@@ -520,7 +520,7 @@
             userId: user.id,
             date: dateInput(addDays(now, (entryIndex - 8) * 7)),
             bodyweight: round(user.bodyweight + Math.sin(entryIndex + userIndex) * 1.2, 1),
-            notes: "Weekly check-in"
+            notes: "Щотижневий замір"
         })));
     }
 
@@ -618,7 +618,7 @@
         const byName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
         const ranges = [[50, 60], [60, 70], [70, 80], [80, 90], [90, 105], [105, 140]];
         const levelMultipliers = { beginner: 0.45, novice: 0.7, third_class: 0.95, second_class: 1.15, first_class: 1.35, candidate_master: 1.55, master: 1.8 };
-        const exerciseMultipliers = { "Bench Press": 1, "Barbell Squat": 1.28, "Romanian Deadlift": 1.2, "Pull-ups": 1.05, "Shoulder Press": 0.68, "Barbell Row": 0.95 };
+        const exerciseMultipliers = { "Жим лежачи": 1, "Присідання зі штангою": 1.28, "Румунська тяга": 1.2, "Підтягування": 1.05, "Жим над головою": 0.68, "Тяга штанги в нахилі": 0.95 };
         const standards = [];
 
         rankedExerciseNames.forEach((name) => {
@@ -634,9 +634,9 @@
                             bodyweightMax: max,
                             level,
                             requiredWeight: round(middle * levelMultipliers[level] * exerciseMultipliers[name] * (gender === "female" ? 0.62 : 1), 1),
-                            repetitions: name === "Pull-ups" ? (gender === "female" ? 3 : 5) : 1,
-                            sourceName: "Demo configurable standards",
-                            sourceNote: "Demo data only. Replace with your own standards later.",
+                            repetitions: name === "Підтягування" ? (gender === "female" ? 3 : 5) : 1,
+                            sourceName: "Демо-нормативи",
+                            sourceNote: "Демо-нормативи використовуються лише для прикладу. Їх можна оновити під реальні стандарти пізніше.",
                             isOfficial: false,
                             updatedAt: new Date().toISOString()
                         });
@@ -653,7 +653,7 @@
     }
 
     function createCardio(index) {
-        return { id: createId("cardio"), type: index % 2 ? "bike" : "treadmill", durationMinutes: 18 + index % 5 * 4, distance: round(2 + index % 4 * 0.7, 1), calories: 140 + index % 5 * 28, averageHeartRate: 125 + index % 4 * 8, intensity: ["low", "medium", "high"][index % 3], notes: "Controlled conditioning block" };
+        return { id: createId("cardio"), type: index % 2 ? "bike" : "treadmill", durationMinutes: 18 + index % 5 * 4, distance: round(2 + index % 4 * 0.7, 1), calories: 140 + index % 5 * 28, averageHeartRate: 125 + index % 4 * 8, intensity: ["low", "medium", "high"][index % 3], notes: "Контрольований кардіо-блок" };
     }
 
     function renderShell() {
@@ -669,7 +669,7 @@
         container.innerHTML = items.map((item) => `
             <button class="nav-button ${state.section === item.id ? "active" : ""}" type="button" data-action="navigate" data-section="${item.id}">
                 <span><i data-lucide="${item.icon}"></i>${escapeHtml(item.title)}</span>
-                ${item.id === "workout" && activeWorkout ? `<strong class="nav-badge">Live</strong>` : ""}
+                ${item.id === "workout" && activeWorkout ? `<strong class="nav-badge">Активне</strong>` : ""}
             </button>
         `).join("");
         icons();
@@ -690,11 +690,11 @@
                 ${avatar(user, "small")}
                 <div>
                     <div class="profile-name">${escapeHtml(user.displayName)}</div>
-                    <div class="profile-meta">${stats.completedWorkouts} workouts Â· ${number(stats.totalVolume)} kg</div>
+                    <div class="profile-meta">${stats.completedWorkouts} тренувань · ${number(stats.totalVolume)} кг</div>
                 </div>
             </div>
             <div class="progress-track" style="margin-top: 14px;"><div class="progress-fill" style="width: ${Math.min(100, stats.completedWorkouts * 5)}%;"></div></div>
-            <div class="profile-meta" style="margin-top: 8px;">Current rank: ${escapeHtml(mainRank(user.id))}</div>
+            <div class="profile-meta" style="margin-top: 8px;">Поточний рівень: ${escapeHtml(mainRank(user.id))}</div>
         `;
     }
 
@@ -702,7 +702,7 @@
         destroyCharts();
         renderShell();
         const item = sectionItems.find((section) => section.id === state.section) || sectionItems[0];
-        element("sectionEyebrow").textContent = "Gym OS";
+        element("sectionEyebrow").textContent = "Gym Progress OS";
         element("sectionTitle").textContent = item.title;
         const renderers = { dashboard, workout, calendar, exercises, knowledge, stats, rankings, achievementsPage, users, profile, settings };
         renderers[state.section]();
@@ -716,18 +716,31 @@
         const record = recordsFor(user.id)[0];
         content(`
             <div class="grid dashboard-grid">
-                ${metric("Today's workout", todayLabel(user.id), "calendar-check", todayCaption(user.id), "span-3")}
-                ${metric("Active workout", activeWorkoutFor(user.id)?.title || "No active", "activity", activeWorkoutFor(user.id) ? "Workout timer is running" : "Start from a template", "span-3")}
-                ${metric("Weekly volume", `${number(stats.weekVolume)} kg`, "boxes", `${stats.weekSets} sets this week`, "span-3")}
-                ${metric("Cardio week", `${stats.weekCardioMinutes} min`, "heart-pulse", "Conditioning tracked", "span-3")}
-                ${chartCard("Weekly volume", "Completed working volume by day.", "weeklyVolumeChart", "span-8")}
-                ${chartCard("Muscle split", "Distribution by completed sets.", "muscleChart", "span-4")}
-                <section class="card span-4"><h2>Training command</h2>${kpi([{ label: "Completed", value: stats.completedWorkouts }, { label: "Total kg", value: number(stats.totalVolume) }, { label: "Streak", value: stats.trainingStreak }, { label: "Sets", value: stats.totalSets }])}<div class="insight-grid" style="margin-top: 14px;">${insights(user.id).slice(0, 3).map(insightCard).join("")}</div></section>
-                <section class="card span-4"><h2>Best recent PR</h2>${record ? recordCard(record) : emptyInline("No personal records yet", "Complete workouts to start detecting PRs.")}</section>
-                <section class="card span-4"><h2>Team summary</h2>${kpi([{ label: "Workouts", value: team.completedWorkouts }, { label: "Team kg", value: number(team.totalVolume) }, { label: "Cardio min", value: team.cardioMinutes }, { label: "Most active", value: team.mostActiveUser.displayName }])}</section>
-                ${chartCard("Bodyweight trend", "Weekly check-ins.", "bodyweightChart", "span-6")}
-                ${chartCard("Cardio minutes", "Recent conditioning blocks.", "cardioChart", "span-6")}
-                <section class="card span-12"><div class="card-header"><div><h2>Recent activity</h2><p class="card-caption">Shared team feed. Other users are view-only.</p></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="rankings">Open leaderboard</button></div><div class="activity-feed">${activityFeed()}</div></section>
+                ${metric("Сьогодні", todayLabel(user.id), "calendar-check", todayCaption(user.id), "span-3")}
+                ${metric("Поточне тренування", activeWorkoutFor(user.id)?.title || "Немає активного", "activity", activeWorkoutFor(user.id) ? "Таймер тренування працює" : "Можна почати з шаблону", "span-3")}
+                ${metric("Обсяг за тиждень", `${number(stats.weekVolume)} кг`, "boxes", `${stats.weekSets} підходів цього тижня`, "span-3")}
+                ${metric("Кардіо за тиждень", `${stats.weekCardioMinutes} хв`, "heart-pulse", "Кондиція врахована", "span-3")}
+                <section class="card span-12">
+                    <div class="card-header">
+                        <div>
+                            <h2>Швидкий старт</h2>
+                            <p class="card-caption">Основні дії для демо: почати, запланувати або перейти до календаря.</p>
+                        </div>
+                    </div>
+                    <div class="action-row">
+                        <button class="button button-primary large-workout-button" type="button" data-action="start-empty-workout"><i data-lucide="play"></i>Почати тренування</button>
+                        <button class="button button-secondary large-workout-button" type="button" data-action="open-planning-modal"><i data-lucide="calendar-plus"></i>Запланувати тренування</button>
+                        <button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Перейти до календаря</button>
+                    </div>
+                </section>
+                ${chartCard("Обсяг за тиждень", "Завершений робочий обсяг за днями.", "weeklyVolumeChart", "span-8")}
+                ${chartCard("Розподіл м'язів", "Підходи у завершених тренуваннях.", "muscleChart", "span-4")}
+                <section class="card span-4"><h2>Операційна панель</h2>${kpi([{ label: "Завершено", value: stats.completedWorkouts }, { label: "Усього кг", value: number(stats.totalVolume) }, { label: "Streak", value: stats.trainingStreak }, { label: "Підходи", value: stats.totalSets }])}<div class="insight-grid" style="margin-top: 14px;">${insights(user.id).slice(0, 3).map(insightCard).join("")}</div></section>
+                <section class="card span-4"><h2>Останній PR</h2>${record ? recordCard(record) : emptyInline("Поки немає особистих рекордів", "Заверши тренування з робочими підходами, щоб GymOS визначив PR.")}</section>
+                <section class="card span-4"><h2>Статистика команди</h2>${kpi([{ label: "Тренування", value: team.completedWorkouts }, { label: "Командні кг", value: number(team.totalVolume) }, { label: "Кардіо хв", value: team.cardioMinutes }, { label: "Найактивніший", value: team.mostActiveUser.displayName }])}</section>
+                ${chartCard("Історія ваги тіла", "Щотижневі заміри.", "bodyweightChart", "span-6")}
+                ${chartCard("Кардіо хвилини", "Останні блоки кондиції.", "cardioChart", "span-6")}
+                <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">Спільна стрічка команди. Чужі тренування відкриваються лише для перегляду.</p></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="rankings">Відкрити рейтинги</button></div><div class="activity-feed">${activityFeed()}</div></section>
             </div>
         `);
         requestAnimationFrame(() => {
@@ -745,15 +758,15 @@
                 <div class="workout-stack">${activeWorkout ? workoutEditor(activeWorkout) : workoutStarter()}</div>
                 <aside class="workout-stack">
                     ${timerCard()}
-                    <section class="card"><h2>Workout intelligence</h2><div class="insight-grid">${insights(currentUser().id).map(insightCard).join("")}</div></section>
-                    <section class="card"><h2>Quick templates</h2><div class="template-grid">${templates.map(templateCard).join("")}</div></section>
+                    <section class="card"><h2>Аналітика тренування</h2><div class="insight-grid">${insights(currentUser().id).map(insightCard).join("")}</div></section>
+                    <section class="card"><h2>Швидкі шаблони</h2><div class="template-grid">${templates.map(templateCard).join("")}</div></section>
                 </aside>
             </div>
         `);
     }
 
     function workoutStarter() {
-        return `<section class="empty-state"><i data-lucide="dumbbell"></i><h2>No active workout</h2><p>Start clean or pick a premium template. Main controls are large enough for actual gym usage.</p><div class="action-row" style="justify-content:center;margin-top:16px;"><button class="button button-primary large-workout-button" type="button" data-action="start-empty-workout"><i data-lucide="play"></i>Start empty workout</button><button class="button button-secondary large-workout-button" type="button" data-action="open-template-modal"><i data-lucide="layers"></i>Choose template</button></div></section>`;
+        return `<section class="empty-state"><i data-lucide="dumbbell"></i><h2>Немає активного тренування</h2><p>Почни з чистої сесії, шаблону або заплануй роботу в календарі. Кнопки збільшені для використання в залі.</p><div class="action-row" style="justify-content:center;margin-top:16px;"><button class="button button-primary large-workout-button" type="button" data-action="start-empty-workout"><i data-lucide="play"></i>Почати тренування</button><button class="button button-secondary large-workout-button" type="button" data-action="open-template-modal"><i data-lucide="layers"></i>Обрати шаблон</button><button class="button button-secondary large-workout-button" type="button" data-action="open-planning-modal"><i data-lucide="calendar-plus"></i>Запланувати</button></div></section>`;
     }
 
     function workoutEditor(workoutItem) {
@@ -763,30 +776,31 @@
         return `
             <section class="card">
                 <div class="card-header">
-                    <div><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${capitalize(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Read only</span>` : ""}<span class="chip">${escapeHtml(owner.displayName)}</span></div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${formatDate(workoutItem.date)} Â· ${duration(workoutItem)} min Â· ${number(workoutVolume(workoutItem))} kg Â· ${completedSets} completed sets</p></div>
-                    <div class="inline-actions"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i>Add exercise</button><button class="button button-primary compact" type="button" data-action="finish-workout" ${readonly ? "disabled" : ""}><i data-lucide="flag"></i>Finish</button></div>
+                    <div><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<span class="chip">${escapeHtml(owner.displayName)}</span></div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг · ${completedSets} завершених підходів</p></div>
+                    <div class="inline-actions"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i>Додати вправу</button><button class="button button-primary compact" type="button" data-action="finish-workout" ${readonly ? "disabled" : ""}><i data-lucide="flag"></i>Завершити тренування</button></div>
                 </div>
-                ${readonly ? `<div class="readonly-layer">You can inspect this workout, but only its owner can edit it.</div>` : ""}
-                <div class="field" style="margin-top:14px;"><label>Workout notes</label><textarea data-action="update-workout-notes" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
+                ${readonly ? `<div class="readonly-layer">Це тренування можна переглядати, але редагувати може лише власник.</div>` : ""}
+                <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
-            ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item) => workoutExerciseEditor(workoutItem, item, readonly)).join("") : emptyInline("No exercises yet", "Add an exercise to build the session.")}
-            <section class="card"><div class="card-header"><div><h2>Cardio inside workout</h2><p class="card-caption">Track conditioning without leaving the active session.</p></div><button class="button button-secondary compact" type="button" data-action="add-cardio" ${readonly ? "disabled" : ""}>Add cardio</button></div>${workoutItem.cardioSessions.length ? workoutItem.cardioSessions.map((session) => `<div class="activity-item"><div class="activity-dot"></div><div><strong>${capitalize(session.type)}</strong><p class="card-caption">${session.durationMinutes} min Â· ${session.distance} km Â· ${session.calories} kcal Â· ${capitalize(session.intensity)}</p></div></div>`).join("") : `<p class="card-caption">No cardio blocks in this workout.</p>`}</section>
+            ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item) => workoutExerciseEditor(workoutItem, item, readonly)).join("") : emptyInline("Вправ ще немає", "Додай вправу, щоб зібрати сесію.")}
+            <section class="card"><div class="card-header"><div><h2>Кардіо в тренуванні</h2><p class="card-caption">Фіксуй кондицію без виходу з поточної сесії.</p></div><button class="button button-secondary compact" type="button" data-action="add-cardio" ${readonly ? "disabled" : ""}>Додати кардіо</button></div>${workoutItem.cardioSessions.length ? workoutItem.cardioSessions.map((session) => `<div class="activity-item"><div class="activity-dot"></div><div><strong>${cardioTypeLabel(session.type)}</strong><p class="card-caption">${session.durationMinutes} хв · ${session.distance} км · ${session.calories} ккал · ${intensityLabel(session.intensity)}</p></div></div>`).join("") : `<p class="card-caption">У цьому тренуванні ще немає кардіо-блоків.</p>`}</section>
         `;
     }
 
     function workoutExerciseEditor(workoutItem, workoutExercise, readonly) {
         const exercise = exerciseById(workoutExercise.exerciseId);
         const previous = previousPerformance(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
-        return `<article class="workout-exercise"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span><span class="chip">${exercise.movementPattern}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} kg volume Â· est. 1RM ${number(exerciseOneRepMax(workoutExercise))} kg${previous ? ` Â· previous ${number(previous.weight)} kg Ã— ${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Technique" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Add set" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Duplicate" data-action="duplicate-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="copy"></i></button></div></div><div class="set-grid-header"><span>Type</span><span>Weight</span><span>Reps</span><span>RPE</span><span>Rest</span><span>Done</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Exercise notes</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        return `<article class="workout-exercise"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span><span class="chip">${exercise.movementPattern}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · розрах. 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг${previous ? ` · попередньо ${number(previous.weight)} кг × ${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Повторити підхід" data-action="duplicate-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="copy"></i></button></div></div><div class="set-grid-header"><span>Тип</span><span>Вага</span><span>Повт.</span><span>RPE</span><span>Відпоч.</span><span>Готово</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Нотатки до вправи</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly) {
-        return `<div class="set-row ${set.isCompleted ? "completed" : ""}"><select data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="type" ${readonly ? "disabled" : ""}>${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${capitalize(type)}</option>`).join("")}</select><input type="number" step="0.5" value="${set.weight}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="weight" ${readonly ? "disabled" : ""}><input type="number" step="1" value="${set.repetitions}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="repetitions" ${readonly ? "disabled" : ""}><input type="number" step="0.5" value="${set.rpe}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="rpe" ${readonly ? "disabled" : ""}><input type="number" step="15" value="${set.restSeconds}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="restSeconds" ${readonly ? "disabled" : ""}><button class="icon-button" type="button" data-action="toggle-set" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" ${readonly ? "disabled" : ""}><i data-lucide="${set.isCompleted ? "check-circle-2" : "circle"}"></i></button><button class="icon-button" type="button" data-action="delete-set" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div>`;
+        return `<div class="set-row ${set.isCompleted ? "completed" : ""}"><select data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="type" ${readonly ? "disabled" : ""}>${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</select><input type="number" step="0.5" value="${set.weight}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="weight" ${readonly ? "disabled" : ""}><input type="number" step="1" value="${set.repetitions}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="repetitions" ${readonly ? "disabled" : ""}><input type="number" step="0.5" value="${set.rpe}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="rpe" ${readonly ? "disabled" : ""}><input type="number" step="15" value="${set.restSeconds}" data-action="set-field" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" data-field="restSeconds" ${readonly ? "disabled" : ""}><button class="icon-button" type="button" data-action="toggle-set" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" ${readonly ? "disabled" : ""}><i data-lucide="${set.isCompleted ? "check-circle-2" : "circle"}"></i></button><button class="icon-button" type="button" data-action="delete-set" data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div>`;
     }
 
     function calendar() {
-        const team = teamStats();
-        content(`<div class="grid dashboard-grid">${metric("Team workouts", team.completedWorkouts, "users", "Completed across the team", "span-3")}${metric("Team volume", `${number(team.totalVolume)} kg`, "boxes", "Shared total", "span-3")}${metric("Cardio days", team.cardioDays, "heart-pulse", "Days with cardio", "span-3")}${metric("Team streak", `${team.teamStreak} days`, "flame", "Any user trained", "span-3")}<section class="calendar-shell span-12"><div class="card-header" style="margin-bottom:16px;"><div><h2>Training calendar</h2><p class="card-caption">Click a day to plan a workout. Click an event to inspect details.</p></div><button class="button button-secondary compact" type="button" data-action="open-template-modal">Plan workout</button></div><div id="calendarContainer"></div></section></div>`);
+        const overview = calendarOverview();
+        const history = state.database.workouts.sort(byDateDesc).slice(0, 8);
+        content(`<div class="grid dashboard-grid">${metric("Тренувань цього тижня", overview.weekWorkouts, "calendar-check", "Усі статуси", "span-3")}${metric("Завершено", overview.weekCompleted, "check-circle-2", "За поточний тиждень", "span-3")}${metric("Заплановано", overview.weekPlanned, "calendar-plus", "Майбутні сесії", "span-3")}${metric("Streak", `${overview.streak} дн.`, "flame", "Будь-яке завершене тренування", "span-3")}<section class="calendar-shell span-8"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар тренувань</h2><p class="card-caption">Клік по дню відкриває планування. Клік по тренуванню відкриває деталі.</p></div><button class="button button-secondary compact" type="button" data-action="open-planning-modal"><i data-lucide="calendar-plus"></i>Запланувати тренування</button></div><div id="calendarContainer"></div></section><section class="card span-4"><h2>Огляд</h2>${kpi([{ label: "Тиждень", value: overview.weekWorkouts }, { label: "Місяць", value: overview.monthWorkouts }, { label: "Кардіо дні", value: overview.cardioDays }, { label: "Заплановано", value: overview.monthPlanned }])}<div class="legend-list"><span><i class="legend-dot planned"></i>Заплановано</span><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span></div></section><section class="card span-12"><div class="card-header"><div><h2>Історія з календаря</h2><p class="card-caption">Видно тренування всіх користувачів. Редагування доступне лише власнику.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
         requestAnimationFrame(renderCalendar);
     }
 
@@ -1808,7 +1822,7 @@
     }
 
     function seedWeight(name, index) {
-        const weights = { "Bench Press": 72, "Incline Dumbbell Press": 28, "Chest Press Machine": 78, "Cable Fly": 18, "Pull-ups": 78, "Lat Pulldown": 67, "Barbell Row": 72, "Seated Cable Row": 64, "Shoulder Press": 45, "Lateral Raise": 12, "Rear Delt Fly": 10, "Barbell Squat": 92, "Leg Press": 180, "Leg Extension": 56, "Romanian Deadlift": 82, "Leg Curl": 48, "Calf Raise": 72, "Barbell Curl": 32, "Dumbbell Curl": 16, "Hammer Curl": 18, "Triceps Pushdown": 38, "Overhead Triceps Extension": 32, "Plank": 0, "Hanging Leg Raise": 0 };
+        const weights = { "Жим лежачи": 72, "Жим гантелей під кутом": 28, "Жим у тренажері": 78, "Зведення в кросовері": 18, "Підтягування": 78, "Тяга верхнього блока": 67, "Тяга штанги в нахилі": 72, "Горизонтальна тяга блока": 64, "Жим над головою": 45, "Підйом гантелей в сторони": 12, "Розведення на задню дельту": 10, "Присідання зі штангою": 92, "Жим ногами": 180, "Розгинання ніг": 56, "Румунська тяга": 82, "Згинання ніг": 48, "Підйом на литки": 72, "Згинання зі штангою": 32, "Згинання з гантелями": 16, "Молоткові згинання": 18, "Розгинання на блоці": 38, "Розгинання трицепса над головою": 32, "Планка": 0, "Підйом ніг у висі": 0 };
         return round((weights[name] || 25) + index * 0.7, 1);
     }
 
