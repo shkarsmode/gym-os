@@ -370,11 +370,191 @@
             return this.mode === "api" && this.config.requireAuth && !this.currentUser;
         }
 
-        async importExerciseCatalog(payload) {
-            if (this.mode === "api") {
-                return this.apiClient.importExercises(payload);
+        async importExerciseCatalog(payload, options = {}) {
+            if (this.mode !== "api") {
+                return null;
             }
-            return null;
+
+            const exercises = this.extractExerciseCatalogRows(payload)
+                .map((exercise) => this.sanitizeExerciseForApiImport(exercise))
+                .filter((exercise) => exercise.name && exercise.originalName);
+
+            const chunks = this.createExerciseImportChunks(exercises, 55 * 1024);
+            const importSummary = {
+                ok: true,
+                received: exercises.length,
+                chunks: chunks.length,
+                imported: 0,
+                skipped: 0,
+                duplicates: 0,
+                failed: 0,
+                errors: []
+            };
+
+            for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+                const chunk = chunks[chunkIndex];
+                const payloadChunk = {
+                    exercises: chunk
+                };
+
+                const result = await this.apiClient.importExercises(payloadChunk);
+
+                this.mergeExerciseImportResult(importSummary, result);
+
+                if (typeof options.onProgress === "function") {
+                    options.onProgress({
+                        current: chunkIndex + 1,
+                        total: chunks.length,
+                        exercises: chunk.length,
+                        result
+                    });
+                }
+
+                await this.wait(120);
+            }
+
+            return importSummary;
+        }
+
+        extractExerciseCatalogRows(payload) {
+            if (Array.isArray(payload)) {
+                return payload;
+            }
+
+            if (Array.isArray(payload?.exercises)) {
+                return payload.exercises;
+            }
+
+            if (payload?.name || payload?.originalName) {
+                return [payload];
+            }
+
+            return [];
+        }
+
+        sanitizeExerciseForApiImport(exercise) {
+            const trimText = (value, maximumLength = 500) => {
+                if (typeof value !== "string") {
+                    return "";
+                }
+
+                return value
+                    .replace(/\s+/g, " ")
+                    .trim()
+                    .slice(0, maximumLength);
+            };
+
+            const trimStringArray = (value, maximumItems = 6, maximumLength = 160) => {
+                if (!Array.isArray(value)) {
+                    return [];
+                }
+
+                return value
+                    .filter((item) => typeof item === "string")
+                    .map((item) => trimText(item, maximumLength))
+                    .filter(Boolean)
+                    .slice(0, maximumItems);
+            };
+
+            const stripSourcePrefix = (value) => {
+                return trimText(value, 180)
+                    .replace(/^ExRx\.net\s*:\s*/i, "")
+                    .replace(/^ExRx\s*:\s*/i, "")
+                    .trim();
+            };
+
+            const name = stripSourcePrefix(exercise.name || exercise.originalName || "");
+            const originalName = stripSourcePrefix(exercise.originalName || exercise.name || "");
+
+            return {
+                id: trimText(exercise.id, 140),
+                sourceName: trimText(exercise.sourceName, 80) || "ExRx.net",
+                sourceUrl: trimText(exercise.sourceUrl, 260),
+                licenseStatus: trimText(exercise.licenseStatus, 80) || "permission_required",
+
+                name: name || originalName,
+                originalName: originalName || name,
+                aliases: trimStringArray(exercise.aliases, 3, 120),
+
+                primaryMuscleGroup: trimText(exercise.primaryMuscleGroup, 60) || "Full Body",
+                secondaryMuscleGroups: trimStringArray(exercise.secondaryMuscleGroups, 4, 60),
+
+                movementPattern: trimText(exercise.movementPattern, 60) || "Other",
+                equipment: trimText(exercise.equipment, 60) || "Other",
+                category: trimText(exercise.category, 80) || "Strength",
+                difficulty: trimText(exercise.difficulty, 60) || "Intermediate",
+
+                description: trimText(exercise.description, 500),
+                techniqueSteps: trimStringArray(exercise.techniqueSteps, 5, 180),
+                commonMistakes: trimStringArray(exercise.commonMistakes, 5, 160),
+                safetyTips: trimStringArray(exercise.safetyTips, 5, 160),
+
+                mediaUrl: "",
+                mediaType: "none",
+                mediaReferences: [],
+
+                isCustom: false,
+                createdByUserId: null
+            };
+        }
+
+        createExerciseImportChunks(exercises, maximumChunkBytes) {
+            const chunks = [];
+            let currentChunk = [];
+
+            for (const exercise of exercises) {
+                const nextChunk = [...currentChunk, exercise];
+                const nextPayloadSize = this.getJsonByteSize({
+                    exercises: nextChunk
+                });
+
+                if (nextPayloadSize > maximumChunkBytes && currentChunk.length > 0) {
+                    chunks.push(currentChunk);
+                    currentChunk = [exercise];
+                    continue;
+                }
+
+                currentChunk = nextChunk;
+            }
+
+            if (currentChunk.length > 0) {
+                chunks.push(currentChunk);
+            }
+
+            return chunks;
+        }
+
+        getJsonByteSize(value) {
+            return new Blob([JSON.stringify(value)]).size;
+        }
+
+        mergeExerciseImportResult(importSummary, result) {
+            const readCounter = (value, nestedKey = "") => {
+                if (typeof value === "number") {
+                    return value;
+                }
+
+                if (value && nestedKey && typeof value[nestedKey] === "number") {
+                    return value[nestedKey];
+                }
+
+                return 0;
+            };
+
+            importSummary.imported += readCounter(result?.imported, "catalogExercises");
+            importSummary.skipped += readCounter(result?.skipped, "catalogExercises");
+            importSummary.duplicates += readCounter(result?.duplicates);
+            importSummary.failed += readCounter(result?.failed);
+
+            if (Array.isArray(result?.errors)) {
+                importSummary.errors.push(...result.errors.slice(0, 5));
+            }
+        }
+
+        wait(milliseconds) {
+            return new Promise((resolve) => {
+                window.setTimeout(resolve, milliseconds);
+            });
         }
 
         async checkBackend(shouldThrow = true) {
@@ -1606,22 +1786,43 @@
         if (!file) {
             return;
         }
+
         try {
             const data = JSON.parse(await file.text());
+
             if (storage.mode === "api") {
-                const result = await storage.importExerciseCatalog(data);
-                toast("Каталог імпортовано", `Додано: ${result.imported || 0}, пропущено: ${result.skipped || 0}.`);
+                toast("Імпорт каталогу запущено", "Фронт відправляє вправи маленькими пачками.");
+
+                const result = await storage.importExerciseCatalog(data, {
+                    onProgress: (progress) => {
+                        console.log(
+                            `Exercise catalog import ${progress.current}/${progress.total}`,
+                            progress
+                        );
+
+                        if (progress.current === 1 || progress.current === progress.total || progress.current % 5 === 0) {
+                            toast("Імпорт каталогу", `Пачка ${progress.current}/${progress.total} відправлена.`);
+                        }
+                    }
+                });
+
                 state.database = await storage.load();
+
+                toast(
+                    "Каталог імпортовано",
+                    `Отримано: ${result.received}, додано: ${result.imported}, пропущено: ${result.skipped}.`
+                );
             } else {
                 const result = mergeImportedExerciseCatalog(state.database.exercises, data);
                 state.database.exercises = result.exercises;
                 await persist();
                 toast("Каталог імпортовано", `Додано: ${result.imported}, пропущено: ${result.skipped}.`);
             }
+
             renderSection();
         } catch (error) {
             console.error(error);
-            toast("Імпорт каталогу не вдався", "Перевір структуру JSON і права доступу.");
+            toast("Імпорт каталогу не вдався", "Перевір JSON, авторизацію або розмір payload.");
         }
     }
 
