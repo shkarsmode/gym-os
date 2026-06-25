@@ -1,19 +1,19 @@
 # GymOS Frontend
 
-Vanilla HTML/CSS/JavaScript frontend for GymOS.
+Vanilla HTML/CSS/JavaScript frontend для GymOS.
 
-## Run
+## Запуск
 
-Open `index.html` directly in a browser.
+Відкрий `index.html` напряму в браузері.
 
-The app starts in local demo mode through IndexedDB/localStorage. Backend mode can be enabled in `Налаштування` after starting the NestJS API in `D:\Features\gymos\gym-os-back`.
+Застосунок стартує в локальному деморежимі через IndexedDB/localStorage. Режим бекенду можна увімкнути в `Налаштуваннях` після запуску NestJS API у `D:\Features\gymos\gym-os-back`.
 
-## Backend Mode
+## Режим бекенду
 
-Default API URL is configured in `index.html`:
+Базовий URL API налаштований в `index.html`:
 
 ```js
 window.FORGE_CONFIG.apiBaseUrl = "http://localhost:3000";
 ```
 
-Use `Налаштування` to switch `Режим даних` between `Локальний` and `Backend API`, then click `Перевірити підключення`.
+У `Налаштуваннях` перемкни `Режим даних` між `Локальний` і `Бекенд API`, потім натисни `Перевірити підключення`.

@@ -10,14 +10,14 @@
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 
-    <meta name="description" content="A premium gym progress platform for planning workouts, tracking sets, monitoring personal records, analyzing cardio, and comparing team performance.">
+    <meta name="description" content="Преміальна платформа для планування тренувань, трекінгу підходів, особистих рекордів, кардіо та командної статистики.">
     <meta name="theme-color" content="#0d0e10">
 
     <link rel="icon" href="favicon.ico" sizes="any">
 </head>
 <body>
     <div class="app-shell">
-        <aside class="sidebar" aria-label="Ð“Ð¾Ð»Ð¾Ð²Ð½Ð° Ð½Ð°Ð²Ñ–Ð³Ð°Ñ†Ñ–Ñ">
+        <aside class="sidebar" aria-label="Головна навігація">
             <div class="brand-block">
                 <div class="brand-mark">GO</div>
                 <div>
@@ -34,23 +34,23 @@
         <main class="main-shell">
             <header class="topbar">
                 <div>
-                    <p class="eyebrow" id="sectionEyebrow">ÐŸÐ°Ð½ÐµÐ»ÑŒ</p>
+                    <p class="eyebrow" id="sectionEyebrow">Панель</p>
                     <h1 id="sectionTitle">GymOS</h1>
                 </div>
 
                 <div class="topbar-actions">
                     <button class="button button-secondary compact" id="openQuickActionButton" type="button">
                         <i data-lucide="zap"></i>
-                        Ð¨Ð²Ð¸Ð´ÐºÐ° Ð´Ñ–Ñ
+                        Швидка дія
                     </button>
-                    <button class="avatar-button" id="openUserSwitcherButton" type="button" aria-label="Ð—Ð¼Ñ–Ð½Ð¸Ñ‚Ð¸ Ð°ÐºÑ‚Ð¸Ð²Ð½Ð¾Ð³Ð¾ ÐºÐ¾Ñ€Ð¸ÑÑ‚ÑƒÐ²Ð°Ñ‡Ð°"></button>
+                    <button class="avatar-button" id="openUserSwitcherButton" type="button" aria-label="Змінити активного користувача"></button>
                 </div>
             </header>
 
             <section class="page-content" id="pageContent"></section>
         </main>
 
-        <nav class="mobile-navigation" id="mobileNavigation" aria-label="ÐœÐ¾Ð±Ñ–Ð»ÑŒÐ½Ð° Ð½Ð°Ð²Ñ–Ð³Ð°Ñ†Ñ–Ñ"></nav>
+        <nav class="mobile-navigation" id="mobileNavigation" aria-label="Мобільна навігація"></nav>
     </div>
 
     <div class="modal-backdrop hidden" id="modalBackdrop"></div>

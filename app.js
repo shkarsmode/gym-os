@@ -290,7 +290,19 @@
         }
 
         async load() {
-            return this.provider.load();
+            try {
+                return await this.provider.load();
+            } catch (error) {
+                console.warn("Data load fallback", error);
+                this.backendStatus = "offline";
+                if (this.config.allowLocalFallback === false) {
+                    throw error;
+                }
+                this.mode = "local";
+                this.writeSetting("dataMode", "local");
+                this.provider = this.localProvider;
+                return this.localProvider.load();
+            }
         }
 
         async save(database) {
@@ -859,7 +871,7 @@
     }
 
     function settings() {
-        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Активний користувач</h2><p class="card-caption">Demo mode імітує права: активний користувач редагує лише власні дані.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Production-режим передбачає тільки Google OAuth. У локальному demo mode можна працювати без входу.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">Frontend працює локально через IndexedDB/localStorage або через backend API. Якщо backend недоступний, demo не ламається.</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode"><option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Backend API</option></select></div><div class="field"><label>API base URL</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="http://localhost:3000" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Backend: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "local" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути demo data</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп local-first бази для ручного перенесення або backend seed.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником, нормативи залишаються configurable data.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise">Додати власну вправу</button><button class="button button-secondary" type="button" data-action="open-standards">Відкрити нормативи</button></div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Активний користувач</h2><p class="card-caption">Деморежим імітує права: активний користувач редагує лише власні дані.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth. У локальному деморежимі можна працювати без входу.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">Застосунок працює локально через IndexedDB/localStorage або через бекенд API. Якщо бекенд недоступний, демо не ламається.</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode"><option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Бекенд API</option></select></div><div class="field"><label>Базовий URL API</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="http://localhost:3000" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Бекенд: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "local" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути демодані</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп local-first бази для ручного перенесення або seed-даних бекенду.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником, нормативи лишаються налаштовуваними даними.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise">Додати власну вправу</button><button class="button button-secondary" type="button" data-action="open-standards">Відкрити нормативи</button></div></section></div>`);
     }
 
     function bindEvents() {
@@ -960,6 +972,14 @@
             handleInput.timeoutId = setTimeout(renderSection, 140);
         }
 
+        if (actionElement.dataset.action === "exercise-picker-search") {
+            state.filters.exerciseSearch = actionElement.value;
+            const pickerGrid = element("exercisePickerGrid");
+            if (pickerGrid) {
+                pickerGrid.innerHTML = exercisePickerCards();
+            }
+        }
+
         if (actionElement.dataset.action === "update-workout-notes") {
             const active = activeWorkoutFor(currentUser().id);
             if (active) {
@@ -994,7 +1014,7 @@
     }
 
     function openUserSwitcher() {
-        openModal(`<div class="modal-header"><div><h2>Змінити активного користувача</h2><p class="card-caption">Права в demo mode імітуються через active user.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="user-grid">${state.database.users.map(userSwitcherCard).join("")}</div>`);
+        openModal(`<div class="modal-header"><div><h2>Змінити активного користувача</h2><p class="card-caption">Права в деморежимі імітуються через активного користувача.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="user-grid">${state.database.users.map(userSwitcherCard).join("")}</div>`);
     }
 
     function openTemplateModal() {
@@ -1014,7 +1034,15 @@
     }
 
     function openAddExerciseModal() {
-        openModal(`<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="search" placeholder="Пошук вправи" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="exercise-picker-grid" style="margin-top:14px;">${filteredExercises().map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("")}</div>`);
+        openModal(`<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="search" placeholder="Пошук вправи" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-picker-search"><div class="exercise-picker-grid" id="exercisePickerGrid" style="margin-top:14px;">${exercisePickerCards()}</div>`);
+    }
+
+    function exercisePickerCards() {
+        const items = filteredExercises();
+        if (!items.length) {
+            return emptyInline("Нічого не знайдено", "Спробуй назву, alias, м'язову групу, патерн руху або обладнання.");
+        }
+        return items.map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
     }
 
     function openCustomExercise() {
@@ -1345,7 +1373,7 @@
             await storage.checkBackend(true);
             toast("Backend доступний", storage.apiBaseUrl || "API base URL активний.");
         } catch (error) {
-            toast("Backend недоступний", "Frontend залишився в локальному demo mode.");
+            toast("Бекенд недоступний", "Застосунок залишився в локальному деморежимі.");
             if (storage.config.allowLocalFallback !== false) {
                 await storage.setMode("local");
             }
@@ -1356,7 +1384,7 @@
     async function changeDataMode(mode) {
         await storage.setMode(mode);
         if (mode === "api" && storage.backendStatus !== "online") {
-            toast("Backend недоступний", "Повертаю demo у локальний режим.");
+            toast("Бекенд недоступний", "Повертаю демо у локальний режим.");
             await storage.setMode("local");
         } else {
             toast("Режим даних змінено", dataModeLabel(storage.mode));
@@ -1379,9 +1407,9 @@
     async function logout() {
         try {
             await storage.logout();
-            toast("Вихід виконано", "У demo mode активний користувач лишається локальним.");
+            toast("Вихід виконано", "У деморежимі активний користувач лишається локальним.");
         } catch (error) {
-            toast("Backend недоступний", "Локальний demo mode продовжує працювати.");
+            toast("Бекенд недоступний", "Локальний деморежим продовжує працювати.");
         }
     }
 
@@ -1871,7 +1899,7 @@
 
     function suggestionNote(userId, exerciseId) {
         const previous = previousPerformance(userId, exerciseId);
-        return previous ? `Last performance: ${previous.weight} kg Ã— ${previous.repetitions} on ${formatDate(previous.date)}.` : "New movement in this program.";
+        return previous ? `Попередній результат: ${previous.weight} кг × ${previous.repetitions} · ${formatDate(previous.date)}.` : "Новий рух у цій програмі.";
     }
 
     function muscleSetMap(workouts) {
@@ -2209,11 +2237,11 @@
     }
 
     function formatDate(value) {
-        return value ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)) : "â€”";
+        return value ? new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value)) : "—";
     }
 
     function shortDate(value) {
-        return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
+        return new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short" }).format(new Date(value));
     }
 
     function seconds(value) {
@@ -2221,7 +2249,7 @@
     }
 
     function number(value) {
-        return new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(Number(value) || 0);
+        return new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 1 }).format(Number(value) || 0);
     }
 
     function numberValue(id, fallback) {
