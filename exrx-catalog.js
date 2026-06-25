@@ -49,8 +49,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1614/3938/5121/BBFrontRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -96,8 +96,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9714/3938/5138/BBMilitaryPressBentLeg.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -143,8 +143,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9014/3938/5169/BBSeatedMilitaryPressFF.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -193,8 +193,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1314/3938/5152/CBSeatedFrontRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -243,8 +243,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7714/3938/5141/CBAlternatingFrontLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -293,8 +293,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8014/3938/5155/CBFrontRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -340,8 +340,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5214/3938/5158/CBStandingShoulderPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -387,8 +387,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3317/5136/0910/CBShoulderPress1ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -434,8 +434,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4714/3938/5257/DBArnoldPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -484,8 +484,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8114/3938/5246/DBFrontRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -534,8 +534,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8114/3938/5165/DBAlternatingFrontRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -581,8 +581,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8114/3938/5255/DBShoulderPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -628,8 +628,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1414/3938/5243/DBOneArmShoulderPressLean.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -675,8 +675,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7014/3938/5364/LVMilitaryInclinePressH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -722,8 +722,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5414/3938/5276/LVReclinedShoulderPressPL.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -769,8 +769,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4114/3938/5276/LVShoulderPressH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -816,8 +816,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6714/3938/5273/LVReclinedShoulderPressParGrip.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -863,8 +863,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4414/3938/5282/LVShoulderPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -910,8 +910,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4814/3938/5255/LVClosWidParGripShouldPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -957,8 +957,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7314/3938/5292/SLShoulderPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1004,8 +1004,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1014/3938/5296/SMShoulderPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1051,8 +1051,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6914/3938/5134/BWPikePressDeclined.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1098,8 +1098,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6914/3938/5134/BWPikePressDeclined.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1148,8 +1148,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4714/3938/5288/STFrontRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1196,8 +1196,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6014/3884/9752/BBUprightRowM.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1246,8 +1246,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8114/3884/9754/CBLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1296,8 +1296,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2817/5180/8499/CBOneArmLateralRaise2ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1344,8 +1344,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4614/3884/9765/CBUprightRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1392,8 +1392,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8314/3884/9789/CBOneArmUprightRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1440,8 +1440,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9314/8743/2719/CBUprightRowRope.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1490,8 +1490,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5114/3884/9771/CBYRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1540,8 +1540,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5914/3884/9774/DBInclineLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1590,8 +1590,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3314/3884/9783/DBLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1640,8 +1640,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5714/3884/9799/DBLyingLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1688,8 +1688,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7114/3884/9796/DBUprightRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1736,8 +1736,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7914/3884/9810/DBOneArmUprightRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1786,8 +1786,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2214/3884/9827/LVLateralRaiseH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1836,8 +1836,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7914/3884/9820/LVLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1886,8 +1886,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7414/3884/9815/LVLateralRaise2.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1934,8 +1934,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4014/3884/9829/SMUprightRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -1984,8 +1984,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3414/3884/9824/STYShoulderRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2032,8 +2032,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7514/3884/9959/CBRearDeltRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2082,8 +2082,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3514/3884/9972/CBStandingRearDeltFly.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2130,8 +2130,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2014/3884/9996/DBRearDeltRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2180,8 +2180,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7814/3885/0027/LVLyingRearDeltRaiseH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2228,8 +2228,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5914/3885/0021/LVRearDeltRowH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2276,8 +2276,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5414/3885/0043/LVSeatedRearDeltRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2324,8 +2324,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1114/3885/0065/SMBentoverRearDeltRowSideView.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2372,8 +2372,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4114/3884/9939/BWRearDeltInvertedHips.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2422,8 +2422,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3714/3886/3120/CBFrontLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2472,8 +2472,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4314/3886/3118/DBFrontLateralRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2520,8 +2520,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2014/3938/4751/CBHammerCurlRope.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2568,8 +2568,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8414/3938/4760/CBReverseCurl.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2616,8 +2616,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6517/6882/2405/LVHammerPreacherCurlPLIso2ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2664,8 +2664,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4314/3886/5315/BBWristCurl.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2712,8 +2712,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8214/3886/5323/DBWristCurl.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2762,8 +2762,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7514/3886/5328/LVGripper.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2812,8 +2812,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1914/3886/5342/LVSeatedGripper.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2862,8 +2862,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8614/3886/5356/SLGripper.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2910,8 +2910,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2514/3886/5150/BBReverseWristCurl.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -2958,8 +2958,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1014/3886/5155/CBReverseWristCurl.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3006,8 +3006,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7114/3886/5153/LVReverseWristCurl.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3056,8 +3056,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8514/3885/8648/DBSeatedPronation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3106,8 +3106,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6114/3885/8652/LVSeatedPronation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3156,8 +3156,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9014/3886/3046/LVSeatedSupination.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3204,8 +3204,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7314/3938/4556/DBCurl.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3252,8 +3252,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1014/3938/4101/BBBentOverRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3300,8 +3300,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6214/3938/4204/BBUnderhandBentOverRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3348,8 +3348,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1514/3938/4238/CBOneArmStrBackHighRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3396,8 +3396,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9714/3938/4254/CBSeatedRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3444,8 +3444,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2714/3938/4248/CBSeatedRowStraightBack.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3492,8 +3492,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5414/3938/4261/CBWideGripSeatedRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3540,8 +3540,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3114/3938/4250/CBSeatedRowWideGripStrBack.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3588,8 +3588,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7014/3938/4263/DBBentoverRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3636,8 +3636,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4214/3938/4266/DBLyingRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3684,8 +3684,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8117/5129/6247/LVNeutralGripInclineRowPL1ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3732,8 +3732,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6717/5129/6677/LVWideGripInclineRowPL2ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3780,8 +3780,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6614/3938/4383/LVSeatedHighRowH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3828,8 +3828,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1214/3938/4386/LVSeatedLowRowH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3876,8 +3876,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6114/3938/4430/LVWideGripSeatedRowH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3924,8 +3924,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1614/3938/4409/LVSeatedRowWideH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -3972,8 +3972,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9714/3938/4441/LVWideGripTBarRowPL.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4020,8 +4020,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4517/6649/0479/LVCloseGripTBarRowPL2ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4068,8 +4068,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9217/5140/7957/LVSeatedHighRowBilateral1ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4116,8 +4116,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2914/3938/4399/LVSeatedRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4164,8 +4164,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8914/3938/4442/LVWideGripSeatedRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4254,8 +4254,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6214/3938/4429/LVUnderhandSeatedRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4302,8 +4302,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7214/3938/4436/SMBentoverRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4350,8 +4350,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6514/3938/4451/WTInvertedRowFeetElevated.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4398,8 +4398,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9714/3938/4202/BWSupineRowFeetElevated.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4446,8 +4446,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7514/3938/4210/BWSupineRowHigh.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4494,8 +4494,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9714/3938/4445/STInvertedRow.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4542,8 +4542,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3917/5163/1807/STOneArmRow1ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4589,8 +4589,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5414/3885/4763/AsPullup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4636,8 +4636,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7214/3885/4753/ASCloseGripPullUpKneeling.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4686,8 +4686,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4514/3885/4795/BBPullover.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4736,8 +4736,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1814/3885/4843/CBStraightArmPullDown.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4783,8 +4783,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2414/3885/4817/CBFrontPulldown.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4830,8 +4830,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4516/4138/8156/CBParallelGripPulldown.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4877,8 +4877,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4314/3885/4819/CBChinup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4924,8 +4924,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3614/3885/4831/CBParallelCloseGripPullup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -4971,8 +4971,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5114/3885/4898/LVPullup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5018,8 +5018,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1314/3885/4834/CBPullup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5065,8 +5065,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7714/3885/4885/LVPulldownH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5112,8 +5112,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2514/3885/4916/LVUnderhandPulldownH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5159,8 +5159,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8714/3885/4861/LVCloseGripPulldown.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5206,8 +5206,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2214/3885/4869/LVFrontPulldown.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5253,8 +5253,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6614/3885/4894/LVPullDown.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5303,8 +5303,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7314/3885/4900/LVPullover.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5350,8 +5350,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3314/3885/4927/WTChinUpUnderhand.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5397,8 +5397,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7114/3885/4935/WTCloseGripChinup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5444,8 +5444,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6814/3885/4933/WTChinUp.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5491,8 +5491,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4117/5162/4443/BAArcherPullupASW2.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5538,8 +5538,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5916/2515/7006/ASChinupFootBand.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5585,8 +5585,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7416/2500/6087/ASPullupFootBand.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5632,8 +5632,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3316/4138/9735/ASParallelGripPullupFootBand.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5679,8 +5679,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2917/5162/5443/BWArcherPullupASW2.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5726,8 +5726,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5514/3885/4806/BWUnderhandChinup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5773,8 +5773,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7617/5155/6246/BWOneArmPull-up2ASW.jpg",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5820,8 +5820,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4014/3885/4784/BWCloseGripPullup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5867,8 +5867,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5414/3885/4808/BWWideGripChinup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5914,8 +5914,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3014/3885/4782/AsUnderhandChinupPartner.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -5961,8 +5961,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6714/3885/4749/AsChinupPartner.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6008,8 +6008,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7014/3885/4801/BWUnderHandChinupSelfAssistedFront.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6055,8 +6055,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7614/3885/4791/BWChinupSelfAssistedFront.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6102,8 +6102,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4714/3885/4918/STPullup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6149,8 +6149,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3214/3885/4931/STSelfAssistedPullup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6199,8 +6199,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5914/3886/3474/BBShrug.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6249,8 +6249,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2914/3886/3602/TBShrug.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6299,8 +6299,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4514/3886/3482/CBShrug.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6349,8 +6349,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1714/3886/3573/DBShrug.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6399,8 +6399,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4714/3886/3575/LVSeatedShrugH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6449,8 +6449,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3914/3886/3581/LVShrugH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6499,8 +6499,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1614/3886/3594/SLGriplessShrug.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6549,8 +6549,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4614/3886/3599/SMShrug.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6599,8 +6599,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7014/3886/3468/BWBentKneeInvertedShrug.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6649,8 +6649,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8614/3886/3472/BWInvertedShrugsRings.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6699,8 +6699,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9114/3885/1743/CBStandingExternalRotation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6749,8 +6749,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9914/3885/1738/DBLyingExternalRotation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6799,8 +6799,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4114/3885/1740/DBStandingExternalRotationSupport.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6849,8 +6849,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4114/3885/1740/DBStandingExternalRotationSupport.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6899,8 +6899,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2414/3885/1746/LVShoulderExternalRotation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6949,8 +6949,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1014/3885/1751/STShoulderExternalRotation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -6999,8 +6999,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4214/3886/2975/CBStandingInternalRotation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7049,8 +7049,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1714/3886/2974/DBInternalRotationFloor.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7099,8 +7099,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3714/3886/2969/LVShoulderInternalRotation.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7149,8 +7149,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3914/3885/0495/BBStandingCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7199,8 +7199,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4314/3885/0512/CBSingleLegCalfRaiseStirrup.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7249,8 +7249,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6314/3885/0514/DBCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7299,8 +7299,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1214/3885/0518/DBSingleLegCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7346,8 +7346,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8614/3885/0523/LV45DegCalfPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7394,8 +7394,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4214/3885/0534/LVSeatedCalfExtensionH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7444,8 +7444,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5214/3885/0548/LVStandingCalfRaisePL.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7494,8 +7494,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3214/3885/0520/LV45DegreeCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7542,8 +7542,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6314/3885/0536/LVSeatedCalfExtension.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7589,8 +7589,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/5014/3885/0544/LVSeatedCalfPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7639,8 +7639,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/2514/3885/0550/LVStandingCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7686,8 +7686,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4614/3885/0558/SL45DegCalfPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7736,8 +7736,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4014/3885/0566/SL45DegreeCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7783,8 +7783,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1814/3885/0570/SLLyingCalfPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7833,8 +7833,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9614/3885/0581/SLStandingCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7883,8 +7883,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9614/3885/0587/SMStandCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7933,8 +7933,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9714/3885/0499/BWCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -7983,8 +7983,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9314/3885/0508/BWSingleLegCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8033,8 +8033,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6114/3885/0492/ASSingleLegCalfRaiseSelfPull.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8083,8 +8083,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8414/3886/2325/SBSeatedCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8133,8 +8133,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3014/3886/2331/LVSeatedCalfRaiseH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8183,8 +8183,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6214/3886/2327/LVSeatedCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8233,8 +8233,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3914/3886/2329/SMSeatedCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8283,8 +8283,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9414/3886/3255/CBReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8333,8 +8333,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4114/3886/3247/CBSingleLegReverseCalfRaise1.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8383,8 +8383,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4514/3886/3263/DBReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8430,8 +8430,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/9614/3886/3257/LV45DegReverseCalfPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8480,8 +8480,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6114/3886/3259/LV45ReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8528,8 +8528,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/3114/3886/3269/LVSeatedReverseCalfExtensionH.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8578,8 +8578,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7314/3886/3265/LVReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8625,8 +8625,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6814/3886/3291/SL45DegReverseCalfPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8672,8 +8672,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/8314/3886/3295/SL45ReverseCalfRaiseHackPressPL.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8722,8 +8722,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1914/3886/3303/SLHackReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8769,8 +8769,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/1314/3886/3318/SLLyingReverseCalfPress.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8819,8 +8819,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/7314/3886/3320/SMReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8869,8 +8869,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/4514/3886/3263/DBReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",
@@ -8919,8 +8919,8 @@ window.GYMOS_EXRX_CATALOG = {
                 "Залишай 1–3 повторення в запасі, якщо не впевнений у техніці.",
                 "Для складних базових вправ використовуй страхування або безпечні упори."
             ],
-            "mediaUrl": "https://exrx.net/application/files/6314/3886/3249/BWSingleLegReverseCalfRaise.gif",
-            "mediaType": "image",
+            "mediaUrl": "",
+            "mediaType": "none",
             "mediaReferences": [
                 {
                     "type": "image",

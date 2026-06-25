@@ -263,7 +263,7 @@
         constructor(config) {
             this.config = config || {};
             this.key = "gym-os-v2";
-            this.mode = this.readSetting("dataMode") || this.config.dataMode || "local";
+            this.mode = this.config.requireAuth ? this.config.dataMode || "api" : this.readSetting("dataMode") || this.config.dataMode || "local";
             this.apiBaseUrl = this.readSetting("apiBaseUrl") || this.config.apiBaseUrl || "";
             this.backendStatus = "unknown";
             this.localProvider = new LocalStorageProvider(this.key);
@@ -540,6 +540,72 @@
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         }));
+    }
+
+    function mergeImportedExerciseCatalog(baseExercises, payload) {
+        const rows = Array.isArray(payload?.exercises) ? payload.exercises : Array.isArray(payload) ? payload : [];
+        const existingKeys = new Set(baseExercises.flatMap(exerciseDuplicateKeys));
+        const imported = [];
+        let skipped = 0;
+
+        rows.forEach((row) => {
+            const exercise = normalizeImportedExercise(row);
+            const keys = exerciseDuplicateKeys(exercise);
+            if (keys.some((key) => existingKeys.has(key))) {
+                skipped += 1;
+                return;
+            }
+            keys.forEach((key) => existingKeys.add(key));
+            imported.push(exercise);
+        });
+
+        return { exercises: [...baseExercises, ...imported], imported: imported.length, skipped };
+    }
+
+    function normalizeImportedExercise(row) {
+        const originalName = cleanText(row.originalName || row.name || "Imported exercise");
+        const sourceName = cleanText(row.sourceName || "ExRx.net");
+        const name = stripSourcePrefix(cleanText(row.name || originalName));
+        const category = cleanText(row.category || normalizeMuscleGroup(row.primaryMuscleGroup, row.category, originalName));
+        const primaryMuscleGroup = normalizeMuscleGroup(row.primaryMuscleGroup, row.category, originalName);
+        const movementPattern = normalizeMovementPattern(row.movementPattern, category, originalName);
+        const equipment = normalizeEquipment(row.equipment, originalName);
+        const now = new Date().toISOString();
+
+        return {
+            id: row.id || `exercise-${createSlug(`${sourceName}-${originalName}`)}`,
+            name,
+            aliases: uniqueStrings([...(Array.isArray(row.aliases) ? row.aliases : []), originalName]),
+            primaryMuscleGroup,
+            secondaryMuscleGroups: uniqueStrings((row.secondaryMuscleGroups || []).map((item) => normalizeMuscleGroup(item))),
+            movementPattern,
+            equipment,
+            category,
+            difficulty: normalizeDifficulty(row.difficulty),
+            description: cleanText(row.description || `${name} — вправа з джерела ${sourceName}. Перевіряй техніку за оригінальним джерелом перед додаванням у тренування.`),
+            techniqueSteps: cleanList(row.techniqueSteps),
+            commonMistakes: cleanList(row.commonMistakes),
+            safetyTips: cleanList(row.safetyTips),
+            mediaUrl: "",
+            mediaType: "none",
+            sourceName,
+            sourceUrl: cleanText(row.sourceUrl),
+            originalName,
+            licenseStatus: cleanText(row.licenseStatus || "permission_required"),
+            mediaReferences: Array.isArray(row.mediaReferences) ? row.mediaReferences : [],
+            isCustom: false,
+            createdByUserId: null,
+            createdAt: row.importedAt || now,
+            updatedAt: row.updatedAt || now
+        };
+    }
+
+    function exerciseDuplicateKeys(exercise) {
+        return [
+            exercise.originalName ? `original:${exercise.originalName.toLowerCase()}` : "",
+            exercise.sourceUrl ? `source:${exercise.sourceUrl.toLowerCase()}` : "",
+            exercise.id ? `id:${exercise.id}` : ""
+        ].filter(Boolean);
     }
 
     function techniqueFor(pattern) {
@@ -902,7 +968,7 @@
         const selected = exerciseById(state.knowledgeExerciseId) || state.database.exercises[0];
         const currentBest = bestResult(currentUser().id, selected.id);
         const teamBest = teamBestResult(selected.id);
-        content(`<div class="grid dashboard-grid"><section class="card span-4"><h2>База знань</h2><input type="search" placeholder="Пошук техніки" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="workout-stack" style="margin-top:14px;">${filteredExercises().slice(0, 14).map((exercise) => `<button class="nav-button ${exercise.id === selected.id ? "active" : ""}" type="button" data-action="select-knowledge" data-exercise-id="${exercise.id}"><span><i data-lucide="circle-dot"></i>${escapeHtml(exercise.name)}</span><strong class="nav-badge">${escapeHtml(exercise.primaryMuscleGroup)}</strong></button>`).join("")}</div></section><section class="card span-8"><div class="card-header"><div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(selected.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(selected.movementPattern)}</span><span class="chip">${escapeHtml(selected.equipment)}</span><span class="chip">${escapeHtml(selected.difficulty)}</span></div><h2>${escapeHtml(selected.name)}</h2><p class="card-caption">${escapeHtml(selected.description)}</p></div><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${selected.id}">Додати до тренування</button></div>${media(selected)}</section><section class="card span-4"><h2>Кроки техніки</h2>${ordered(selected.techniqueSteps)}</section><section class="card span-4"><h2>Типові помилки</h2>${bullets(selected.commonMistakes)}</section><section class="card span-4"><h2>Безпека</h2>${bullets(selected.safetyTips)}</section><section class="card span-4"><h2>Використання</h2>${kpi([{ label: "Востаннє", value: lastUsed(selected.id) ? shortDate(lastUsed(selected.id)) : "Ще не було" }, { label: "Користувачі", value: usersForExercise(selected.id).length }, { label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section><section class="card span-8"><h2>Схожі вправи</h2><div class="exercise-card-grid">${relatedExercises(selected.id).slice(0, 4).map(exerciseCard).join("") || emptyInline("Схожих вправ немає", "Каталог можна розширити у налаштуваннях.")}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-4"><h2>База знань</h2><input type="search" placeholder="Пошук техніки" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="workout-stack" style="margin-top:14px;">${filteredExercises().slice(0, 14).map((exercise) => `<button class="nav-button ${exercise.id === selected.id ? "active" : ""}" type="button" data-action="select-knowledge" data-exercise-id="${exercise.id}"><span><i data-lucide="circle-dot"></i>${escapeHtml(exercise.name)}</span><strong class="nav-badge">${escapeHtml(exercise.primaryMuscleGroup)}</strong></button>`).join("")}</div></section><section class="card span-8"><div class="card-header"><div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(selected.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(selected.movementPattern)}</span><span class="chip">${escapeHtml(selected.equipment)}</span><span class="chip">${escapeHtml(selected.difficulty)}</span></div><h2>${escapeHtml(selected.name)}</h2><p class="card-caption">${escapeHtml(selected.description)}</p></div><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${selected.id}">Додати до тренування</button></div>${media(selected)}${exerciseSourceBlock(selected)}</section><section class="card span-4"><h2>Кроки техніки</h2>${ordered(selected.techniqueSteps)}</section><section class="card span-4"><h2>Типові помилки</h2>${bullets(selected.commonMistakes)}</section><section class="card span-4"><h2>Безпека</h2>${bullets(selected.safetyTips)}</section><section class="card span-4"><h2>Використання</h2>${kpi([{ label: "Востаннє", value: lastUsed(selected.id) ? shortDate(lastUsed(selected.id)) : "Ще не було" }, { label: "Користувачі", value: usersForExercise(selected.id).length }, { label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section><section class="card span-8"><h2>Схожі вправи</h2><div class="exercise-card-grid">${relatedExercises(selected.id).slice(0, 4).map(exerciseCard).join("") || emptyInline("Схожих вправ немає", "Каталог можна розширити у налаштуваннях.")}</div></section></div>`);
     }
 
     function stats() {
@@ -948,7 +1014,9 @@
     }
 
     function settings() {
-        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Активний користувач</h2><p class="card-caption">Деморежим імітує права: активний користувач редагує лише власні дані.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth. У локальному деморежимі можна працювати без входу.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">Застосунок працює локально через IndexedDB/localStorage або через бекенд API. Якщо бекенд недоступний, демо не ламається.</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode"><option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Бекенд API</option></select></div><div class="field"><label>Базовий URL API</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="http://localhost:3000" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Бекенд: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "local" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути демодані</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп local-first бази для ручного перенесення або seed-даних бекенду.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником, нормативи лишаються налаштовуваними даними.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise">Додати власну вправу</button><button class="button button-secondary" type="button" data-action="open-standards">Відкрити нормативи</button></div></section></div>`);
+        const modeOptions = storage.config.requireAuth ? `<option value="api" selected>Бекенд API</option>` : `<option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Бекенд API</option>`;
+        const modeCaption = storage.config.requireAuth ? "Застосунок працює тільки через backend API. Зміни даних доступні після Google OAuth." : "Застосунок працює локально через IndexedDB/localStorage або через бекенд API.";
+        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Активний користувач</h2><p class="card-caption">Права редагування залежать від авторизованого Google акаунта.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">${modeCaption}</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode">${modeOptions}</select></div><div class="field"><label>Базовий URL API</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="https://gym-os-back.vercel.app" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Бекенд: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "backend API" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути локальний кеш</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп GymOS і окремий імпорт каталогу вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"><label class="button button-secondary" for="exerciseCatalogInput"><i data-lucide="file-up"></i>Імпортувати каталог вправ з JSON</label><input class="hidden" id="exerciseCatalogInput" type="file" accept="application/json" data-action="import-exercise-catalog"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником, нормативи лишаються налаштовуваними даними.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise">Додати власну вправу</button><button class="button button-secondary" type="button" data-action="open-standards">Відкрити нормативи</button></div></section></div>`);
     }
 
     function bindEvents() {
@@ -1030,6 +1098,10 @@
 
         if (actionElement.dataset.action === "import-data") {
             await importData(actionElement.files[0]);
+        }
+
+        if (actionElement.dataset.action === "import-exercise-catalog") {
+            await importExerciseCatalog(actionElement.files[0]);
         }
 
         if (actionElement.dataset.action === "data-mode") {
@@ -1425,7 +1497,7 @@
         const exercise = exerciseById(exerciseId);
         const currentBest = bestResult(currentUser().id, exerciseId);
         const teamBest = teamBestResult(exerciseId);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}<section class="panel" style="margin-top:14px;"><h3>Техніка</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Результати</h3>${kpi([{ label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section><section class="panel" style="margin-top:14px;"><h3>Схожі вправи</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("") || emptyInline("Схожих вправ немає", "Розшир каталог у налаштуваннях.")}</div></section>`);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}${exerciseSourceBlock(exercise)}<section class="panel" style="margin-top:14px;"><h3>Техніка</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Результати</h3>${kpi([{ label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section><section class="panel" style="margin-top:14px;"><h3>Схожі вправи</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("") || emptyInline("Схожих вправ немає", "Розшир каталог у налаштуваннях.")}</div></section>`);
     }
 
     function openWorkout(workoutId) {
@@ -1448,12 +1520,17 @@
     async function checkBackendConnection() {
         try {
             await storage.checkBackend(true);
-            toast("Backend доступний", storage.apiBaseUrl || "API base URL активний.");
+            await storage.refreshCurrentUser(false);
+            toast("Бекенд доступний", storage.apiBaseUrl || "API URL активний.");
         } catch (error) {
-            toast("Бекенд недоступний", "Застосунок залишився в локальному деморежимі.");
+            toast("Бекенд недоступний", storage.config.allowLocalFallback === false ? "Перевір deployment і env variables." : "Застосунок залишився в локальному деморежимі.");
             if (storage.config.allowLocalFallback !== false) {
                 await storage.setMode("local");
             }
+        }
+        if (storage.requiresAuthentication()) {
+            renderAuthGate();
+            return;
         }
         renderSection();
     }
@@ -1525,16 +1602,47 @@
         }
     }
 
+    async function importExerciseCatalog(file) {
+        if (!file) {
+            return;
+        }
+        try {
+            const data = JSON.parse(await file.text());
+            if (storage.mode === "api") {
+                const result = await storage.importExerciseCatalog(data);
+                toast("Каталог імпортовано", `Додано: ${result.imported || 0}, пропущено: ${result.skipped || 0}.`);
+                state.database = await storage.load();
+            } else {
+                const result = mergeImportedExerciseCatalog(state.database.exercises, data);
+                state.database.exercises = result.exercises;
+                await persist();
+                toast("Каталог імпортовано", `Додано: ${result.imported}, пропущено: ${result.skipped}.`);
+            }
+            renderSection();
+        } catch (error) {
+            console.error(error);
+            toast("Імпорт каталогу не вдався", "Перевір структуру JSON і права доступу.");
+        }
+    }
+
     async function resetData() {
-        if (!confirm("Скинути всі локальні demo data?")) {
+        if (!confirm(storage.mode === "api" ? "Очистити локальний кеш і перечитати дані з backend?" : "Скинути всі локальні demo data?")) {
             return;
         }
         await storage.reset();
+        if (storage.mode === "api") {
+            state.database = await storage.load();
+            state.profileUserId = state.database.currentUserId;
+            renderShell();
+            renderSection();
+            toast("Кеш очищено", "Дані перечитано з backend.");
+            return;
+        }
         state.database = createSeedDatabase();
         state.profileUserId = state.database.currentUserId;
         await persist();
         renderSection();
-        toast("Demo data скинуто", "Створено свіжу локальну базу.");
+        toast("Демодані скинуто", "Створено свіжу локальну базу.");
     }
 
     function metric(title, value, icon, caption, span = "span-3") {
@@ -1595,9 +1703,17 @@
 
     function media(exercise) {
         if (exercise.mediaUrl && exercise.mediaType !== "none") {
-            return `<div class="media-placeholder"><img src="${escapeHtml(exercise.mediaUrl)}" alt="${escapeHtml(exercise.name)} demonstration"></div>`;
+            return `<div class="media-placeholder"><img src="${escapeHtml(exercise.mediaUrl)}" alt="Демонстрація вправи ${escapeHtml(exercise.name)}"></div>`;
         }
         return `<div class="media-placeholder"><div class="media-placeholder-label">Місце для майбутнього GIF/WebP демо · анімований placeholder</div></div>`;
+    }
+
+    function exerciseSourceBlock(exercise) {
+        if (!exercise.sourceName) {
+            return "";
+        }
+        const sourceText = exercise.sourceName === "ExRx.net" ? "Джерело: ExRx.net" : `Джерело: ${exercise.sourceName}`;
+        return `<div class="source-strip"><span>${escapeHtml(sourceText)}</span>${exercise.sourceUrl ? `<a href="${escapeHtml(exercise.sourceUrl)}" target="_blank" rel="noreferrer">Відкрити джерело</a>` : ""}<span>Медіа збережено лише як reference metadata.</span></div>`;
     }
 
     function emptyInline(title, caption) {
@@ -2223,6 +2339,79 @@
 
     function unique(items) {
         return [...new Set(items)].sort();
+    }
+
+    function uniqueStrings(items) {
+        return [...new Set(items.map(cleanText).filter(Boolean))];
+    }
+
+    function cleanList(items) {
+        return uniqueStrings(Array.isArray(items) ? items : []);
+    }
+
+    function cleanText(value) {
+        return String(value || "").trim();
+    }
+
+    function stripSourcePrefix(value) {
+        return value.replace(/^ExRx\.net\s*:\s*/i, "").trim();
+    }
+
+    function createSlug(value) {
+        return cleanText(value).toLowerCase().replace(/[^a-z0-9а-яіїєґ]+/gi, "-").replace(/^-|-$/g, "").slice(0, 90);
+    }
+
+    function normalizeMuscleGroup(value = "", category = "", originalName = "") {
+        const text = `${value} ${category} ${originalName}`.toLowerCase();
+        if (/(chest|pector|pec\b|sternal|clavicular)/.test(text)) return "Груди";
+        if (/(back|lat|teres|trap|rhomboid|row)/.test(text)) return "Спина";
+        if (/(delt|shoulder|front delt|side delt|rear delt)/.test(text)) return "Плечі";
+        if (/triceps/.test(text)) return "Трицепс";
+        if (/(biceps|brachialis|curl)/.test(text)) return "Біцепс";
+        if (/(forearm|wrist|grip)/.test(text)) return "Передпліччя";
+        if (/(quad|thigh|leg extension)/.test(text)) return "Квадрицепс";
+        if (/(hamstring|leg curl)/.test(text)) return "Задня поверхня стегна";
+        if (/(glute|hip)/.test(text)) return "Сідниці";
+        if (/(calf|gastrocnemius|soleus)/.test(text)) return "Литки";
+        if (/(ab|oblique|waist|core)/.test(text)) return "Прес";
+        if (/neck/.test(text)) return "Шия";
+        return value && value !== "Full Body" ? cleanText(value) : "Все тіло";
+    }
+
+    function normalizeEquipment(value = "", originalName = "") {
+        const text = `${value} ${originalName}`.toLowerCase();
+        if (/barbell|bb\b/.test(text)) return "Штанга";
+        if (/dumbbell|db\b/.test(text)) return "Гантелі";
+        if (/cable|pulley/.test(text)) return "Блок";
+        if (/lever|machine|sled|smith/.test(text)) return "Тренажер";
+        if (/body\s?weight|self|assisted/.test(text)) return "Вага тіла";
+        if (/kettlebell/.test(text)) return "Гиря";
+        if (/band/.test(text)) return "Еспандер";
+        if (/medicine/.test(text)) return "Медбол";
+        return cleanText(value) || "Інше";
+    }
+
+    function normalizeMovementPattern(value = "", category = "", originalName = "") {
+        const text = `${value} ${category} ${originalName}`.toLowerCase();
+        if (/cardio|walk|run|cycle|bike|treadmill/.test(text)) return "Кардіо";
+        if (/squat|lunge|step-up|leg press/.test(text)) return "Присідання";
+        if (/deadlift|hinge|pull-through|good morning/.test(text)) return "Hinge";
+        if (/row/.test(text)) return "Горизонтальна тяга";
+        if (/pulldown|pull-up|chin-up/.test(text)) return "Вертикальна тяга";
+        if (/military|overhead|shoulder press|vertical press/.test(text)) return "Вертикальний жим";
+        if (/press|bench|dip|push-up/.test(text)) return "Горизонтальний жим";
+        if (/raise|fly|abduction/.test(text)) return "Підйом";
+        if (/curl|flexion/.test(text)) return "Згинання";
+        if (/extension|pushdown/.test(text)) return "Розгинання";
+        if (/rotation|twist|crunch|sit-up|plank/.test(text)) return "Кор";
+        return cleanText(value) || "Ізоляція";
+    }
+
+    function normalizeDifficulty(value = "") {
+        const text = String(value || "").toLowerCase();
+        if (/advanced|expert/.test(text)) return "Просунутий";
+        if (/beginner|basic|easy/.test(text)) return "Початковий";
+        return "Середній";
     }
 
     function content(html) {
