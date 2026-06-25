@@ -1,0 +1,71 @@
+﻿<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GymOS — Gym Progress OS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar" aria-label="Ð“Ð¾Ð»Ð¾Ð²Ð½Ð° Ð½Ð°Ð²Ñ–Ð³Ð°Ñ†Ñ–Ñ">
+            <div class="brand-block">
+                <div class="brand-mark">GO</div>
+                <div>
+                    <div class="brand-title">GymOS</div>
+                    <div class="brand-caption">Gym Progress OS</div>
+                </div>
+            </div>
+
+            <nav class="sidebar-navigation" id="sidebarNavigation"></nav>
+
+            <div class="sidebar-profile-card" id="sidebarProfileCard"></div>
+        </aside>
+
+        <main class="main-shell">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow" id="sectionEyebrow">ÐŸÐ°Ð½ÐµÐ»ÑŒ</p>
+                    <h1 id="sectionTitle">GymOS</h1>
+                </div>
+
+                <div class="topbar-actions">
+                    <button class="button button-secondary compact" id="openQuickActionButton" type="button">
+                        <i data-lucide="zap"></i>
+                        Ð¨Ð²Ð¸Ð´ÐºÐ° Ð´Ñ–Ñ
+                    </button>
+                    <button class="avatar-button" id="openUserSwitcherButton" type="button" aria-label="Ð—Ð¼Ñ–Ð½Ð¸Ñ‚Ð¸ Ð°ÐºÑ‚Ð¸Ð²Ð½Ð¾Ð³Ð¾ ÐºÐ¾Ñ€Ð¸ÑÑ‚ÑƒÐ²Ð°Ñ‡Ð°"></button>
+                </div>
+            </header>
+
+            <section class="page-content" id="pageContent"></section>
+        </main>
+
+        <nav class="mobile-navigation" id="mobileNavigation" aria-label="ÐœÐ¾Ð±Ñ–Ð»ÑŒÐ½Ð° Ð½Ð°Ð²Ñ–Ð³Ð°Ñ†Ñ–Ñ"></nav>
+    </div>
+
+    <div class="modal-backdrop hidden" id="modalBackdrop"></div>
+    <div class="modal-layer hidden" id="modalLayer" role="dialog" aria-modal="true"></div>
+    <div class="drawer-layer hidden" id="drawerLayer" aria-live="polite"></div>
+    <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script>
+        window.FORGE_CONFIG = {
+            appName: "GymOS",
+            apiBaseUrl: "",
+            dataMode: "local",
+            allowLocalFallback: true
+        };
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
+
