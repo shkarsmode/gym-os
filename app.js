@@ -422,35 +422,35 @@
 
     function createExercises() {
         const rows = [
-            ["bench-press", "Bench Press", "Barbell Bench,Flat Bench", "Chest", "Triceps,Shoulders", "Horizontal Press", "Barbell", "Strength", "Intermediate"],
-            ["incline-dumbbell-press", "Incline Dumbbell Press", "Incline DB Press", "Chest", "Shoulders,Triceps", "Horizontal Press", "Dumbbell", "Hypertrophy", "Intermediate"],
-            ["chest-press-machine", "Chest Press Machine", "Machine Press", "Chest", "Triceps", "Horizontal Press", "Machine", "Hypertrophy", "Beginner"],
-            ["cable-fly", "Cable Fly", "Cable Crossover", "Chest", "Shoulders", "Horizontal Press", "Cable", "Isolation", "Beginner"],
-            ["pull-ups", "Pull-ups", "Pullup,Chin over bar", "Back", "Biceps,Forearms", "Vertical Pull", "Bodyweight", "Strength", "Intermediate"],
-            ["lat-pulldown", "Lat Pulldown", "Pulldown", "Back", "Biceps", "Vertical Pull", "Cable", "Hypertrophy", "Beginner"],
-            ["barbell-row", "Barbell Row", "Bent-over Row", "Back", "Biceps,Forearms", "Horizontal Pull", "Barbell", "Strength", "Intermediate"],
-            ["seated-cable-row", "Seated Cable Row", "Cable Row", "Back", "Biceps", "Horizontal Pull", "Cable", "Hypertrophy", "Beginner"],
-            ["shoulder-press", "Shoulder Press", "Overhead Press,OHP", "Shoulders", "Triceps", "Vertical Press", "Barbell", "Strength", "Intermediate"],
-            ["lateral-raise", "Lateral Raise", "Side Raise", "Shoulders", "", "Raise", "Dumbbell", "Isolation", "Beginner"],
-            ["rear-delt-fly", "Rear Delt Fly", "Reverse Fly", "Shoulders", "Back", "Raise", "Dumbbell", "Isolation", "Beginner"],
-            ["barbell-squat", "Barbell Squat", "Back Squat", "Quads", "Glutes,Hamstrings,Abs", "Squat", "Barbell", "Strength", "Advanced"],
-            ["leg-press", "Leg Press", "Machine Leg Press", "Quads", "Glutes,Hamstrings", "Squat", "Machine", "Hypertrophy", "Beginner"],
-            ["leg-extension", "Leg Extension", "Quad Extension", "Quads", "", "Extension", "Machine", "Isolation", "Beginner"],
-            ["romanian-deadlift", "Romanian Deadlift", "RDL", "Hamstrings", "Glutes,Back", "Hinge", "Barbell", "Strength", "Intermediate"],
-            ["leg-curl", "Leg Curl", "Hamstring Curl", "Hamstrings", "", "Curl", "Machine", "Isolation", "Beginner"],
-            ["calf-raise", "Calf Raise", "Standing Calf Raise", "Calves", "", "Raise", "Machine", "Isolation", "Beginner"],
-            ["barbell-curl", "Barbell Curl", "EZ Curl", "Biceps", "Forearms", "Curl", "Barbell", "Isolation", "Beginner"],
-            ["dumbbell-curl", "Dumbbell Curl", "DB Curl", "Biceps", "Forearms", "Curl", "Dumbbell", "Isolation", "Beginner"],
-            ["hammer-curl", "Hammer Curl", "Neutral Curl", "Biceps", "Forearms", "Curl", "Dumbbell", "Isolation", "Beginner"],
-            ["triceps-pushdown", "Triceps Pushdown", "Cable Pushdown", "Triceps", "", "Extension", "Cable", "Isolation", "Beginner"],
-            ["overhead-triceps-extension", "Overhead Triceps Extension", "Overhead Cable Extension", "Triceps", "", "Extension", "Cable", "Isolation", "Beginner"],
-            ["plank", "Plank", "Front Plank", "Abs", "Full Body", "Core", "Bodyweight", "Core", "Beginner"],
-            ["hanging-leg-raise", "Hanging Leg Raise", "Leg Raise", "Abs", "Forearms", "Core", "Bodyweight", "Core", "Intermediate"],
-            ["treadmill", "Treadmill", "Incline Walk", "Full Body", "Calves", "Cardio", "Machine", "Cardio", "Beginner"],
-            ["bike", "Bike", "Stationary Bike", "Quads", "Glutes,Calves", "Cardio", "Machine", "Cardio", "Beginner"],
-            ["running", "Running", "Run", "Full Body", "Calves,Quads", "Cardio", "Bodyweight", "Cardio", "Intermediate"],
-            ["walking", "Walking", "Walk", "Full Body", "Calves", "Cardio", "Bodyweight", "Cardio", "Beginner"],
-            ["rowing-machine", "Rowing Machine", "Rower", "Full Body", "Back,Quads,Biceps", "Cardio", "Machine", "Cardio", "Intermediate"]
+            ["bench-press", "Жим лежачи", "Bench Press,Barbell Bench,Flat Bench", "Груди", "Трицепс,Плечі", "Горизонтальний жим", "Штанга", "Сила", "Середній"],
+            ["incline-dumbbell-press", "Жим гантелей під кутом", "Incline Dumbbell Press,Incline DB Press", "Груди", "Плечі,Трицепс", "Горизонтальний жим", "Гантелі", "Гіпертрофія", "Середній"],
+            ["chest-press-machine", "Жим у тренажері", "Chest Press Machine,Machine Press", "Груди", "Трицепс", "Горизонтальний жим", "Тренажер", "Гіпертрофія", "Початковий"],
+            ["cable-fly", "Зведення в кросовері", "Cable Fly,Cable Crossover", "Груди", "Плечі", "Ізоляція", "Блок", "Ізоляція", "Початковий"],
+            ["pull-ups", "Підтягування", "Pull-ups,Pullup,Chin over bar", "Спина", "Біцепс,Передпліччя", "Вертикальна тяга", "Вага тіла", "Сила", "Середній"],
+            ["lat-pulldown", "Тяга верхнього блока", "Lat Pulldown,Pulldown", "Спина", "Біцепс", "Вертикальна тяга", "Блок", "Гіпертрофія", "Початковий"],
+            ["barbell-row", "Тяга штанги в нахилі", "Barbell Row,Bent-over Row", "Спина", "Біцепс,Передпліччя", "Горизонтальна тяга", "Штанга", "Сила", "Середній"],
+            ["seated-cable-row", "Горизонтальна тяга блока", "Seated Cable Row,Cable Row", "Спина", "Біцепс", "Горизонтальна тяга", "Блок", "Гіпертрофія", "Початковий"],
+            ["shoulder-press", "Жим над головою", "Shoulder Press,Overhead Press,OHP", "Плечі", "Трицепс", "Вертикальний жим", "Штанга", "Сила", "Середній"],
+            ["lateral-raise", "Підйом гантелей в сторони", "Lateral Raise,Side Raise", "Плечі", "", "Підйом", "Гантелі", "Ізоляція", "Початковий"],
+            ["rear-delt-fly", "Розведення на задню дельту", "Rear Delt Fly,Reverse Fly", "Плечі", "Спина", "Підйом", "Гантелі", "Ізоляція", "Початковий"],
+            ["barbell-squat", "Присідання зі штангою", "Barbell Squat,Back Squat", "Квадрицепс", "Сідниці,Задня поверхня стегна,Прес", "Присідання", "Штанга", "Сила", "Просунутий"],
+            ["leg-press", "Жим ногами", "Leg Press,Machine Leg Press", "Квадрицепс", "Сідниці,Задня поверхня стегна", "Присідання", "Тренажер", "Гіпертрофія", "Початковий"],
+            ["leg-extension", "Розгинання ніг", "Leg Extension,Quad Extension", "Квадрицепс", "", "Розгинання", "Тренажер", "Ізоляція", "Початковий"],
+            ["romanian-deadlift", "Румунська тяга", "Romanian Deadlift,RDL", "Задня поверхня стегна", "Сідниці,Спина", "Hinge", "Штанга", "Сила", "Середній"],
+            ["leg-curl", "Згинання ніг", "Leg Curl,Hamstring Curl", "Задня поверхня стегна", "", "Згинання", "Тренажер", "Ізоляція", "Початковий"],
+            ["calf-raise", "Підйом на литки", "Calf Raise,Standing Calf Raise", "Литки", "", "Підйом", "Тренажер", "Ізоляція", "Початковий"],
+            ["barbell-curl", "Згинання зі штангою", "Barbell Curl,EZ Curl", "Біцепс", "Передпліччя", "Згинання", "Штанга", "Ізоляція", "Початковий"],
+            ["dumbbell-curl", "Згинання з гантелями", "Dumbbell Curl,DB Curl", "Біцепс", "Передпліччя", "Згинання", "Гантелі", "Ізоляція", "Початковий"],
+            ["hammer-curl", "Молоткові згинання", "Hammer Curl,Neutral Curl", "Біцепс", "Передпліччя", "Згинання", "Гантелі", "Ізоляція", "Початковий"],
+            ["triceps-pushdown", "Розгинання на блоці", "Triceps Pushdown,Cable Pushdown", "Трицепс", "", "Розгинання", "Блок", "Ізоляція", "Початковий"],
+            ["overhead-triceps-extension", "Розгинання трицепса над головою", "Overhead Triceps Extension,Overhead Cable Extension", "Трицепс", "", "Розгинання", "Блок", "Ізоляція", "Початковий"],
+            ["plank", "Планка", "Plank,Front Plank", "Прес", "Все тіло", "Кор", "Вага тіла", "Кор", "Початковий"],
+            ["hanging-leg-raise", "Підйом ніг у висі", "Hanging Leg Raise,Leg Raise", "Прес", "Передпліччя", "Кор", "Вага тіла", "Кор", "Середній"],
+            ["treadmill", "Бігова доріжка", "Treadmill,Incline Walk", "Все тіло", "Литки", "Кардіо", "Тренажер", "Кардіо", "Початковий"],
+            ["bike", "Велотренажер", "Bike,Stationary Bike", "Квадрицепс", "Сідниці,Литки", "Кардіо", "Тренажер", "Кардіо", "Початковий"],
+            ["running", "Біг", "Running,Run", "Все тіло", "Литки,Квадрицепс", "Кардіо", "Вага тіла", "Кардіо", "Середній"],
+            ["walking", "Ходьба", "Walking,Walk", "Все тіло", "Литки", "Кардіо", "Вага тіла", "Кардіо", "Початковий"],
+            ["rowing-machine", "Гребний тренажер", "Rowing Machine,Rower", "Все тіло", "Спина,Квадрицепс,Біцепс", "Кардіо", "Тренажер", "Кардіо", "Середній"]
         ];
 
         return rows.map(([slug, name, aliases, primaryMuscleGroup, secondaryMuscles, movementPattern, equipment, category, difficulty]) => ({
@@ -463,7 +463,7 @@
             equipment,
             category,
             difficulty,
-            description: `${name} is a ${movementPattern.toLowerCase()} movement focused on ${primaryMuscleGroup.toLowerCase()}. Keep the setup repeatable and track clean performance.` ,
+            description: `${name} — вправа з патерном "${movementPattern}", основний фокус: ${primaryMuscleGroup.toLowerCase()}. Тримай сетап повторюваним і фіксуй чисту роботу.`,
             techniqueSteps: techniqueFor(movementPattern),
             commonMistakes: mistakesFor(movementPattern),
             safetyTips: safetyFor(movementPattern),
@@ -478,40 +478,40 @@
 
     function techniqueFor(pattern) {
         const data = {
-            "Horizontal Press": ["Set shoulder blades down and back.", "Keep wrists stacked over elbows.", "Lower with control.", "Press without bouncing."],
-            "Vertical Press": ["Brace ribs down.", "Press in a smooth vertical path.", "Avoid excessive arching.", "Finish with controlled lockout."],
-            "Horizontal Pull": ["Set the torso angle.", "Drive elbows back.", "Pause near the body.", "Lower under control."],
-            "Vertical Pull": ["Start with stable shoulders.", "Pull elbows down to ribs.", "Avoid swinging.", "Control the full stretch."],
-            "Squat": ["Brace before descent.", "Keep foot pressure balanced.", "Control depth.", "Drive up without knee collapse."],
-            "Hinge": ["Push hips back.", "Keep the load close.", "Maintain neutral spine.", "Stand tall without leaning back."],
-            "Curl": ["Lock upper arms.", "Lift without hip swing.", "Squeeze briefly.", "Lower slowly."],
-            "Extension": ["Keep elbows stable.", "Move through the target joint.", "Control lockout.", "Avoid stack slamming."],
-            "Raise": ["Use controlled weight.", "Lead smoothly.", "Avoid trap domination.", "Lower slowly."],
-            "Core": ["Brace first.", "Keep pelvis controlled.", "Avoid momentum.", "Stop when position breaks."],
-            "Cardio": ["Start easy.", "Increase intensity gradually.", "Keep breathing stable.", "Record duration and effort."]
+            "Горизонтальний жим": ["Зведи лопатки вниз і назад.", "Тримай кисті над ліктями.", "Опускай вагу контрольовано.", "Тисни без відбиву."],
+            "Вертикальний жим": ["Зафіксуй ребра та корпус.", "Тисни по рівній вертикальній траєкторії.", "Не компенсуй надмірним прогином.", "Завершуй з контрольованою фіксацією."],
+            "Горизонтальна тяга": ["Задай стабільний кут корпуса.", "Веди лікті назад.", "Зроби коротку паузу біля корпуса.", "Опускай вагу під контролем."],
+            "Вертикальна тяга": ["Почни зі стабільних плечей.", "Тягни лікті вниз до ребер.", "Не розгойдуйся.", "Контролюй повну амплітуду."],
+            "Присідання": ["Забрейсь перед спуском.", "Тримай рівномірний тиск стопи.", "Контролюй глибину.", "Підіймайся без завалу колін."],
+            "Hinge": ["Відведи таз назад.", "Тримай вагу близько до тіла.", "Зберігай нейтральну спину.", "Вставай рівно без перерозгинання."],
+            "Згинання": ["Зафіксуй плечі.", "Підіймай без розгону тазом.", "Коротко стисни м'яз.", "Опускай повільно."],
+            "Розгинання": ["Тримай лікті стабільно.", "Рухайся через цільовий суглоб.", "Контролюй фінальне розгинання.", "Не кидай вагу в стек."],
+            "Підйом": ["Обери вагу для контролю.", "Рухайся плавно.", "Не забирай усе трапеціями.", "Опускай повільно."],
+            "Кор": ["Спочатку зафіксуй корпус.", "Контролюй таз.", "Не працюй інерцією.", "Зупинись, якщо позиція ламається."],
+            "Кардіо": ["Почни легко.", "Піднімай інтенсивність поступово.", "Тримай стабільне дихання.", "Запиши тривалість і відчуття."]
         };
-        return data[pattern] || ["Set up with control.", "Use repeatable range.", "Avoid rushing.", "Track consistently."];
+        return data[pattern] || ["Налаштуй позицію контрольовано.", "Працюй у повторюваній амплітуді.", "Не поспішай.", "Фіксуй результат стабільно."];
     }
 
     function mistakesFor(pattern) {
         const data = {
-            "Horizontal Press": ["Bouncing the weight", "Loose shoulder position", "Inconsistent range"],
-            "Vertical Pull": ["Swinging", "Half reps", "Only pulling with arms"],
-            "Squat": ["Rushing descent", "Heels lifting", "Knees collapsing inward"],
-            "Hinge": ["Turning it into a squat", "Rounding under fatigue", "Load drifting away"],
-            "Cardio": ["Starting too hard", "Skipping warm-up", "Not recording intensity"]
+            "Горизонтальний жим": ["Відбивання ваги", "Нестабільні плечі", "Нерівна амплітуда"],
+            "Вертикальна тяга": ["Розгойдування", "Половинчасті повторення", "Тяга лише руками"],
+            "Присідання": ["Поспішний спуск", "Відрив п'ят", "Завал колін всередину"],
+            "Hinge": ["Перетворення руху на присідання", "Округлення спини під втомою", "Вага відходить далеко від тіла"],
+            "Кардіо": ["Занадто різкий старт", "Пропуск розминки", "Відсутність інтенсивності в логах"]
         };
-        return data[pattern] || ["Too much momentum", "Too much load", "Poor control near fatigue"];
+        return data[pattern] || ["Зайва інерція", "Завелика вага", "Втрата контролю на втомі"];
     }
 
     function safetyFor(pattern) {
         const data = {
-            "Horizontal Press": ["Use safeties or a spotter for heavy sets.", "Stop when bar path becomes unstable."],
-            "Squat": ["Use safeties for heavy attempts.", "Do not chase depth by losing control."],
-            "Hinge": ["Respect fatigue on hinge work.", "Reduce load if position changes."],
-            "Cardio": ["Increase intensity gradually.", "Rest if discomfort appears."]
+            "Горизонтальний жим": ["Для важких сетів використовуй страхувальні упори або партнера.", "Зупинись, якщо траєкторія штанги стала нестабільною."],
+            "Присідання": ["Для важких підходів став страхувальні упори.", "Не гонись за глибиною ціною контролю."],
+            "Hinge": ["Поважай втому в hinge-рухах.", "Зменш вагу, якщо позиція змінюється."],
+            "Кардіо": ["Піднімай інтенсивність поступово.", "Зроби паузу, якщо є дискомфорт."]
         };
-        return data[pattern] || ["Use controlled loading.", "Do not chase numbers with broken form."];
+        return data[pattern] || ["Працюй із контрольованим навантаженням.", "Не женись за цифрами ціною форми."];
     }
 
     function createBodyweights(users, now) {
@@ -527,20 +527,20 @@
     function createWorkouts(exercises, now) {
         const byName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
         const plan = [
-            ["user-daniil", 38, "Push strength", "push", ["Bench Press", "Incline Dumbbell Press", "Lateral Raise", "Triceps Pushdown"]],
-            ["user-daniil", 35, "Pull volume", "pull", ["Pull-ups", "Barbell Row", "Lat Pulldown", "Hammer Curl"]],
-            ["user-daniil", 32, "Leg rebuild", "legs", ["Barbell Squat", "Romanian Deadlift", "Leg Press", "Calf Raise"]],
-            ["user-daniil", 28, "Upper control", "upper", ["Bench Press", "Seated Cable Row", "Shoulder Press", "Barbell Curl"]],
-            ["user-daniil", 20, "Push hypertrophy", "push", ["Incline Dumbbell Press", "Chest Press Machine", "Cable Fly", "Triceps Pushdown"]],
-            ["user-daniil", 16, "Leg volume", "legs", ["Barbell Squat", "Leg Extension", "Leg Curl", "Calf Raise"]],
-            ["user-daniil", 7, "Push progression", "push", ["Bench Press", "Incline Dumbbell Press", "Shoulder Press", "Overhead Triceps Extension"]],
-            ["user-daniil", 3, "Pull precision", "pull", ["Pull-ups", "Barbell Row", "Seated Cable Row", "Hammer Curl"]],
-            ["user-anastasia", 31, "Lower body control", "lower", ["Leg Press", "Romanian Deadlift", "Leg Curl", "Calf Raise"]],
-            ["user-anastasia", 24, "Cardio and core", "cardio", ["Treadmill", "Bike", "Plank"]],
-            ["user-anastasia", 9, "Upper clean reps", "upper", ["Lat Pulldown", "Seated Cable Row", "Lateral Raise", "Triceps Pushdown"]],
-            ["user-maxim", 36, "Heavy push", "push", ["Bench Press", "Shoulder Press", "Triceps Pushdown"]],
-            ["user-maxim", 19, "Leg power", "legs", ["Barbell Squat", "Romanian Deadlift", "Leg Press"]],
-            ["user-maxim", 5, "Upper density", "upper", ["Bench Press", "Barbell Row", "Shoulder Press", "Hammer Curl"]]
+            ["user-daniil", 38, "Push сила", "push", ["Жим лежачи", "Жим гантелей під кутом", "Підйом гантелей в сторони", "Розгинання на блоці"]],
+            ["user-daniil", 35, "Pull обсяг", "pull", ["Підтягування", "Тяга штанги в нахилі", "Тяга верхнього блока", "Молоткові згинання"]],
+            ["user-daniil", 32, "Legs відновлення", "legs", ["Присідання зі штангою", "Румунська тяга", "Жим ногами", "Підйом на литки"]],
+            ["user-daniil", 28, "Upper контроль", "upper", ["Жим лежачи", "Горизонтальна тяга блока", "Жим над головою", "Згинання зі штангою"]],
+            ["user-daniil", 20, "Push гіпертрофія", "push", ["Жим гантелей під кутом", "Жим у тренажері", "Зведення в кросовері", "Розгинання на блоці"]],
+            ["user-daniil", 16, "Legs обсяг", "legs", ["Присідання зі штангою", "Розгинання ніг", "Згинання ніг", "Підйом на литки"]],
+            ["user-daniil", 7, "Push прогресія", "push", ["Жим лежачи", "Жим гантелей під кутом", "Жим над головою", "Розгинання трицепса над головою"]],
+            ["user-daniil", 3, "Pull точність", "pull", ["Підтягування", "Тяга штанги в нахилі", "Горизонтальна тяга блока", "Молоткові згинання"]],
+            ["user-anastasia", 31, "Lower контроль", "lower", ["Жим ногами", "Румунська тяга", "Згинання ніг", "Підйом на литки"]],
+            ["user-anastasia", 24, "Кардіо і кор", "cardio", ["Бігова доріжка", "Велотренажер", "Планка"]],
+            ["user-anastasia", 9, "Upper чисті повторення", "upper", ["Тяга верхнього блока", "Горизонтальна тяга блока", "Підйом гантелей в сторони", "Розгинання на блоці"]],
+            ["user-maxim", 36, "Важкий push", "push", ["Жим лежачи", "Жим над головою", "Розгинання на блоці"]],
+            ["user-maxim", 19, "Legs сила", "legs", ["Присідання зі штангою", "Румунська тяга", "Жим ногами"]],
+            ["user-maxim", 5, "Upper щільність", "upper", ["Жим лежачи", "Тяга штанги в нахилі", "Жим над головою", "Молоткові згинання"]]
         ];
 
         const workouts = plan.map(([userId, daysAgo, title, workoutType, exerciseNames], workoutIndex) => {
@@ -554,7 +554,7 @@
                 workoutType,
                 startedAt: start.toISOString(),
                 finishedAt: addMinutes(start, 65 + workoutIndex % 25).toISOString(),
-                notes: workoutIndex % 2 ? "Good session. Add load only if control stays stable." : "Clean technique. Repeat setup next time.",
+                notes: workoutIndex % 2 ? "Хороша сесія. Додавати вагу тільки якщо контроль стабільний." : "Чиста техніка. Повторити сетап наступного разу.",
                 exercises: exerciseNames.map((name, index) => createWorkoutExercise(byName.get(name), workoutIndex, index)),
                 cardioSessions: workoutType === "cardio" || workoutIndex % 4 === 0 ? [createCardio(workoutIndex)] : [],
                 createdAt: start.toISOString(),
@@ -566,14 +566,14 @@
         workouts.push(createTemplateWorkout("user-daniil", templateById("legs"), "planned", dateInput(addDays(now, 2)), exercises));
         const activeWorkout = createTemplateWorkout("user-daniil", templateById("push"), "active", dateInput(now), exercises);
         activeWorkout.startedAt = addMinutes(now, -34).toISOString();
-        activeWorkout.notes = "Active demo workout. Finish it or add more work.";
+        activeWorkout.notes = "Активне demo-тренування. Можна завершити або додати роботу.";
         workouts.push(activeWorkout);
         return workouts;
     }
 
     function createWorkoutExercise(exercise, workoutIndex, index) {
-        if (exercise.movementPattern === "Cardio") {
-            return { id: createId("workout-exercise"), exerciseId: exercise.id, order: index + 1, notes: "Cardio exercise tracked in cardio sessions.", sets: [] };
+        if (exercise.movementPattern === "Кардіо") {
+            return { id: createId("workout-exercise"), exerciseId: exercise.id, order: index + 1, notes: "Кардіо ведеться окремим блоком у тренуванні.", sets: [] };
         }
 
         const base = seedWeight(exercise.name, workoutIndex);
@@ -581,7 +581,7 @@
             id: createId("workout-exercise"),
             exerciseId: exercise.id,
             order: index + 1,
-            notes: index === 0 ? "Main movement. Stay strict." : "Accessory movement.",
+            notes: index === 0 ? "Головний рух. Тримай техніку строгою." : "Допоміжний рух.",
             sets: [
                 createSet("warmup", Math.max(0, round(base * 0.55, 1)), 10, 5, 60, true),
                 createSet("working", base, 8 + (workoutIndex + index) % 3, 8, 105, true),
@@ -603,10 +603,10 @@
             workoutType: template.type,
             startedAt: status === "active" ? now.toISOString() : null,
             finishedAt: null,
-            notes: status === "planned" ? "Planned from template." : "Started from template.",
+            notes: status === "planned" ? "Заплановано із шаблону." : "Почато із шаблону.",
             exercises: template.exerciseNames.map((name, index) => {
                 const exercise = byName.get(name);
-                return { id: createId("workout-exercise"), exerciseId: exercise.id, order: index + 1, notes: "Template suggestion.", sets: suggestedSets(exercise) };
+                return { id: createId("workout-exercise"), exerciseId: exercise.id, order: index + 1, notes: "Підказка із шаблону.", sets: suggestedSets(exercise) };
             }),
             cardioSessions: template.type === "cardio" ? [createCardio(0)] : [],
             createdAt: now.toISOString(),
@@ -2007,4 +2007,5 @@
         await storage.save(state.database);
     }
 })();
+
 
