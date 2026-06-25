@@ -1,54 +1,58 @@
-(() => {
+﻿(() => {
     "use strict";
 
     const sectionItems = [
-        ["dashboard", "Dashboard", "layout-dashboard"],
-        ["workout", "Current Workout", "dumbbell"],
-        ["calendar", "Calendar", "calendar-days"],
-        ["exercises", "Exercises", "list-filter"],
-        ["knowledge", "Knowledge Base", "book-open"],
-        ["stats", "Stats", "bar-chart-3"],
-        ["rankings", "Rankings", "trophy"],
-        ["achievements", "Achievements", "badge-check"],
-        ["users", "Users", "users"],
-        ["profile", "Profile", "user-round"],
-        ["settings", "Settings", "settings"]
+        ["dashboard", "Панель", "layout-dashboard"],
+        ["workout", "Поточне тренування", "dumbbell"],
+        ["calendar", "Календар", "calendar-days"],
+        ["exercises", "Вправи", "list-filter"],
+        ["knowledge", "База знань", "book-open"],
+        ["stats", "Статистика", "bar-chart-3"],
+        ["rankings", "Рейтинги", "trophy"],
+        ["achievements", "Досягнення", "badge-check"],
+        ["users", "Команда", "users"],
+        ["profile", "Профіль", "user-round"],
+        ["settings", "Налаштування", "settings"]
     ].map(([id, title, icon]) => ({ id, title, icon }));
 
     const mobileSectionIds = ["dashboard", "workout", "calendar", "stats", "profile"];
-    const rankedExerciseNames = ["Bench Press", "Barbell Squat", "Romanian Deadlift", "Pull-ups", "Shoulder Press", "Barbell Row"];
+    const rankedExerciseNames = ["Жим лежачи", "Присідання зі штангою", "Румунська тяга", "Підтягування", "Жим над головою", "Тяга штанги в нахилі"];
     const rankOrder = ["beginner", "novice", "third_class", "second_class", "first_class", "candidate_master", "master"];
+    const statusLabels = { planned: "Заплановано", active: "Активне", completed: "Завершено" };
+    const setTypeLabels = { warmup: "Розминка", working: "Робочий", drop: "Дроп", failure: "Відмова", backoff: "Відкат" };
+    const workoutTypeLabels = { push: "Push", pull: "Pull", legs: "Legs", upper: "Upper", lower: "Lower", full_body: "Full Body", cardio: "Cardio", custom: "Custom" };
+    const genderLabels = { male: "чоловіча", female: "жіноча" };
+    const dataModeLabels = { local: "локальний", api: "backend" };
 
     const templates = [
-        ["push", "Push Day", "Chest, shoulders and triceps.", ["Bench Press", "Incline Dumbbell Press", "Shoulder Press", "Lateral Raise", "Triceps Pushdown"]],
-        ["pull", "Pull Day", "Back and biceps with clean pulling patterns.", ["Pull-ups", "Barbell Row", "Lat Pulldown", "Rear Delt Fly", "Hammer Curl"]],
-        ["legs", "Leg Day", "Squat, hinge and lower-body accessories.", ["Barbell Squat", "Romanian Deadlift", "Leg Press", "Leg Curl", "Calf Raise"]],
-        ["upper", "Upper Body", "Balanced upper-body strength work.", ["Bench Press", "Pull-ups", "Shoulder Press", "Seated Cable Row", "Barbell Curl"]],
-        ["lower", "Lower Body", "Lower-body volume without chaos.", ["Barbell Squat", "Leg Press", "Romanian Deadlift", "Leg Extension", "Calf Raise"]],
-        ["full_body", "Full Body", "Compact strength session.", ["Bench Press", "Pull-ups", "Barbell Squat", "Plank"]],
-        ["cardio", "Cardio Day", "Conditioning-focused workout.", ["Treadmill", "Bike"]],
-        ["custom", "Custom Day", "Start from a clean slate.", []]
+        ["push", "Push", "Груди, плечі та трицепс.", ["Жим лежачи", "Жим гантелей під кутом", "Жим над головою", "Підйом гантелей в сторони", "Розгинання на блоці"]],
+        ["pull", "Pull", "Спина та біцепс із чистою тяговою механікою.", ["Підтягування", "Тяга штанги в нахилі", "Тяга верхнього блока", "Розведення на задню дельту", "Молоткові згинання"]],
+        ["legs", "Legs", "Присідання, hinge і нижня частина тіла.", ["Присідання зі штангою", "Румунська тяга", "Жим ногами", "Згинання ніг", "Підйом на литки"]],
+        ["upper", "Upper", "Збалансована силова робота для верху.", ["Жим лежачи", "Підтягування", "Жим над головою", "Горизонтальна тяга блока", "Згинання зі штангою"]],
+        ["lower", "Lower", "Контрольований обсяг для низу тіла.", ["Присідання зі штангою", "Жим ногами", "Румунська тяга", "Розгинання ніг", "Підйом на литки"]],
+        ["full_body", "Full Body", "Компактна силова сесія на все тіло.", ["Жим лежачи", "Підтягування", "Присідання зі штангою", "Планка"]],
+        ["cardio", "Cardio", "Тренування з фокусом на кондицію.", ["Бігова доріжка", "Велотренажер"]],
+        ["custom", "Custom", "Порожній шаблон для власного плану.", []]
     ].map(([id, title, description, exerciseNames]) => ({ id, title, description, exerciseNames, type: id }));
 
     const achievements = [
-        ["first-workout", "First Workout", "Complete your first workout.", "🏁", "Consistency", 1, "completedWorkouts"],
-        ["three-workouts", "3 Workouts Completed", "Build the first visible rhythm.", "⚙️", "Consistency", 3, "completedWorkouts"],
-        ["ten-workouts", "10 Workouts Completed", "Lock in a real training habit.", "🧱", "Consistency", 10, "completedWorkouts"],
-        ["first-pr", "First Personal Record", "Register any PR.", "📈", "Strength", 1, "personalRecords"],
-        ["bench-pr", "Bench Press PR", "Set a bench press record.", "🏋️", "Strength", 1, "benchRecords"],
-        ["squat-pr", "Squat PR", "Set a squat record.", "🦵", "Strength", 1, "squatRecords"],
-        ["pullup-progress", "Pull-up Progress", "Log pull-ups three times.", "🪢", "Strength", 3, "pullupSessions"],
-        ["volume-10k", "10,000 kg Total Volume", "Move the first big block.", "🧮", "Volume", 10000, "totalVolume"],
-        ["volume-50k", "50,000 kg Total Volume", "Volume starts to compound.", "📦", "Volume", 50000, "totalVolume"],
-        ["first-cardio", "First Cardio Session", "Log your first cardio block.", "❤️", "Cardio", 1, "cardioSessions"],
-        ["cardio-100", "100 Cardio Minutes", "Build conditioning base.", "⏱️", "Cardio", 100, "cardioMinutes"],
-        ["full-week", "Full Week Completed", "Train three times in one week.", "🗓️", "Consistency", 1, "fullTrainingWeeks"],
-        ["ppl", "Push Pull Legs Completed", "Complete push, pull and legs.", "🔺", "Technique", 3, "pushPullLegs"],
-        ["warmup", "Warm-up Discipline", "Complete 10 warm-up sets.", "🧤", "Technique", 10, "warmupSets"],
-        ["notes", "Notes Master", "Add useful notes.", "📝", "Technique", 5, "notesCount"],
-        ["profile", "Profile Completed", "Fill the key profile fields.", "🪪", "Profile", 1, "profileCompleteness"]
+        ["first-workout", "Перше тренування", "Завершити перше тренування.", "01", "Ритм", 1, "completedWorkouts"],
+        ["three-workouts", "3 завершені тренування", "Побудувати перший стабільний ритм.", "03", "Ритм", 3, "completedWorkouts"],
+        ["ten-workouts", "10 завершених тренувань", "Закріпити помітну тренувальну звичку.", "10", "Ритм", 10, "completedWorkouts"],
+        ["first-pr", "Перший особистий рекорд", "Зафіксувати будь-який PR.", "PR", "Сила", 1, "personalRecords"],
+        ["bench-pr", "PR у жимі лежачи", "Поставити рекорд у жимі лежачи.", "BP", "Сила", 1, "benchRecords"],
+        ["squat-pr", "PR у присіданні", "Поставити рекорд у присіданні.", "SQ", "Сила", 1, "squatRecords"],
+        ["pullup-progress", "Прогрес у підтягуваннях", "Залогувати підтягування три рази.", "PU", "Сила", 3, "pullupSessions"],
+        ["volume-10k", "10 000 кг обсягу", "Зібрати перший великий блок роботи.", "10K", "Обсяг", 10000, "totalVolume"],
+        ["volume-50k", "50 000 кг обсягу", "Показати накопичений силовий обсяг.", "50K", "Обсяг", 50000, "totalVolume"],
+        ["first-cardio", "Перше кардіо", "Додати перший кардіо-блок.", "C1", "Кардіо", 1, "cardioSessions"],
+        ["cardio-100", "100 хвилин кардіо", "Побудувати базу кондиції.", "C100", "Кардіо", 100, "cardioMinutes"],
+        ["full-week", "Повний тренувальний тиждень", "Завершити три тренування за один тиждень.", "WK", "Ритм", 1, "fullTrainingWeeks"],
+        ["ppl", "Push Pull Legs", "Закрити push, pull і legs у завершених сесіях.", "PPL", "Техніка", 3, "pushPullLegs"],
+        ["warmup", "Дисципліна розминки", "Виконати 10 розминкових підходів.", "WU", "Техніка", 10, "warmupSets"],
+        ["notes", "Якісні нотатки", "Додати корисні нотатки до тренувань.", "NT", "Техніка", 5, "notesCount"],
+        ["profile", "Заповнений профіль", "Заповнити ключові поля профілю.", "ID", "Профіль", 1, "profileCompleteness"]
     ].map(([id, title, description, icon, category, target, metric]) => ({ id, title, description, icon, category, target, metric }));
-
     const state = {
         section: "dashboard",
         knowledgeExerciseId: "exercise-bench-press",
@@ -62,6 +66,7 @@
             statsRange: "90",
             statsMuscle: "all",
             statsExerciseId: "all",
+            statsWorkoutType: "all",
             achievementCategory: "all"
         },
         timer: {
@@ -376,6 +381,9 @@
     async function initialize() {
         await storage.initialize();
         state.database = await storage.load() || createSeedDatabase();
+        if (!state.database.version || state.database.version < 2) {
+            state.database = createSeedDatabase();
+        }
         state.profileUserId = state.database.currentUserId;
         await persist();
         bindEvents();
@@ -388,7 +396,7 @@
         const users = createUsers();
         const exercises = createExercises();
         return {
-            version: 1,
+            version: 2,
             currentUserId: "user-daniil",
             users,
             exercises,
@@ -402,9 +410,9 @@
 
     function createUsers() {
         return [
-            createUser("user-daniil", "Daniil Shkarupa", "Dunskyi", "DS", "#8c6f3f", 185, 78, "male", "Lean strength and visible progress", "4 years", "Back"),
-            createUser("user-anastasia", "Anastasia", "Nastya", "AN", "#6e604a", 168, 56, "female", "Mobility, tone and consistency", "2 years", "Glutes"),
-            createUser("user-maxim", "Maxim", "Max", "MX", "#465369", 181, 84, "male", "Powerbuilding", "5 years", "Chest")
+            createUser("user-daniil", "Данило Шкарупа", "Dunskyi", "DS", "#8c6f3f", 185, 78, "male", "Суха сила і видимий прогрес", "4 роки", "Спина"),
+            createUser("user-anastasia", "Анастасія Коваль", "Nastya", "AN", "#6e604a", 168, 56, "female", "Мобільність, тонус і регулярність", "2 роки", "Сідниці"),
+            createUser("user-maxim", "Максим Левченко", "Max", "MX", "#465369", 181, 84, "male", "Powerbuilding", "5 років", "Груди")
         ];
     }
 
@@ -682,7 +690,7 @@
                 ${avatar(user, "small")}
                 <div>
                     <div class="profile-name">${escapeHtml(user.displayName)}</div>
-                    <div class="profile-meta">${stats.completedWorkouts} workouts · ${number(stats.totalVolume)} kg</div>
+                    <div class="profile-meta">${stats.completedWorkouts} workouts Â· ${number(stats.totalVolume)} kg</div>
                 </div>
             </div>
             <div class="progress-track" style="margin-top: 14px;"><div class="progress-fill" style="width: ${Math.min(100, stats.completedWorkouts * 5)}%;"></div></div>
@@ -755,21 +763,21 @@
         return `
             <section class="card">
                 <div class="card-header">
-                    <div><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${capitalize(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Read only</span>` : ""}<span class="chip">${escapeHtml(owner.displayName)}</span></div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} min · ${number(workoutVolume(workoutItem))} kg · ${completedSets} completed sets</p></div>
+                    <div><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${capitalize(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Read only</span>` : ""}<span class="chip">${escapeHtml(owner.displayName)}</span></div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${formatDate(workoutItem.date)} Â· ${duration(workoutItem)} min Â· ${number(workoutVolume(workoutItem))} kg Â· ${completedSets} completed sets</p></div>
                     <div class="inline-actions"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i>Add exercise</button><button class="button button-primary compact" type="button" data-action="finish-workout" ${readonly ? "disabled" : ""}><i data-lucide="flag"></i>Finish</button></div>
                 </div>
                 ${readonly ? `<div class="readonly-layer">You can inspect this workout, but only its owner can edit it.</div>` : ""}
                 <div class="field" style="margin-top:14px;"><label>Workout notes</label><textarea data-action="update-workout-notes" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
             ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item) => workoutExerciseEditor(workoutItem, item, readonly)).join("") : emptyInline("No exercises yet", "Add an exercise to build the session.")}
-            <section class="card"><div class="card-header"><div><h2>Cardio inside workout</h2><p class="card-caption">Track conditioning without leaving the active session.</p></div><button class="button button-secondary compact" type="button" data-action="add-cardio" ${readonly ? "disabled" : ""}>Add cardio</button></div>${workoutItem.cardioSessions.length ? workoutItem.cardioSessions.map((session) => `<div class="activity-item"><div class="activity-dot"></div><div><strong>${capitalize(session.type)}</strong><p class="card-caption">${session.durationMinutes} min · ${session.distance} km · ${session.calories} kcal · ${capitalize(session.intensity)}</p></div></div>`).join("") : `<p class="card-caption">No cardio blocks in this workout.</p>`}</section>
+            <section class="card"><div class="card-header"><div><h2>Cardio inside workout</h2><p class="card-caption">Track conditioning without leaving the active session.</p></div><button class="button button-secondary compact" type="button" data-action="add-cardio" ${readonly ? "disabled" : ""}>Add cardio</button></div>${workoutItem.cardioSessions.length ? workoutItem.cardioSessions.map((session) => `<div class="activity-item"><div class="activity-dot"></div><div><strong>${capitalize(session.type)}</strong><p class="card-caption">${session.durationMinutes} min Â· ${session.distance} km Â· ${session.calories} kcal Â· ${capitalize(session.intensity)}</p></div></div>`).join("") : `<p class="card-caption">No cardio blocks in this workout.</p>`}</section>
         `;
     }
 
     function workoutExerciseEditor(workoutItem, workoutExercise, readonly) {
         const exercise = exerciseById(workoutExercise.exerciseId);
         const previous = previousPerformance(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
-        return `<article class="workout-exercise"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span><span class="chip">${exercise.movementPattern}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} kg volume · est. 1RM ${number(exerciseOneRepMax(workoutExercise))} kg${previous ? ` · previous ${number(previous.weight)} kg × ${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Technique" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Add set" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Duplicate" data-action="duplicate-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="copy"></i></button></div></div><div class="set-grid-header"><span>Type</span><span>Weight</span><span>Reps</span><span>RPE</span><span>Rest</span><span>Done</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Exercise notes</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        return `<article class="workout-exercise"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span><span class="chip">${exercise.movementPattern}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} kg volume Â· est. 1RM ${number(exerciseOneRepMax(workoutExercise))} kg${previous ? ` Â· previous ${number(previous.weight)} kg Ã— ${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Technique" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Add set" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Duplicate" data-action="duplicate-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="copy"></i></button></div></div><div class="set-grid-header"><span>Type</span><span>Weight</span><span>Reps</span><span>RPE</span><span>Rest</span><span>Done</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Exercise notes</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly) {
@@ -791,13 +799,13 @@
         const selected = exerciseById(state.knowledgeExerciseId) || state.database.exercises[0];
         const currentBest = bestResult(currentUser().id, selected.id);
         const teamBest = teamBestResult(selected.id);
-        content(`<div class="grid dashboard-grid"><section class="card span-4"><h2>Knowledge Base</h2><input type="search" placeholder="Search technique" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="workout-stack" style="margin-top:14px;">${filteredExercises().slice(0, 14).map((exercise) => `<button class="nav-button ${exercise.id === selected.id ? "active" : ""}" type="button" data-action="select-knowledge" data-exercise-id="${exercise.id}"><span><i data-lucide="circle-dot"></i>${escapeHtml(exercise.name)}</span><strong class="nav-badge">${escapeHtml(exercise.primaryMuscleGroup)}</strong></button>`).join("")}</div></section><section class="card span-8"><div class="card-header"><div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(selected.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(selected.movementPattern)}</span><span class="chip">${escapeHtml(selected.equipment)}</span><span class="chip">${escapeHtml(selected.difficulty)}</span></div><h2>${escapeHtml(selected.name)}</h2><p class="card-caption">${escapeHtml(selected.description)}</p></div><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${selected.id}">Add to workout</button></div>${media(selected)}</section><section class="card span-4"><h2>Technique steps</h2>${ordered(selected.techniqueSteps)}</section><section class="card span-4"><h2>Common mistakes</h2>${bullets(selected.commonMistakes)}</section><section class="card span-4"><h2>Safety tips</h2>${bullets(selected.safetyTips)}</section><section class="card span-4"><h2>Usage intelligence</h2>${kpi([{ label: "Last used", value: lastUsed(selected.id) ? shortDate(lastUsed(selected.id)) : "Never" }, { label: "Users", value: usersForExercise(selected.id).length }, { label: "Your best", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} kg` : "—" }, { label: "Team best", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} kg` : "—" }])}</section><section class="card span-8"><h2>Related exercises</h2><div class="exercise-card-grid">${relatedExercises(selected.id).slice(0, 4).map(exerciseCard).join("")}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-4"><h2>Knowledge Base</h2><input type="search" placeholder="Search technique" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="workout-stack" style="margin-top:14px;">${filteredExercises().slice(0, 14).map((exercise) => `<button class="nav-button ${exercise.id === selected.id ? "active" : ""}" type="button" data-action="select-knowledge" data-exercise-id="${exercise.id}"><span><i data-lucide="circle-dot"></i>${escapeHtml(exercise.name)}</span><strong class="nav-badge">${escapeHtml(exercise.primaryMuscleGroup)}</strong></button>`).join("")}</div></section><section class="card span-8"><div class="card-header"><div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(selected.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(selected.movementPattern)}</span><span class="chip">${escapeHtml(selected.equipment)}</span><span class="chip">${escapeHtml(selected.difficulty)}</span></div><h2>${escapeHtml(selected.name)}</h2><p class="card-caption">${escapeHtml(selected.description)}</p></div><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${selected.id}">Add to workout</button></div>${media(selected)}</section><section class="card span-4"><h2>Technique steps</h2>${ordered(selected.techniqueSteps)}</section><section class="card span-4"><h2>Common mistakes</h2>${bullets(selected.commonMistakes)}</section><section class="card span-4"><h2>Safety tips</h2>${bullets(selected.safetyTips)}</section><section class="card span-4"><h2>Usage intelligence</h2>${kpi([{ label: "Last used", value: lastUsed(selected.id) ? shortDate(lastUsed(selected.id)) : "Never" }, { label: "Users", value: usersForExercise(selected.id).length }, { label: "Your best", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} kg` : "â€”" }, { label: "Team best", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} kg` : "â€”" }])}</section><section class="card span-8"><h2>Related exercises</h2><div class="exercise-card-grid">${relatedExercises(selected.id).slice(0, 4).map(exerciseCard).join("")}</div></section></div>`);
     }
 
     function stats() {
         const userId = state.filters.statsScope === "current" ? currentUser().id : null;
         const summary = userId ? userStats(userId) : teamStats();
-        content(`<section class="card"><div class="card-header"><div><h2>Powerful stats</h2><p class="card-caption">Filter by scope, date range, muscle group and exercise.</p></div></div><div class="filter-row"><select data-action="stats-filter" data-filter="statsScope"><option value="current" ${state.filters.statsScope === "current" ? "selected" : ""}>Current user</option><option value="team" ${state.filters.statsScope === "team" ? "selected" : ""}>All users</option></select><select data-action="stats-filter" data-filter="statsRange"><option value="30" ${state.filters.statsRange === "30" ? "selected" : ""}>Last 30 days</option><option value="90" ${state.filters.statsRange === "90" ? "selected" : ""}>Last 90 days</option><option value="365" ${state.filters.statsRange === "365" ? "selected" : ""}>Last year</option><option value="all" ${state.filters.statsRange === "all" ? "selected" : ""}>All time</option></select><select data-action="stats-filter" data-filter="statsMuscle"><option value="all">All muscle groups</option>${unique(state.database.exercises.map((exercise) => exercise.primaryMuscleGroup)).map((muscle) => `<option value="${muscle}" ${state.filters.statsMuscle === muscle ? "selected" : ""}>${muscle}</option>`).join("")}</select><select data-action="stats-filter" data-filter="statsExerciseId"><option value="all">All exercises</option>${state.database.exercises.map((exercise) => `<option value="${exercise.id}" ${state.filters.statsExerciseId === exercise.id ? "selected" : ""}>${escapeHtml(exercise.name)}</option>`).join("")}</select></div></section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Total workouts", summary.totalWorkouts, "calendar", "All statuses", "span-3")}${metric("Completed", summary.completedWorkouts, "check-circle-2", "Finished sessions", "span-3")}${metric("Total sets", summary.totalSets, "list-checks", `${summary.workingSets || 0} working`, "span-3")}${metric("Total volume", `${number(summary.totalVolume)} kg`, "boxes", "Completed sets", "span-3")}${metric("Avg duration", `${summary.averageDurationMinutes || 0} min`, "timer", "Completed workouts", "span-3")}${metric("Cardio minutes", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} km`, "span-3")}${metric("Most used", summary.mostUsedExercise?.name || "—", "repeat", "Exercise frequency", "span-3")}${metric("Best muscle", summary.mostTrainedMuscleGroup || "—", "target", "By completed sets", "span-3")}${chartCard("Volume over time", "Completed volume by session.", "statsVolume", "span-6")}${chartCard("Sets by muscle group", "Completed sets distribution.", "statsMuscle", "span-6")}${chartCard("Exercise progress", "Approximate 1RM trend.", "statsProgress", "span-6")}${chartCard("Consistency", "Exercises per session.", "statsConsistency", "span-6")}</div>`);
+        content(`<section class="card"><div class="card-header"><div><h2>Powerful stats</h2><p class="card-caption">Filter by scope, date range, muscle group and exercise.</p></div></div><div class="filter-row"><select data-action="stats-filter" data-filter="statsScope"><option value="current" ${state.filters.statsScope === "current" ? "selected" : ""}>Current user</option><option value="team" ${state.filters.statsScope === "team" ? "selected" : ""}>All users</option></select><select data-action="stats-filter" data-filter="statsRange"><option value="30" ${state.filters.statsRange === "30" ? "selected" : ""}>Last 30 days</option><option value="90" ${state.filters.statsRange === "90" ? "selected" : ""}>Last 90 days</option><option value="365" ${state.filters.statsRange === "365" ? "selected" : ""}>Last year</option><option value="all" ${state.filters.statsRange === "all" ? "selected" : ""}>All time</option></select><select data-action="stats-filter" data-filter="statsMuscle"><option value="all">All muscle groups</option>${unique(state.database.exercises.map((exercise) => exercise.primaryMuscleGroup)).map((muscle) => `<option value="${muscle}" ${state.filters.statsMuscle === muscle ? "selected" : ""}>${muscle}</option>`).join("")}</select><select data-action="stats-filter" data-filter="statsExerciseId"><option value="all">All exercises</option>${state.database.exercises.map((exercise) => `<option value="${exercise.id}" ${state.filters.statsExerciseId === exercise.id ? "selected" : ""}>${escapeHtml(exercise.name)}</option>`).join("")}</select></div></section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Total workouts", summary.totalWorkouts, "calendar", "All statuses", "span-3")}${metric("Completed", summary.completedWorkouts, "check-circle-2", "Finished sessions", "span-3")}${metric("Total sets", summary.totalSets, "list-checks", `${summary.workingSets || 0} working`, "span-3")}${metric("Total volume", `${number(summary.totalVolume)} kg`, "boxes", "Completed sets", "span-3")}${metric("Avg duration", `${summary.averageDurationMinutes || 0} min`, "timer", "Completed workouts", "span-3")}${metric("Cardio minutes", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} km`, "span-3")}${metric("Most used", summary.mostUsedExercise?.name || "â€”", "repeat", "Exercise frequency", "span-3")}${metric("Best muscle", summary.mostTrainedMuscleGroup || "â€”", "target", "By completed sets", "span-3")}${chartCard("Volume over time", "Completed volume by session.", "statsVolume", "span-6")}${chartCard("Sets by muscle group", "Completed sets distribution.", "statsMuscle", "span-6")}${chartCard("Exercise progress", "Approximate 1RM trend.", "statsProgress", "span-6")}${chartCard("Consistency", "Exercises per session.", "statsConsistency", "span-6")}</div>`);
         requestAnimationFrame(() => {
             volumeChart("statsVolume", userId);
             muscleDistributionChart("statsMuscle", userId);
@@ -808,7 +816,7 @@
 
     function rankings() {
         const user = currentUser();
-        content(`<section class="card"><div class="card-header"><div><h2>Strength rankings</h2><p class="card-caption">Standards are configurable demo data, not official final truth.</p></div><span class="badge accent">${user.bodyweight} kg · ${user.gender}</span></div></section><section class="ranking-grid" style="margin-top:16px;">${rankedExerciseNames.map((name) => rankCard(user, exerciseByName(name))).join("")}</section><section class="card" style="margin-top:16px;"><div class="card-header"><div><h2>Team leaderboard</h2><p class="card-caption">Ranked by consistency, volume and best lift.</p></div></div><div class="table-wrap"><table><thead><tr><th>User</th><th>Completed</th><th>Total volume</th><th>Best lift</th><th>Main level</th><th>Score</th></tr></thead><tbody>${leaderboard().map((row, index) => `<tr><td><div class="list-row">${avatar(row.user, "small")}<strong>${index + 1}. ${escapeHtml(row.user.displayName)}</strong></div></td><td>${row.completedWorkouts}</td><td>${number(row.totalVolume)} kg</td><td>${row.bestLift ? `${escapeHtml(row.bestLift.exercise.name)} · ${number(row.bestLift.estimatedOneRepMax)} kg` : "—"}</td><td>${escapeHtml(row.mainRank)}</td><td>${number(row.score)}</td></tr>`).join("")}</tbody></table></div></section>`);
+        content(`<section class="card"><div class="card-header"><div><h2>Strength rankings</h2><p class="card-caption">Standards are configurable demo data, not official final truth.</p></div><span class="badge accent">${user.bodyweight} kg Â· ${user.gender}</span></div></section><section class="ranking-grid" style="margin-top:16px;">${rankedExerciseNames.map((name) => rankCard(user, exerciseByName(name))).join("")}</section><section class="card" style="margin-top:16px;"><div class="card-header"><div><h2>Team leaderboard</h2><p class="card-caption">Ranked by consistency, volume and best lift.</p></div></div><div class="table-wrap"><table><thead><tr><th>User</th><th>Completed</th><th>Total volume</th><th>Best lift</th><th>Main level</th><th>Score</th></tr></thead><tbody>${leaderboard().map((row, index) => `<tr><td><div class="list-row">${avatar(row.user, "small")}<strong>${index + 1}. ${escapeHtml(row.user.displayName)}</strong></div></td><td>${row.completedWorkouts}</td><td>${number(row.totalVolume)} kg</td><td>${row.bestLift ? `${escapeHtml(row.bestLift.exercise.name)} Â· ${number(row.bestLift.estimatedOneRepMax)} kg` : "â€”"}</td><td>${escapeHtml(row.mainRank)}</td><td>${number(row.score)}</td></tr>`).join("")}</tbody></table></div></section>`);
     }
 
     function achievementsPage() {
@@ -828,7 +836,7 @@
         const summary = userStats(user.id);
         const isCurrent = user.id === currentUser().id;
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span><span class="status-badge ${isCurrent ? "completed" : "readonly"}">${isCurrent ? "Editable" : "Read only"}</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} cm · ${user.bodyweight} kg · ${escapeHtml(user.trainingExperience)}</p></div></div><button class="button button-primary" type="button" data-action="open-profile-editor" ${isCurrent ? "" : "disabled"}><i data-lucide="pen-line"></i>Edit profile</button></div></section>${metric("Workouts", summary.completedWorkouts, "calendar-check", "Completed", "span-3")}${metric("Total volume", `${number(summary.totalVolume)} kg`, "boxes", "All completed sets", "span-3")}${metric("Total sets", summary.totalSets, "list-checks", `${summary.workingSets} working`, "span-3")}${metric("Streak", `${summary.trainingStreak} days`, "flame", "Completed sessions", "span-3")}${chartCard("Bodyweight history", "Weekly check-ins.", "profileBodyweight", "span-6")}${chartCard("Estimated 1RM trend", "Bench press trend demo.", "profileMax", "span-6")}<section class="card span-6"><h2>Personal records</h2><div class="workout-stack">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("No PRs yet", "Complete working sets to detect records.")}</div></section><section class="card span-6"><h2>Current badges</h2><div class="achievement-grid">${achievementsFor(user.id).filter((item) => item.isUnlocked).slice(0, 4).map(achievementCard).join("") || emptyInline("No badges yet", "Complete workouts to unlock badges.")}</div></section><section class="card span-12"><h2>Recent workouts</h2><div class="table-wrap"><table><thead><tr><th>Date</th><th>Title</th><th>Type</th><th>Volume</th><th>Duration</th><th></th></tr></thead><tbody>${recent.map((workoutItem) => `<tr><td>${formatDate(workoutItem.date)}</td><td>${escapeHtml(workoutItem.title)}</td><td>${capitalize(workoutItem.workoutType)}</td><td>${number(workoutVolume(workoutItem))} kg</td><td>${duration(workoutItem)} min</td><td><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">View</button></td></tr>`).join("")}</tbody></table></div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span><span class="status-badge ${isCurrent ? "completed" : "readonly"}">${isCurrent ? "Editable" : "Read only"}</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} Â· ${user.height} cm Â· ${user.bodyweight} kg Â· ${escapeHtml(user.trainingExperience)}</p></div></div><button class="button button-primary" type="button" data-action="open-profile-editor" ${isCurrent ? "" : "disabled"}><i data-lucide="pen-line"></i>Edit profile</button></div></section>${metric("Workouts", summary.completedWorkouts, "calendar-check", "Completed", "span-3")}${metric("Total volume", `${number(summary.totalVolume)} kg`, "boxes", "All completed sets", "span-3")}${metric("Total sets", summary.totalSets, "list-checks", `${summary.workingSets} working`, "span-3")}${metric("Streak", `${summary.trainingStreak} days`, "flame", "Completed sessions", "span-3")}${chartCard("Bodyweight history", "Weekly check-ins.", "profileBodyweight", "span-6")}${chartCard("Estimated 1RM trend", "Bench press trend demo.", "profileMax", "span-6")}<section class="card span-6"><h2>Personal records</h2><div class="workout-stack">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("No PRs yet", "Complete working sets to detect records.")}</div></section><section class="card span-6"><h2>Current badges</h2><div class="achievement-grid">${achievementsFor(user.id).filter((item) => item.isUnlocked).slice(0, 4).map(achievementCard).join("") || emptyInline("No badges yet", "Complete workouts to unlock badges.")}</div></section><section class="card span-12"><h2>Recent workouts</h2><div class="table-wrap"><table><thead><tr><th>Date</th><th>Title</th><th>Type</th><th>Volume</th><th>Duration</th><th></th></tr></thead><tbody>${recent.map((workoutItem) => `<tr><td>${formatDate(workoutItem.date)}</td><td>${escapeHtml(workoutItem.title)}</td><td>${capitalize(workoutItem.workoutType)}</td><td>${number(workoutVolume(workoutItem))} kg</td><td>${duration(workoutItem)} min</td><td><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">View</button></td></tr>`).join("")}</tbody></table></div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
@@ -961,7 +969,7 @@
     }
 
     function openAddExerciseModal() {
-        openModal(`<div class="modal-header"><div><h2>Add exercise</h2><p class="card-caption">Search by name, alias, muscle, pattern or equipment.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="search" placeholder="Search exercise" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="exercise-picker-grid" style="margin-top:14px;">${filteredExercises().map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Add</button></article>`).join("")}</div>`);
+        openModal(`<div class="modal-header"><div><h2>Add exercise</h2><p class="card-caption">Search by name, alias, muscle, pattern or equipment.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="search" placeholder="Search exercise" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="exercise-picker-grid" style="margin-top:14px;">${filteredExercises().map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} Â· ${escapeHtml(exercise.movementPattern)} Â· ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Add</button></article>`).join("")}</div>`);
     }
 
     function openCustomExercise() {
@@ -1175,18 +1183,18 @@
         const exercise = exerciseById(exerciseId);
         const currentBest = bestResult(currentUser().id, exerciseId);
         const teamBest = teamBestResult(exerciseId);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}<section class="panel" style="margin-top:14px;"><h3>Technique</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Performance</h3>${kpi([{ label: "Your best", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} kg` : "—" }, { label: "Team best", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} kg` : "—" }])}</section><section class="panel" style="margin-top:14px;"><h3>Related</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("")}</div></section>`);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} Â· ${exercise.movementPattern} Â· ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}<section class="panel" style="margin-top:14px;"><h3>Technique</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Performance</h3>${kpi([{ label: "Your best", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} kg` : "â€”" }, { label: "Team best", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} kg` : "â€”" }])}</section><section class="panel" style="margin-top:14px;"><h3>Related</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("")}</div></section>`);
     }
 
     function openWorkout(workoutId) {
         const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
         const owner = userById(workoutItem.userId);
         const readonly = workoutItem.userId !== currentUser().id;
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${escapeHtml(owner.displayName)} · ${formatDate(workoutItem.date)} · ${capitalize(workoutItem.status)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Read-only: another user's workout.</div>` : ""}${kpi([{ label: "Volume kg", value: number(workoutVolume(workoutItem)) }, { label: "Minutes", value: duration(workoutItem) }, { label: "Exercises", value: workoutItem.exercises.length }])}<div class="workout-stack" style="margin-top:14px;">${workoutItem.exercises.map((workoutExercise) => `<article class="panel"><h3>${escapeHtml(exerciseById(workoutExercise.exerciseId).name)}</h3><p class="card-caption">${workoutExercise.sets.length} sets · ${number(exerciseVolume(workoutExercise))} kg</p><div class="tag-row">${workoutExercise.sets.map((set) => `<span class="chip">${capitalize(set.type)} · ${set.weight} × ${set.repetitions}</span>`).join("")}</div></article>`).join("")}</div>`);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${escapeHtml(owner.displayName)} Â· ${formatDate(workoutItem.date)} Â· ${capitalize(workoutItem.status)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Read-only: another user's workout.</div>` : ""}${kpi([{ label: "Volume kg", value: number(workoutVolume(workoutItem)) }, { label: "Minutes", value: duration(workoutItem) }, { label: "Exercises", value: workoutItem.exercises.length }])}<div class="workout-stack" style="margin-top:14px;">${workoutItem.exercises.map((workoutExercise) => `<article class="panel"><h3>${escapeHtml(exerciseById(workoutExercise.exerciseId).name)}</h3><p class="card-caption">${workoutExercise.sets.length} sets Â· ${number(exerciseVolume(workoutExercise))} kg</p><div class="tag-row">${workoutExercise.sets.map((set) => `<span class="chip">${capitalize(set.type)} Â· ${set.weight} Ã— ${set.repetitions}</span>`).join("")}</div></article>`).join("")}</div>`);
     }
 
     function openStandards() {
-        openModal(`<div class="modal-header"><div><h2>Strength standards</h2><p class="card-caption">Demo configurable standards. Not official final truth.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="table-wrap"><table><thead><tr><th>Exercise</th><th>Gender</th><th>BW</th><th>Level</th><th>Required</th><th>Source</th></tr></thead><tbody>${state.database.strengthStandards.slice(0, 42).map((standard) => `<tr><td>${escapeHtml(exerciseById(standard.exerciseId).name)}</td><td>${standard.gender}</td><td>${standard.bodyweightMin}-${standard.bodyweightMax}</td><td>${rankLabel(standard.level)}</td><td>${standard.requiredWeight} kg × ${standard.repetitions}</td><td>${escapeHtml(standard.sourceName)}</td></tr>`).join("")}</tbody></table></div>`);
+        openModal(`<div class="modal-header"><div><h2>Strength standards</h2><p class="card-caption">Demo configurable standards. Not official final truth.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="table-wrap"><table><thead><tr><th>Exercise</th><th>Gender</th><th>BW</th><th>Level</th><th>Required</th><th>Source</th></tr></thead><tbody>${state.database.strengthStandards.slice(0, 42).map((standard) => `<tr><td>${escapeHtml(exerciseById(standard.exerciseId).name)}</td><td>${standard.gender}</td><td>${standard.bodyweightMin}-${standard.bodyweightMax}</td><td>${rankLabel(standard.level)}</td><td>${standard.requiredWeight} kg Ã— ${standard.repetitions}</td><td>${escapeHtml(standard.sourceName)}</td></tr>`).join("")}</tbody></table></div>`);
     }
 
     function requestNotifications() {
@@ -1261,7 +1269,7 @@
     }
 
     function recordCard(record) {
-        return `<article class="activity-item"><div class="activity-dot"></div><div><strong>${escapeHtml(record.exercise.name)}</strong><p class="card-caption">${number(record.estimatedOneRepMax)} kg estimated 1RM · ${record.weight} kg × ${record.repetitions} · ${formatDate(record.date)}</p></div></article>`;
+        return `<article class="activity-item"><div class="activity-dot"></div><div><strong>${escapeHtml(record.exercise.name)}</strong><p class="card-caption">${number(record.estimatedOneRepMax)} kg estimated 1RM Â· ${record.weight} kg Ã— ${record.repetitions} Â· ${formatDate(record.date)}</p></div></article>`;
     }
 
     function templateCard(template) {
@@ -1285,14 +1293,14 @@
 
     function achievementCard(item) {
         const percent = Math.min(100, Math.round(item.currentValue / item.target * 100));
-        return `<article class="achievement-card ${item.isUnlocked ? "" : "locked"}"><div class="achievement-icon">${item.icon}</div><div class="card-header"><h3>${escapeHtml(item.title)}</h3><span class="badge ${item.isUnlocked ? "unlocked" : "locked"}">${item.isUnlocked ? "Unlocked" : "Locked"}</span></div><p class="card-caption">${escapeHtml(item.description)}</p><div class="progress-track" style="margin:12px 0 8px;"><div class="progress-fill" style="width:${percent}%;"></div></div><p class="profile-meta">${number(Math.min(item.currentValue, item.target))}/${number(item.target)} · ${item.unlockedAt ? `Unlocked ${formatDate(item.unlockedAt)}` : item.category}</p></article>`;
+        return `<article class="achievement-card ${item.isUnlocked ? "" : "locked"}"><div class="achievement-icon">${item.icon}</div><div class="card-header"><h3>${escapeHtml(item.title)}</h3><span class="badge ${item.isUnlocked ? "unlocked" : "locked"}">${item.isUnlocked ? "Unlocked" : "Locked"}</span></div><p class="card-caption">${escapeHtml(item.description)}</p><div class="progress-track" style="margin:12px 0 8px;"><div class="progress-fill" style="width:${percent}%;"></div></div><p class="profile-meta">${number(Math.min(item.currentValue, item.target))}/${number(item.target)} Â· ${item.unlockedAt ? `Unlocked ${formatDate(item.unlockedAt)}` : item.category}</p></article>`;
     }
 
     function rankCard(user, exercise) {
         const rank = rankingFor(user.id, exercise.id);
         const current = rank.currentLevel ? rankLabel(rank.currentLevel.level) : "No result yet";
         const next = rank.nextLevel ? rankLabel(rank.nextLevel.level) : "Top level";
-        return `<article class="ranking-card"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern}</p></div><span class="badge accent">${current}</span></div>${kpi([{ label: "Best approx", value: rank.best ? `${number(rank.best.estimatedOneRepMax)} kg` : "—" }, { label: "Next req.", value: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} kg` : "—" }])}<div class="progress-track" style="margin-top:12px;"><div class="progress-fill" style="width:${Math.min(100, rank.progress)}%;"></div></div><p class="profile-meta" style="margin-top:8px;">Next: ${next} · ${Math.round(rank.progress)}% · ${rank.best?.isEstimated ? "estimated value" : "direct value"}</p></article>`;
+        return `<article class="ranking-card"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${exercise.primaryMuscleGroup} Â· ${exercise.movementPattern}</p></div><span class="badge accent">${current}</span></div>${kpi([{ label: "Best approx", value: rank.best ? `${number(rank.best.estimatedOneRepMax)} kg` : "â€”" }, { label: "Next req.", value: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} kg` : "â€”" }])}<div class="progress-track" style="margin-top:12px;"><div class="progress-fill" style="width:${Math.min(100, rank.progress)}%;"></div></div><p class="profile-meta" style="margin-top:8px;">Next: ${next} Â· ${Math.round(rank.progress)}% Â· ${rank.best?.isEstimated ? "estimated value" : "direct value"}</p></article>`;
     }
 
     function timerCard() {
@@ -1304,7 +1312,7 @@
         if (exercise.mediaUrl && exercise.mediaType !== "none") {
             return `<div class="media-placeholder"><img src="${escapeHtml(exercise.mediaUrl)}" alt="${escapeHtml(exercise.name)} demonstration"></div>`;
         }
-        return `<div class="media-placeholder"><div class="media-placeholder-label">Future GIF/WebP demo slot · animated placeholder</div></div>`;
+        return `<div class="media-placeholder"><div class="media-placeholder-label">Future GIF/WebP demo slot Â· animated placeholder</div></div>`;
     }
 
     function emptyInline(title, caption) {
@@ -1314,7 +1322,7 @@
     function activityFeed() {
         return state.database.workouts.filter((item) => item.status === "completed").sort(byDateDesc).slice(0, 8).map((workoutItem) => {
             const owner = userById(workoutItem.userId);
-            return `<article class="activity-item"><div class="activity-dot"></div><div style="flex:1;"><strong>${escapeHtml(owner.displayName)} completed ${escapeHtml(workoutItem.title)}</strong><p class="card-caption">${formatDate(workoutItem.date)} · ${number(workoutVolume(workoutItem))} kg · ${workoutItem.exercises.length} exercises</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Open</button></article>`;
+            return `<article class="activity-item"><div class="activity-dot"></div><div style="flex:1;"><strong>${escapeHtml(owner.displayName)} completed ${escapeHtml(workoutItem.title)}</strong><p class="card-caption">${formatDate(workoutItem.date)} Â· ${number(workoutVolume(workoutItem))} kg Â· ${workoutItem.exercises.length} exercises</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Open</button></article>`;
         }).join("");
     }
 
@@ -1663,7 +1671,7 @@
 
     function suggestionNote(userId, exerciseId) {
         const previous = previousPerformance(userId, exerciseId);
-        return previous ? `Last performance: ${previous.weight} kg × ${previous.repetitions} on ${formatDate(previous.date)}.` : "New movement in this program.";
+        return previous ? `Last performance: ${previous.weight} kg Ã— ${previous.repetitions} on ${formatDate(previous.date)}.` : "New movement in this program.";
     }
 
     function muscleSetMap(workouts) {
@@ -1939,7 +1947,7 @@
     }
 
     function formatDate(value) {
-        return value ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)) : "—";
+        return value ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)) : "â€”";
     }
 
     function shortDate(value) {
@@ -1999,3 +2007,4 @@
         await storage.save(state.database);
     }
 })();
+
