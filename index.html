@@ -65,11 +65,13 @@
     <script>
         window.FORGE_CONFIG = {
             appName: "GymOS",
-            apiBaseUrl: "http://localhost:3000",
-            dataMode: "local",
-            allowLocalFallback: true
+            apiBaseUrl: "https://gym-os-back.vercel.app",
+            dataMode: "api",
+            allowLocalFallback: false,
+            requireAuth: true
         };
     </script>
+    <script src="exrx-catalog.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

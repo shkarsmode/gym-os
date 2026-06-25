@@ -57,6 +57,7 @@
         section: "dashboard",
         knowledgeExerciseId: "exercise-bench-press",
         profileUserId: null,
+        authUser: null,
         database: null,
         charts: new Map(),
         calendar: null,
@@ -205,6 +206,10 @@
             return this.request("/import", { method: "POST", body: JSON.stringify(database) });
         }
 
+        importExercises(payload) {
+            return this.request("/import/exercises", { method: "POST", body: JSON.stringify(payload) });
+        }
+
         createWorkout(payload) {
             return this.request("/workouts", { method: "POST", body: JSON.stringify(payload) });
         }
@@ -266,6 +271,7 @@
             this.apiClient = new ApiClient(this.apiBaseUrl);
             this.apiProvider = new ApiProvider(this.apiClient);
             this.provider = this.localProvider;
+            this.currentUser = null;
         }
 
         async initialize() {
@@ -277,11 +283,17 @@
             }
 
             if (this.mode === "api") {
+                if (this.config.requireAuth) {
+                    await this.localProvider.reset();
+                }
                 const isBackendAvailable = await this.checkBackend(false);
-                this.provider = isBackendAvailable ? this.apiProvider : this.localProvider;
+                this.provider = isBackendAvailable || this.config.allowLocalFallback === false ? this.apiProvider : this.localProvider;
                 if (!isBackendAvailable && this.config.allowLocalFallback !== false) {
                     this.mode = "local";
                     this.writeSetting("dataMode", "local");
+                }
+                if (isBackendAvailable) {
+                    await this.refreshCurrentUser(false);
                 }
                 return;
             }
@@ -340,6 +352,31 @@
             await this.initialize();
         }
 
+        async refreshCurrentUser(shouldThrow = true) {
+            try {
+                const response = await this.apiClient.me();
+                this.currentUser = response?.user || null;
+                return this.currentUser;
+            } catch (error) {
+                this.currentUser = null;
+                if (shouldThrow) {
+                    throw error;
+                }
+                return null;
+            }
+        }
+
+        requiresAuthentication() {
+            return this.mode === "api" && this.config.requireAuth && !this.currentUser;
+        }
+
+        async importExerciseCatalog(payload) {
+            if (this.mode === "api") {
+                return this.apiClient.importExercises(payload);
+            }
+            return null;
+        }
+
         async checkBackend(shouldThrow = true) {
             try {
                 this.apiClient = new ApiClient(this.apiBaseUrl);
@@ -392,23 +429,40 @@
 
     async function initialize() {
         await storage.initialize();
-        state.database = await storage.load() || createSeedDatabase();
-        if (!state.database.version || state.database.version < 2) {
+        bindEvents();
+        state.authUser = storage.currentUser;
+        if (storage.requiresAuthentication()) {
+            state.database = createEmptyDatabase();
+            renderAuthGate();
+            return;
+        }
+        try {
+            state.database = await storage.load() || createSeedDatabase();
+        } catch (error) {
+            console.error(error);
+            state.database = createEmptyDatabase();
+            renderAuthGate("Бекенд відповів помилкою під час завантаження даних.");
+            return;
+        }
+        if (!state.database.version || state.database.version < 3) {
             state.database = createSeedDatabase();
         }
         state.profileUserId = state.database.currentUserId;
         await persist();
-        bindEvents();
         renderShell();
         renderSection();
+    }
+
+    function createEmptyDatabase() {
+        return { version: 3, currentUserId: "", users: [], exercises: [], bodyweightEntries: [], workouts: [], strengthStandards: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     }
 
     function createSeedDatabase() {
         const now = new Date();
         const users = createUsers();
-        const exercises = createExercises();
+        const exercises = mergeImportedExerciseCatalog(createExercises(), window.GYMOS_EXRX_CATALOG || null).exercises;
         return {
-            version: 2,
+            version: 3,
             currentUserId: "user-daniil",
             users,
             exercises,
@@ -673,6 +727,29 @@
         renderNavigation("mobileNavigation", sectionItems.filter((item) => mobileSectionIds.includes(item.id)));
         renderCurrentUserButton();
         renderSidebarProfile();
+    }
+
+    function renderAuthGate(message = "") {
+        element("sidebarNavigation").innerHTML = "";
+        element("mobileNavigation").innerHTML = "";
+        element("sidebarProfileCard").innerHTML = `<div class="profile-meta">Потрібна авторизація Google</div>`;
+        element("openUserSwitcherButton").innerHTML = "GO";
+        element("sectionEyebrow").textContent = "Авторизація";
+        element("sectionTitle").textContent = "GymOS";
+        element("pageContent").innerHTML = `
+            <section class="empty-state auth-gate">
+                <i data-lucide="shield-check"></i>
+                <h2>Увійди через Google</h2>
+                <p>GymOS працює через backend API. Дані тренувань доступні тільки після авторизації.</p>
+                ${message ? `<p class="card-caption">${escapeHtml(message)}</p>` : ""}
+                <div class="action-row" style="justify-content:center;margin-top:16px;">
+                    <button class="button button-primary large-workout-button" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button>
+                    <button class="button button-secondary large-workout-button" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити backend</button>
+                </div>
+                <p class="profile-meta" style="margin-top:14px;">Backend: ${escapeHtml(storage.apiBaseUrl || "не налаштовано")} · статус: ${backendStatusLabel(storage.backendStatus)}</p>
+            </section>
+        `;
+        icons();
     }
 
     function renderNavigation(containerId, items) {
