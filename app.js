@@ -1059,7 +1059,7 @@
 
     function openProfileEditor() {
         const user = currentUser();
-        openModal(`<div class="modal-header"><div><h2>Редагувати профіль</h2><p class="card-caption">Редагувати можна тільки профіль активного користувача.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Ім'я</label><input id="profileName" type="text" value="${escapeHtml(user.name)}"></div><div class="field"><label>Display name</label><input id="profileDisplayName" type="text" value="${escapeHtml(user.displayName)}"></div><div class="field"><label>Зріст</label><input id="profileHeight" type="number" value="${user.height}"></div><div class="field"><label>Вага тіла</label><input id="profileBodyweight" type="number" step="0.1" value="${user.bodyweight}"></div><div class="field"><label>Тренувальна ціль</label><input id="profileGoal" type="text" value="${escapeHtml(user.trainingGoal)}"></div><div class="field"><label>Досвід</label><input id="profileExperience" type="text" value="${escapeHtml(user.trainingExperience)}"></div><div class="field"><label>Улюблена група</label>${select("profileMuscle", muscles(), user.favoriteMuscleGroup)}</div><div class="field"><label>Категорія</label>${select("profileGender", ["male", "female"], user.gender)}</div></div><div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата заміру</label><input id="bodyweightDate" type="date" value="${dateInput(new Date())}"></div><div class="field"><label>Додати запис ваги</label><input id="bodyweightValue" type="number" step="0.1" value="${user.bodyweight}"></div></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-profile">Зберегти профіль</button></div>`);
+        openModal(`<div class="modal-header"><div><h2>Редагувати профіль</h2><p class="card-caption">Редагувати можна тільки профіль активного користувача.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Ім'я</label><input id="profileName" type="text" value="${escapeHtml(user.name)}"></div><div class="field"><label>Display name</label><input id="profileDisplayName" type="text" value="${escapeHtml(user.displayName)}"></div><div class="field"><label>Зріст</label><input id="profileHeight" type="number" value="${user.height}"></div><div class="field"><label>Вага тіла</label><input id="profileBodyweight" type="number" step="0.1" value="${user.bodyweight}"></div><div class="field"><label>Тренувальна ціль</label><input id="profileGoal" type="text" value="${escapeHtml(user.trainingGoal)}"></div><div class="field"><label>Досвід</label><input id="profileExperience" type="text" value="${escapeHtml(user.trainingExperience)}"></div><div class="field"><label>Улюблена група</label>${select("profileMuscle", muscles(), user.favoriteMuscleGroup)}</div><div class="field"><label>Категорія</label><select id="profileGender"><option value="male" ${user.gender === "male" ? "selected" : ""}>чоловіча</option><option value="female" ${user.gender === "female" ? "selected" : ""}>жіноча</option></select></div></div><div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата заміру</label><input id="bodyweightDate" type="date" value="${dateInput(new Date())}"></div><div class="field"><label>Додати запис ваги</label><input id="bodyweightValue" type="number" step="0.1" value="${user.bodyweight}"></div></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-profile">Зберегти профіль</button></div>`);
     }
 
     async function saveProfile() {
@@ -1521,7 +1521,7 @@
     function renderCalendar() {
         const container = element("calendarContainer");
         if (!window.FullCalendar) {
-            container.innerHTML = emptyInline("Calendar library unavailable", "Connect internet for FullCalendar CDN.");
+            container.innerHTML = emptyInline("Календар недоступний", "Потрібен доступ до FullCalendar CDN або локальний bundle.");
             icons();
             return;
         }
@@ -1702,9 +1702,9 @@
         const summary = userStats(userId);
         const records = recordsFor(userId);
         const completed = workoutsFor(userId).filter((item) => item.status === "completed");
-        const bench = exerciseByName("Bench Press");
-        const squat = exerciseByName("Barbell Squat");
-        const pullups = exerciseByName("Pull-ups");
+        const bench = exerciseByName("Жим лежачи");
+        const squat = exerciseByName("Присідання зі штангою");
+        const pullups = exerciseByName("Підтягування");
         const metrics = {
             completedWorkouts: summary.completedWorkouts,
             personalRecords: records.length,
@@ -1750,28 +1750,28 @@
 
     function insights(userId) {
         const summary = userStats(userId);
-        const bench = exerciseByName("Bench Press");
+        const bench = exerciseByName("Жим лежачи");
         const lastBench = lastUsed(bench.id, userId);
         const days = lastBench ? dayDiff(new Date(), new Date(lastBench)) : null;
         const rank = rankingFor(userId, bench.id);
-        const chestSets = workoutsFor(userId).filter((item) => item.status === "completed" && new Date(item.date) >= startWeek(new Date())).flatMap((item) => item.exercises).filter((item) => exerciseById(item.exerciseId).primaryMuscleGroup === "Chest").flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
+        const chestSets = workoutsFor(userId).filter((item) => item.status === "completed" && new Date(item.date) >= startWeek(new Date())).flatMap((item) => item.exercises).filter((item) => exerciseById(item.exerciseId).primaryMuscleGroup === "Груди").flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
         return [
-            { title: `Chest work: ${chestSets} sets`, caption: chestSets ? "Chest was trained this week." : "Chest has not been trained this week." },
-            { title: days === null ? "Bench not logged yet" : `Bench trained ${days} days ago`, caption: "Useful for planning frequency and recovery." },
-            { title: rank.nextLevel ? "Next rank is visible" : "Top demo rank reached", caption: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} kg estimated 1RM for ${rankLabel(rank.nextLevel.level)}.` : "Update standards later for advanced levels." },
-            { title: summary.weekVolume ? "Volume is moving" : "Start the week", caption: `${number(summary.weekVolume)} kg completed this week.` },
-            { title: summary.warmupSets >= 10 ? "Warm-up discipline" : "Warm-up helper", caption: summary.warmupSets >= 10 ? "Warm-up habit is visible in your logs." : "Add warm-up sets before main lifts." }
+            { title: `Робота на груди: ${chestSets} підходів`, caption: chestSets ? "Груди вже тренувалися цього тижня." : "Груди ще не тренувалися цього тижня." },
+            { title: days === null ? "Жим ще не логували" : `Жим був ${days} дн. тому`, caption: "Корисно для частоти і відновлення." },
+            { title: rank.nextLevel ? "Наступний рівень видимий" : "Верхній demo-рівень досягнуто", caption: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} кг розрах. 1ПМ для рівня ${rankLabel(rank.nextLevel.level)}.` : "Нормативи можна оновити пізніше." },
+            { title: summary.weekVolume ? "Обсяг рухається" : "Почни тиждень", caption: `${number(summary.weekVolume)} кг завершено цього тижня.` },
+            { title: summary.warmupSets >= 10 ? "Дисципліна розминки" : "Підказка для розминки", caption: summary.warmupSets >= 10 ? "Звичка розминки вже помітна в логах." : "Додавай розминкові підходи перед основними рухами." }
         ];
     }
 
     function suggestedSets(exercise) {
-        if (exercise.movementPattern === "Cardio") {
+        if (exercise.movementPattern === "Кардіо") {
             return [];
         }
         const currentUserId = state.database?.currentUserId;
         const previous = currentUserId ? previousPerformance(currentUserId, exercise.id) : null;
         const weight = previous?.weight || seedWeight(exercise.name, 0);
-        if (exercise.movementPattern === "Core") {
+        if (exercise.movementPattern === "Кор") {
             return [createSet("working", 0, 45, 7, 60, false), createSet("working", 0, 45, 8, 60, false)];
         }
         return [createSet("warmup", round(weight * 0.55, 1), 10, 5, 60, false), createSet("working", round(weight, 1), 8, 8, 105, false), createSet("working", round(weight, 1), 8, 8.5, 120, false)];
@@ -1897,13 +1897,13 @@
     function mainRank(userId) {
         const levels = rankedExerciseNames.map((name) => rankingFor(userId, exerciseByName(name).id).currentLevel?.level).filter(Boolean);
         if (!levels.length) {
-            return "No rank yet";
+            return "Поки немає рівня";
         }
         return rankLabel(levels.sort((left, right) => rankOrder.indexOf(right) - rankOrder.indexOf(left))[0]);
     }
 
     function rankLabel(level) {
-        return ({ beginner: "Beginner", novice: "Novice", third_class: "3rd Class", second_class: "2nd Class", first_class: "1st Class", candidate_master: "Candidate Master", master: "Master" })[level] || capitalize(level);
+        return ({ beginner: "Початковий", novice: "Новачок", third_class: "3-й клас", second_class: "2-й клас", first_class: "1-й клас", candidate_master: "Кандидат у майстри", master: "Майстер" })[level] || capitalize(level);
     }
 
     function streak(completedWorkouts) {
@@ -1955,9 +1955,9 @@
             }
             if (state.timer.remaining <= 0) {
                 stopTimer();
-                toast("Rest finished", "Ready for the next set.");
+                toast("Відпочинок завершено", "Можна переходити до наступного підходу.");
                 if ("Notification" in window && Notification.permission === "granted") {
-                    new Notification("Gym OS", { body: "Rest finished. Ready for the next set." });
+                    new Notification("GymOS", { body: "Відпочинок завершено. Можна переходити до наступного підходу." });
                 }
             }
         }, 1000);
@@ -2007,6 +2007,68 @@
         return templates.find((template) => template.id === id) || templates.at(-1);
     }
 
+    function templateByType(type) {
+        return templates.find((template) => template.type === type) || templateById("custom");
+    }
+
+    function statusLabel(status) {
+        return statusLabels[status] || capitalize(status);
+    }
+
+    function setTypeLabel(type) {
+        return setTypeLabels[type] || capitalize(type);
+    }
+
+    function workoutTypeLabel(type) {
+        return workoutTypeLabels[type] || capitalize(type);
+    }
+
+    function genderLabel(gender) {
+        return genderLabels[gender] || gender;
+    }
+
+    function dataModeLabel(mode) {
+        return dataModeLabels[mode] || mode;
+    }
+
+    function backendStatusLabel(status) {
+        return ({ online: "доступний", offline: "недоступний", unknown: "не перевірено" })[status] || "не перевірено";
+    }
+
+    function cardioTypeLabel(type) {
+        return ({ treadmill: "Бігова доріжка", bike: "Велотренажер", running: "Біг", walking: "Ходьба", rower: "Гребний тренажер" })[type] || type;
+    }
+
+    function intensityLabel(value) {
+        return ({ low: "низька", medium: "середня", high: "висока" })[value] || value;
+    }
+
+    function workoutSetCount(workoutItem) {
+        return workoutItem.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
+    }
+
+    function workoutCardioMinutes(workoutItem) {
+        return (workoutItem.cardioSessions || []).reduce((sum, session) => sum + session.durationMinutes, 0);
+    }
+
+    function calendarOverview() {
+        const now = new Date();
+        const weekStart = startWeek(now);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const weekItems = state.database.workouts.filter((item) => new Date(item.date) >= weekStart);
+        const monthItems = state.database.workouts.filter((item) => new Date(item.date) >= monthStart);
+        const completed = state.database.workouts.filter((item) => item.status === "completed");
+        return {
+            weekWorkouts: weekItems.length,
+            weekCompleted: weekItems.filter((item) => item.status === "completed").length,
+            weekPlanned: weekItems.filter((item) => item.status === "planned").length,
+            monthWorkouts: monthItems.length,
+            monthPlanned: monthItems.filter((item) => item.status === "planned").length,
+            cardioDays: new Set(weekItems.filter((item) => workoutCardioMinutes(item) > 0).map((item) => item.date)).size,
+            streak: streak(completed)
+        };
+    }
+
     function seedWeight(name, index) {
         const weights = { "Жим лежачи": 72, "Жим гантелей під кутом": 28, "Жим у тренажері": 78, "Зведення в кросовері": 18, "Підтягування": 78, "Тяга верхнього блока": 67, "Тяга штанги в нахилі": 72, "Горизонтальна тяга блока": 64, "Жим над головою": 45, "Підйом гантелей в сторони": 12, "Розведення на задню дельту": 10, "Присідання зі штангою": 92, "Жим ногами": 180, "Розгинання ніг": 56, "Румунська тяга": 82, "Згинання ніг": 48, "Підйом на литки": 72, "Згинання зі штангою": 32, "Згинання з гантелями": 16, "Молоткові згинання": 18, "Розгинання на блоці": 38, "Розгинання трицепса над головою": 32, "Планка": 0, "Підйом ніг у висі": 0 };
         return round((weights[name] || 25) + index * 0.7, 1);
@@ -2014,24 +2076,24 @@
 
     function todayLabel(userId) {
         const item = workoutsFor(userId).find((workoutItem) => workoutItem.date === dateInput(new Date()));
-        return item ? item.title : "Plan today";
+        return item ? item.title : "Заплануй сьогодні";
     }
 
     function todayCaption(userId) {
         const item = workoutsFor(userId).find((workoutItem) => workoutItem.date === dateInput(new Date()));
-        return item ? capitalize(item.status) : "No workout logged yet";
+        return item ? statusLabel(item.status) : "Тренувань сьогодні ще немає";
     }
 
     function muscles() {
-        return ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Quads", "Hamstrings", "Glutes", "Calves", "Abs", "Forearms", "Full Body"];
+        return ["Груди", "Спина", "Плечі", "Біцепс", "Трицепс", "Квадрицепс", "Задня поверхня стегна", "Сідниці", "Литки", "Прес", "Передпліччя", "Все тіло"];
     }
 
     function patterns() {
-        return ["Horizontal Press", "Vertical Press", "Horizontal Pull", "Vertical Pull", "Squat", "Hinge", "Lunge", "Curl", "Extension", "Raise", "Carry", "Rotation", "Core", "Cardio"];
+        return ["Горизонтальний жим", "Вертикальний жим", "Горизонтальна тяга", "Вертикальна тяга", "Присідання", "Hinge", "Випад", "Згинання", "Розгинання", "Підйом", "Перенесення", "Ротація", "Кор", "Кардіо"];
     }
 
     function equipment() {
-        return ["Barbell", "Dumbbell", "Machine", "Cable", "Bodyweight", "Smith Machine", "Kettlebell", "Resistance Band", "Other"];
+        return ["Штанга", "Гантелі", "Тренажер", "Блок", "Вага тіла", "Smith Machine", "Гиря", "Еспандер", "Інше"];
     }
 
     function avatar(user, size = "") {
