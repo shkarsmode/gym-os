@@ -859,7 +859,7 @@
     }
 
     function settings() {
-        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Active user</h2><p class="card-caption">Front-end permission simulation. Active user can edit only own data.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Theme</h2><p class="card-caption">Dark only. Premium graphite palette, soft borders, muted gold accent, no neon.</p>${kpi([{ label: "Mode", value: "Dark" }, { label: "Font", value: "Oxanium" }])}</section><section class="card span-6"><h2>Data portability</h2><p class="card-caption">Local-first storage abstraction. Easy to replace with API calls later.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Export JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Import JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"></div></section><section class="card span-6"><h2>Storage status</h2>${kpi([{ label: "Storage", value: storage.mode }, { label: "Exercises", value: state.database.exercises.length }, { label: "Workouts", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Notifications</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Reset demo data</button></div></section><section class="card span-6"><h2>Manage exercise catalog</h2><p class="card-caption">Custom exercises are stored locally and marked by owner.</p><button class="button button-primary" type="button" data-action="open-custom-exercise">Add custom exercise</button></section><section class="card span-6"><h2>Manage strength standards</h2><p class="card-caption">Demo standards are configurable and not presented as official truth.</p><button class="button button-secondary" type="button" data-action="open-standards">Open standards table</button></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Активний користувач</h2><p class="card-caption">Demo mode імітує права: активний користувач редагує лише власні дані.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Production-режим передбачає тільки Google OAuth. У локальному demo mode можна працювати без входу.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">Frontend працює локально через IndexedDB/localStorage або через backend API. Якщо backend недоступний, demo не ламається.</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode"><option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Backend API</option></select></div><div class="field"><label>API base URL</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="http://localhost:3000" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Backend: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "local" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути demo data</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп local-first бази для ручного перенесення або backend seed.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником, нормативи залишаються configurable data.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise">Додати власну вправу</button><button class="button button-secondary" type="button" data-action="open-standards">Відкрити нормативи</button></div></section></div>`);
     }
 
     function bindEvents() {
@@ -881,6 +881,12 @@
         const actions = {
             navigate: () => navigate(actionElement.dataset.section),
             "open-template-modal": openTemplateModal,
+            "open-planning-modal": () => openPlanningModal(actionElement.dataset.date || dateInput(new Date())),
+            "create-planned-workout": () => savePlanningWorkout("planned"),
+            "create-and-start-planned-workout": () => savePlanningWorkout("active"),
+            "save-planned-workout": () => savePlanningWorkout("planned", actionElement.dataset.workoutId),
+            "start-planned-workout": () => startPlannedWorkout(actionElement.dataset.workoutId),
+            "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "start-template": () => startFromTemplate(actionElement.dataset.templateId, "active"),
             "plan-template": () => startFromTemplate(actionElement.dataset.templateId, "planned"),
             "start-empty-workout": () => startFromTemplate("custom", "active"),
@@ -904,6 +910,9 @@
             "achievement-filter": () => filterAchievements(actionElement.dataset.category),
             "open-workout": () => openWorkout(actionElement.dataset.workoutId),
             notifications: requestNotifications,
+            "check-backend": checkBackendConnection,
+            "login-google": loginWithGoogle,
+            logout: logout,
             "export-data": exportData,
             reset: resetData,
             "open-standards": openStandards,
@@ -932,6 +941,10 @@
 
         if (actionElement.dataset.action === "import-data") {
             await importData(actionElement.files[0]);
+        }
+
+        if (actionElement.dataset.action === "data-mode") {
+            await changeDataMode(actionElement.value);
         }
     }
 
@@ -963,6 +976,11 @@
                 schedulePersist();
             }
         }
+
+        if (actionElement.dataset.action === "api-base-url") {
+            clearTimeout(handleInput.apiUrlTimeoutId);
+            handleInput.apiUrlTimeoutId = setTimeout(() => updateApiBaseUrl(actionElement.value), 450);
+        }
     }
 
     function navigate(section) {
@@ -972,29 +990,41 @@
     }
 
     function openQuickAction() {
-        openModal(`<div class="modal-header"><div><h2>Quick action</h2><p class="card-caption">Start, plan or jump to a focused area.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="template-grid"><button class="template-card" type="button" data-action="start-empty-workout"><h3>Start empty workout</h3><p class="card-caption">Clean session with no predefined exercises.</p></button><button class="template-card" type="button" data-action="open-template-modal"><h3>Choose template</h3><p class="card-caption">Push, pull, legs, full body and more.</p></button><button class="template-card" type="button" data-action="navigate" data-section="rankings"><h3>Open rankings</h3><p class="card-caption">Check current strength class.</p></button><button class="template-card" type="button" data-action="navigate" data-section="knowledge"><h3>Technique base</h3><p class="card-caption">Review form and mistakes.</p></button></div>`);
+        openModal(`<div class="modal-header"><div><h2>Швидка дія</h2><p class="card-caption">Почати, запланувати або перейти в потрібний розділ.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="template-grid"><button class="template-card" type="button" data-action="start-empty-workout"><h3>Почати порожнє тренування</h3><p class="card-caption">Чиста сесія без заздалегідь заданих вправ.</p></button><button class="template-card" type="button" data-action="open-planning-modal"><h3>Запланувати тренування</h3><p class="card-caption">Дата, тип, шаблон і нотатки.</p></button><button class="template-card" type="button" data-action="open-template-modal"><h3>Обрати шаблон</h3><p class="card-caption">Push, Pull, Legs, Full Body і не тільки.</p></button><button class="template-card" type="button" data-action="navigate" data-section="rankings"><h3>Відкрити рейтинги</h3><p class="card-caption">Перевірити поточний силовий рівень.</p></button><button class="template-card" type="button" data-action="navigate" data-section="knowledge"><h3>База техніки</h3><p class="card-caption">Форма, помилки і безпечне виконання.</p></button></div>`);
     }
 
     function openUserSwitcher() {
-        openModal(`<div class="modal-header"><div><h2>Switch active user</h2><p class="card-caption">Permissions are simulated with currentUserId.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="user-grid">${state.database.users.map(userSwitcherCard).join("")}</div>`);
+        openModal(`<div class="modal-header"><div><h2>Змінити активного користувача</h2><p class="card-caption">Права в demo mode імітуються через active user.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="user-grid">${state.database.users.map(userSwitcherCard).join("")}</div>`);
     }
 
     function openTemplateModal() {
-        openModal(`<div class="modal-header"><div><h2>Workout templates</h2><p class="card-caption">Create planned or active workouts. Everything can be edited after creation.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="template-grid">${templates.map(templateCard).join("")}</div>`);
+        openModal(`<div class="modal-header"><div><h2>Шаблони тренувань</h2><p class="card-caption">Створи заплановане або активне тренування. Усе можна редагувати після створення.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="template-grid">${templates.map(templateCard).join("")}</div>`);
+    }
+
+    function openPlanningModal(date = dateInput(new Date()), workoutId = null) {
+        const workoutItem = workoutId ? state.database.workouts.find((item) => item.id === workoutId) : null;
+        const readonly = workoutItem && workoutItem.userId !== currentUser().id;
+        const selectedTemplateId = workoutItem ? templateByType(workoutItem.workoutType).id : "custom";
+        const selectedType = workoutItem?.workoutType || templateById(selectedTemplateId).type;
+        const title = workoutItem?.title || "";
+        const notes = workoutItem?.notes || "";
+        const targetDate = workoutItem?.date || date;
+
+        openModal(`<div class="modal-header"><div><h2>${workoutItem ? "Деталі плану" : "Запланувати тренування"}</h2><p class="card-caption">${readonly ? "Чуже тренування доступне лише для перегляду." : "Обери дату, тип і шаблон. Можна одразу почати сесію."}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: редагувати може тільки власник тренування.</div>` : ""}<div class="field-grid"><div class="field"><label>Дата</label><input id="planDate" type="date" value="${escapeHtml(targetDate)}" ${readonly ? "disabled" : ""}></div><div class="field"><label>Назва тренування</label><input id="planTitle" type="text" value="${escapeHtml(title)}" placeholder="Наприклад: Push сила" ${readonly ? "disabled" : ""}></div><div class="field"><label>Тип тренування</label><select id="planType" ${readonly ? "disabled" : ""}>${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${selectedType === value ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Шаблон</label><select id="planTemplate" ${readonly ? "disabled" : ""}>${templates.map((template) => `<option value="${template.id}" ${selectedTemplateId === template.id ? "selected" : ""}>${escapeHtml(template.title)}</option>`).join("")}</select></div></div><div class="field" style="margin-top:14px;"><label>Нотатки</label><textarea id="planNotes" placeholder="Що важливо пам'ятати перед сесією" ${readonly ? "disabled" : ""}>${escapeHtml(notes)}</textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button>${workoutItem && !readonly ? `<button class="button button-danger" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}">Видалити</button><button class="button button-secondary" type="button" data-action="start-planned-workout" data-workout-id="${workoutItem.id}">Почати</button><button class="button button-primary" type="button" data-action="save-planned-workout" data-workout-id="${workoutItem.id}">Зберегти</button>` : ""}${!workoutItem ? `<button class="button button-secondary" type="button" data-action="create-planned-workout">Запланувати</button><button class="button button-primary" type="button" data-action="create-and-start-planned-workout">Запланувати і почати</button>` : ""}</div>`);
     }
 
     function openAddExerciseModal() {
-        openModal(`<div class="modal-header"><div><h2>Add exercise</h2><p class="card-caption">Search by name, alias, muscle, pattern or equipment.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="search" placeholder="Search exercise" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="exercise-picker-grid" style="margin-top:14px;">${filteredExercises().map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} Â· ${escapeHtml(exercise.movementPattern)} Â· ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Add</button></article>`).join("")}</div>`);
+        openModal(`<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="search" placeholder="Пошук вправи" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"><div class="exercise-picker-grid" style="margin-top:14px;">${filteredExercises().map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("")}</div>`);
     }
 
     function openCustomExercise() {
-        openModal(`<div class="modal-header"><div><h2>Custom exercise</h2><p class="card-caption">Create a local custom exercise.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Name</label><input id="customExerciseName" type="text" placeholder="Smith Incline Press"></div><div class="field"><label>Aliases</label><input id="customExerciseAliases" type="text" placeholder="Comma separated"></div><div class="field"><label>Primary muscle</label>${select("customExerciseMuscle", muscles(), "Chest")}</div><div class="field"><label>Movement pattern</label>${select("customExercisePattern", patterns(), "Horizontal Press")}</div><div class="field"><label>Equipment</label>${select("customExerciseEquipment", equipment(), "Machine")}</div><div class="field"><label>Difficulty</label>${select("customExerciseDifficulty", ["Beginner", "Intermediate", "Advanced"], "Intermediate")}</div></div><div class="field" style="margin-top:14px;"><label>Description</label><textarea id="customExerciseDescription" placeholder="Short explanation"></textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Cancel</button><button class="button button-primary" type="button" data-action="save-custom-exercise">Save exercise</button></div>`);
+        openModal(`<div class="modal-header"><div><h2>Власна вправа</h2><p class="card-caption">Створи вправу для локального каталогу або майбутнього backend.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Назва</label><input id="customExerciseName" type="text" placeholder="Жим у Smith під кутом"></div><div class="field"><label>Aliases</label><input id="customExerciseAliases" type="text" placeholder="Через кому"></div><div class="field"><label>Основний м'яз</label>${select("customExerciseMuscle", muscles(), "Груди")}</div><div class="field"><label>Патерн руху</label>${select("customExercisePattern", patterns(), "Горизонтальний жим")}</div><div class="field"><label>Обладнання</label>${select("customExerciseEquipment", equipment(), "Тренажер")}</div><div class="field"><label>Складність</label>${select("customExerciseDifficulty", ["Початковий", "Середній", "Просунутий"], "Середній")}</div></div><div class="field" style="margin-top:14px;"><label>Опис</label><textarea id="customExerciseDescription" placeholder="Коротке пояснення"></textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-custom-exercise">Зберегти вправу</button></div>`);
     }
 
     async function saveCustomExercise() {
         const name = inputValue("customExerciseName").trim();
         if (!name) {
-            toast("Name required", "Add a clear exercise name.");
+            toast("Потрібна назва", "Додай зрозумілу назву вправи.");
             return;
         }
         const muscle = inputValue("customExerciseMuscle");
@@ -1007,9 +1037,9 @@
             secondaryMuscleGroups: [],
             movementPattern: pattern,
             equipment: inputValue("customExerciseEquipment"),
-            category: "Custom",
+            category: "Власна",
             difficulty: inputValue("customExerciseDifficulty"),
-            description: inputValue("customExerciseDescription") || `${name} is a custom ${pattern.toLowerCase()} movement focused on ${muscle.toLowerCase()}.`,
+            description: inputValue("customExerciseDescription") || `${name} — власна вправа з фокусом на ${muscle.toLowerCase()}.`,
             techniqueSteps: techniqueFor(pattern),
             commonMistakes: mistakesFor(pattern),
             safetyTips: safetyFor(pattern),
@@ -1024,12 +1054,12 @@
         await persist();
         closeOverlay();
         renderSection();
-        toast("Custom exercise created", name);
+        toast("Власну вправу створено", name);
     }
 
     function openProfileEditor() {
         const user = currentUser();
-        openModal(`<div class="modal-header"><div><h2>Edit profile</h2><p class="card-caption">Only the active user can edit their profile.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Name</label><input id="profileName" type="text" value="${escapeHtml(user.name)}"></div><div class="field"><label>Display name</label><input id="profileDisplayName" type="text" value="${escapeHtml(user.displayName)}"></div><div class="field"><label>Height</label><input id="profileHeight" type="number" value="${user.height}"></div><div class="field"><label>Bodyweight</label><input id="profileBodyweight" type="number" step="0.1" value="${user.bodyweight}"></div><div class="field"><label>Training goal</label><input id="profileGoal" type="text" value="${escapeHtml(user.trainingGoal)}"></div><div class="field"><label>Experience</label><input id="profileExperience" type="text" value="${escapeHtml(user.trainingExperience)}"></div><div class="field"><label>Favorite muscle</label>${select("profileMuscle", muscles(), user.favoriteMuscleGroup)}</div><div class="field"><label>Gender</label>${select("profileGender", ["male", "female"], user.gender)}</div></div><div class="field-grid" style="margin-top:14px;"><div class="field"><label>Bodyweight date</label><input id="bodyweightDate" type="date" value="${dateInput(new Date())}"></div><div class="field"><label>Add bodyweight entry</label><input id="bodyweightValue" type="number" step="0.1" value="${user.bodyweight}"></div></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Cancel</button><button class="button button-primary" type="button" data-action="save-profile">Save profile</button></div>`);
+        openModal(`<div class="modal-header"><div><h2>Редагувати профіль</h2><p class="card-caption">Редагувати можна тільки профіль активного користувача.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Ім'я</label><input id="profileName" type="text" value="${escapeHtml(user.name)}"></div><div class="field"><label>Display name</label><input id="profileDisplayName" type="text" value="${escapeHtml(user.displayName)}"></div><div class="field"><label>Зріст</label><input id="profileHeight" type="number" value="${user.height}"></div><div class="field"><label>Вага тіла</label><input id="profileBodyweight" type="number" step="0.1" value="${user.bodyweight}"></div><div class="field"><label>Тренувальна ціль</label><input id="profileGoal" type="text" value="${escapeHtml(user.trainingGoal)}"></div><div class="field"><label>Досвід</label><input id="profileExperience" type="text" value="${escapeHtml(user.trainingExperience)}"></div><div class="field"><label>Улюблена група</label>${select("profileMuscle", muscles(), user.favoriteMuscleGroup)}</div><div class="field"><label>Категорія</label>${select("profileGender", ["male", "female"], user.gender)}</div></div><div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата заміру</label><input id="bodyweightDate" type="date" value="${dateInput(new Date())}"></div><div class="field"><label>Додати запис ваги</label><input id="bodyweightValue" type="number" step="0.1" value="${user.bodyweight}"></div></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-profile">Зберегти профіль</button></div>`);
     }
 
     async function saveProfile() {
@@ -1047,7 +1077,7 @@
         await persist();
         closeOverlay();
         renderSection();
-        toast("Profile saved", user.displayName);
+        toast("Профіль збережено", user.displayName);
     }
 
     async function saveBodyweight(shouldRender = true) {
@@ -1055,7 +1085,7 @@
         if (!value) {
             return;
         }
-        state.database.bodyweightEntries.push({ id: createId("bodyweight"), userId: currentUser().id, date: inputValue("bodyweightDate") || dateInput(new Date()), bodyweight: value, notes: "Manual entry" });
+        state.database.bodyweightEntries.push({ id: createId("bodyweight"), userId: currentUser().id, date: inputValue("bodyweightDate") || dateInput(new Date()), bodyweight: value, notes: "Ручний запис" });
         currentUser().bodyweight = value;
         if (shouldRender) {
             await persist();
@@ -1064,12 +1094,104 @@
         }
     }
 
-    async function startFromTemplate(templateId, status) {
-        const existing = activeWorkoutFor(currentUser().id);
-        if (status === "active" && existing && !confirm("You already have an active workout. Finish it and start a new one?")) {
+    async function savePlanningWorkout(status, workoutId = null) {
+        const template = templateById(inputValue("planTemplate") || "custom");
+        const date = inputValue("planDate") || dateInput(new Date());
+        const title = inputValue("planTitle").trim() || template.title;
+        const workoutType = inputValue("planType") || template.type;
+        const notes = inputValue("planNotes").trim();
+
+        if (workoutId) {
+            const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
+            if (!workoutItem || workoutItem.userId !== currentUser().id) {
+                toast("Лише перегляд", "Редагувати можна тільки власні тренування.");
+                return;
+            }
+            workoutItem.date = date;
+            workoutItem.title = title;
+            workoutItem.workoutType = workoutType;
+            workoutItem.notes = notes;
+            workoutItem.updatedAt = new Date().toISOString();
+            await persist();
+            closeOverlay();
+            renderSection();
+            toast("План оновлено", workoutItem.title);
             return;
         }
+
+        const workoutItem = createTemplateWorkout(currentUser().id, template, status, date, state.database.exercises);
+        workoutItem.title = title;
+        workoutItem.workoutType = workoutType;
+        workoutItem.notes = notes || (status === "active" ? "Почато з планування." : "Заплановано вручну.");
+        if (status === "active") {
+            const canStart = await ensureSingleActiveWorkout();
+            if (!canStart) {
+                return;
+            }
+        }
+        state.database.workouts.push(workoutItem);
+        await persist();
+        closeOverlay();
+        navigate(status === "active" ? "workout" : "calendar");
+        toast(status === "active" ? "Тренування почато" : "Тренування заплановано", workoutItem.title);
+    }
+
+    async function startPlannedWorkout(workoutId) {
+        const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
+        if (!workoutItem || workoutItem.userId !== currentUser().id) {
+            toast("Лише перегляд", "Почати можна тільки власне тренування.");
+            return;
+        }
+        const canStart = await ensureSingleActiveWorkout(workoutItem.id);
+        if (!canStart) {
+            return;
+        }
+        workoutItem.status = "active";
+        workoutItem.startedAt = new Date().toISOString();
+        workoutItem.finishedAt = null;
+        workoutItem.updatedAt = new Date().toISOString();
+        await persist();
+        closeOverlay();
+        navigate("workout");
+        toast("Тренування почато", workoutItem.title);
+    }
+
+    async function deleteWorkout(workoutId) {
+        const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
+        if (!workoutItem || workoutItem.userId !== currentUser().id) {
+            toast("Лише перегляд", "Видаляти можна тільки власні тренування.");
+            return;
+        }
+        if (!confirm("Видалити це тренування?")) {
+            return;
+        }
+        state.database.workouts = state.database.workouts.filter((item) => item.id !== workoutId);
+        await persist();
+        closeOverlay();
+        renderSection();
+        toast("Тренування видалено", workoutItem.title);
+    }
+
+    async function ensureSingleActiveWorkout(excludedWorkoutId = null) {
+        const existing = activeWorkoutFor(currentUser().id);
+        if (!existing || existing.id === excludedWorkoutId) {
+            return true;
+        }
+        if (!confirm("У тебе вже є активне тренування. Завершити його і почати нове?")) {
+            return false;
+        }
+        existing.status = "completed";
+        existing.finishedAt = new Date().toISOString();
+        existing.updatedAt = new Date().toISOString();
+        return true;
+    }
+
+    async function startFromTemplate(templateId, status) {
+        const existing = activeWorkoutFor(currentUser().id);
         if (status === "active" && existing) {
+            if (!confirm("У тебе вже є активне тренування. Завершити його і почати нове?")) {
+                return;
+            }
             existing.status = "completed";
             existing.finishedAt = new Date().toISOString();
         }
@@ -1078,13 +1200,13 @@
         await persist();
         closeOverlay();
         navigate(status === "active" ? "workout" : "calendar");
-        toast(status === "active" ? "Workout started" : "Workout planned", workoutItem.title);
+        toast(status === "active" ? "Тренування почато" : "Тренування заплановано", workoutItem.title);
     }
 
     async function addExercise(exerciseId) {
         const active = activeWorkoutFor(currentUser().id);
         if (!active) {
-            toast("Start a workout first", "Create an active workout before adding exercises.");
+            toast("Спочатку почни тренування", "Додати вправу можна тільки в активну сесію.");
             return;
         }
         const exercise = exerciseById(exerciseId);
@@ -1093,7 +1215,7 @@
         await persist();
         closeOverlay();
         navigate("workout");
-        toast("Exercise added", exercise.name);
+        toast("Вправу додано", exercise.name);
     }
 
     async function addSet(workoutExerciseId) {
@@ -1109,7 +1231,7 @@
 
     async function duplicateSet(workoutExerciseId) {
         await addSet(workoutExerciseId);
-        toast("Set duplicated", "Previous set was copied.");
+        toast("Підхід повторено", "Попередній підхід скопійовано.");
     }
 
     async function toggleSet(workoutExerciseId, setId) {
@@ -1121,14 +1243,14 @@
         await persist();
         if (set.isCompleted) {
             startTimer(set.restSeconds || 90);
-            toast("Set completed", `Rest timer: ${seconds(set.restSeconds || 90)}`);
+            toast("Підхід завершено", `Таймер відпочинку: ${seconds(set.restSeconds || 90)}`);
         }
         renderSection();
     }
 
     async function deleteSet(workoutExerciseId, setId) {
         const workoutExercise = activeWorkoutExercise(workoutExerciseId);
-        if (!workoutExercise || !confirm("Delete this set?")) {
+        if (!workoutExercise || !confirm("Видалити цей підхід?")) {
             return;
         }
         workoutExercise.sets = workoutExercise.sets.filter((set) => set.id !== setId);
@@ -1156,7 +1278,7 @@
         stopTimer();
         await persist();
         renderSection();
-        toast("Workout completed", "PRs and achievements were recalculated.");
+        toast("Тренування завершено", "PR, досягнення і статистику перераховано.");
     }
 
     async function addCardioToWorkout() {
@@ -1167,7 +1289,7 @@
         active.cardioSessions.push(createCardio(1));
         await persist();
         renderSection();
-        toast("Cardio added", "Conditioning block added.");
+        toast("Кардіо додано", "Блок кондиції додано до тренування.");
     }
 
     async function switchUser(userId) {
@@ -1176,7 +1298,7 @@
         await persist();
         closeOverlay();
         renderSection();
-        toast("Active user switched", userById(userId).displayName);
+        toast("Активного користувача змінено", userById(userId).displayName);
     }
 
     function viewUser(userId) {
@@ -1356,20 +1478,15 @@
             height: "auto",
             firstDay: 1,
             headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,listWeek" },
-            events: state.database.workouts.map((workoutItem) => ({ id: workoutItem.id, title: `${userById(workoutItem.userId).displayName}: ${workoutItem.title}`, start: workoutItem.date, extendedProps: { workoutId: workoutItem.id } })),
-            dateClick: (info) => planOnDate(info.dateStr),
+            events: state.database.workouts.map((workoutItem) => ({ id: workoutItem.id, title: `${userById(workoutItem.userId).displayName}: ${workoutItem.title}`, start: workoutItem.date, classNames: [`workout-status-${workoutItem.status}`], extendedProps: { workoutId: workoutItem.id } })),
+            dateClick: (info) => openPlanningModal(info.dateStr),
             eventClick: (info) => openWorkout(info.event.extendedProps.workoutId)
         });
         state.calendar.render();
     }
 
     async function planOnDate(date) {
-        const workoutItem = createTemplateWorkout(currentUser().id, templateById("custom"), "planned", date, state.database.exercises);
-        workoutItem.title = "Custom planned workout";
-        state.database.workouts.push(workoutItem);
-        await persist();
-        renderSection();
-        toast("Workout planned", formatDate(date));
+        openPlanningModal(date);
     }
 
     function weeklyVolumeChart(id, userId) {
