@@ -772,7 +772,8 @@ select option {
 .ranking-card,
 .template-card,
 .insight-card,
-.activity-item {
+.activity-item,
+.history-card {
     border: 1px solid var(--color-border);
     border-radius: 20px;
     padding: 15px;
@@ -781,17 +782,28 @@ select option {
 
 .exercise-card,
 .template-card,
-.user-card {
+.user-card,
+.history-card {
     cursor: pointer;
     transition: 0.16s ease;
 }
 
 .exercise-card:hover,
 .template-card:hover,
-.user-card:hover {
+.user-card:hover,
+.history-card:hover {
     transform: translateY(-2px);
     border-color: var(--color-border-strong);
     background: rgba(255, 255, 255, 0.065);
+}
+
+.history-card {
+    display: grid;
+    gap: 12px;
+}
+
+.history-notes {
+    margin: 0;
 }
 
 .media-placeholder {
@@ -943,6 +955,51 @@ td {
     padding: 2px 5px !important;
     background: rgba(211, 183, 121, 0.78) !important;
     color: #15120c !important;
+}
+
+.fc-event.workout-status-planned {
+    background: rgba(208, 160, 96, 0.88) !important;
+}
+
+.fc-event.workout-status-active {
+    background: rgba(240, 216, 154, 0.94) !important;
+}
+
+.fc-event.workout-status-completed {
+    background: rgba(130, 180, 137, 0.88) !important;
+}
+
+.legend-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+.legend-list span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+}
+
+.legend-dot.planned {
+    background: var(--color-warning);
+}
+
+.legend-dot.active {
+    background: var(--color-accent-strong);
+}
+
+.legend-dot.completed {
+    background: var(--color-good);
 }
 
 .modal-backdrop {
