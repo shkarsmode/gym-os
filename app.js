@@ -881,7 +881,7 @@
         const actions = {
             navigate: () => navigate(actionElement.dataset.section),
             "open-template-modal": openTemplateModal,
-            "open-planning-modal": () => openPlanningModal(actionElement.dataset.date || dateInput(new Date())),
+            "open-planning-modal": () => openPlanningModal(actionElement.dataset.date || dateInput(new Date()), actionElement.dataset.workoutId || null),
             "create-planned-workout": () => savePlanningWorkout("planned"),
             "create-and-start-planned-workout": () => savePlanningWorkout("active"),
             "save-planned-workout": () => savePlanningWorkout("planned", actionElement.dataset.workoutId),
@@ -1320,26 +1320,69 @@
         const exercise = exerciseById(exerciseId);
         const currentBest = bestResult(currentUser().id, exerciseId);
         const teamBest = teamBestResult(exerciseId);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} Â· ${exercise.movementPattern} Â· ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}<section class="panel" style="margin-top:14px;"><h3>Technique</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Performance</h3>${kpi([{ label: "Your best", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} kg` : "â€”" }, { label: "Team best", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} kg` : "â€”" }])}</section><section class="panel" style="margin-top:14px;"><h3>Related</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("")}</div></section>`);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}<section class="panel" style="margin-top:14px;"><h3>Техніка</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Результати</h3>${kpi([{ label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section><section class="panel" style="margin-top:14px;"><h3>Схожі вправи</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("") || emptyInline("Схожих вправ немає", "Розшир каталог у налаштуваннях.")}</div></section>`);
     }
 
     function openWorkout(workoutId) {
         const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
         const owner = userById(workoutItem.userId);
         const readonly = workoutItem.userId !== currentUser().id;
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${escapeHtml(owner.displayName)} Â· ${formatDate(workoutItem.date)} Â· ${capitalize(workoutItem.status)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Read-only: another user's workout.</div>` : ""}${kpi([{ label: "Volume kg", value: number(workoutVolume(workoutItem)) }, { label: "Minutes", value: duration(workoutItem) }, { label: "Exercises", value: workoutItem.exercises.length }])}<div class="workout-stack" style="margin-top:14px;">${workoutItem.exercises.map((workoutExercise) => `<article class="panel"><h3>${escapeHtml(exerciseById(workoutExercise.exerciseId).name)}</h3><p class="card-caption">${workoutExercise.sets.length} sets Â· ${number(exerciseVolume(workoutExercise))} kg</p><div class="tag-row">${workoutExercise.sets.map((set) => `<span class="chip">${capitalize(set.type)} Â· ${set.weight} Ã— ${set.repetitions}</span>`).join("")}</div></article>`).join("")}</div>`);
+        const totalSets = workoutSetCount(workoutItem);
+        const cardioMinutes = workoutCardioMinutes(workoutItem);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${escapeHtml(owner.displayName)} · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: totalSets }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${cardioMinutes} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row" style="margin-top:14px;">${!readonly && workoutItem.status === "planned" ? `<button class="button button-primary compact" type="button" data-action="start-planned-workout" data-workout-id="${workoutItem.id}">Почати</button><button class="button button-secondary compact" type="button" data-action="open-planning-modal" data-date="${workoutItem.date}" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}">Видалити</button>` : ""}${!readonly && workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="navigate" data-section="workout">Перейти до поточного</button><button class="button button-secondary compact" type="button" data-action="finish-workout">Завершити</button>` : ""}</div></section><div class="workout-stack" style="margin-top:14px;">${workoutItem.exercises.length ? workoutItem.exercises.map((workoutExercise) => `<article class="panel"><h3>${escapeHtml(exerciseById(workoutExercise.exerciseId).name)}</h3><p class="card-caption">${workoutExercise.sets.length} підходів · ${number(exerciseVolume(workoutExercise))} кг</p><div class="tag-row">${workoutExercise.sets.map((set) => `<span class="chip">${setTypeLabel(set.type)} · ${set.weight} × ${set.repetitions}${set.isCompleted ? " · готово" : ""}</span>`).join("")}</div></article>`).join("") : emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.")}</div>`);
     }
 
     function openStandards() {
-        openModal(`<div class="modal-header"><div><h2>Strength standards</h2><p class="card-caption">Demo configurable standards. Not official final truth.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="table-wrap"><table><thead><tr><th>Exercise</th><th>Gender</th><th>BW</th><th>Level</th><th>Required</th><th>Source</th></tr></thead><tbody>${state.database.strengthStandards.slice(0, 42).map((standard) => `<tr><td>${escapeHtml(exerciseById(standard.exerciseId).name)}</td><td>${standard.gender}</td><td>${standard.bodyweightMin}-${standard.bodyweightMax}</td><td>${rankLabel(standard.level)}</td><td>${standard.requiredWeight} kg Ã— ${standard.repetitions}</td><td>${escapeHtml(standard.sourceName)}</td></tr>`).join("")}</tbody></table></div>`);
+        openModal(`<div class="modal-header"><div><h2>Силові нормативи</h2><p class="card-caption">Демо-нормативи використовуються лише для прикладу. Їх можна оновити під реальні стандарти пізніше.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="table-wrap"><table><thead><tr><th>Вправа</th><th>Категорія</th><th>Вага тіла</th><th>Рівень</th><th>Вимога</th><th>Джерело</th></tr></thead><tbody>${state.database.strengthStandards.slice(0, 42).map((standard) => `<tr><td>${escapeHtml(exerciseById(standard.exerciseId).name)}</td><td>${genderLabel(standard.gender)}</td><td>${standard.bodyweightMin}-${standard.bodyweightMax}</td><td>${rankLabel(standard.level)}</td><td>${standard.requiredWeight} кг × ${standard.repetitions}</td><td>${escapeHtml(standard.sourceName)}</td></tr>`).join("")}</tbody></table></div>`);
     }
 
     function requestNotifications() {
-        if (!("Notification" in window)) {
-            toast("Notifications unavailable", "Browser notifications are not supported here.");
-            return;
+        toast("Таймер працює без дозволів", "GymOS покаже visual toast навіть без browser notifications.");
+    }
+
+    async function checkBackendConnection() {
+        try {
+            await storage.checkBackend(true);
+            toast("Backend доступний", storage.apiBaseUrl || "API base URL активний.");
+        } catch (error) {
+            toast("Backend недоступний", "Frontend залишився в локальному demo mode.");
+            if (storage.config.allowLocalFallback !== false) {
+                await storage.setMode("local");
+            }
         }
-        Notification.requestPermission().then((permission) => toast("Notification permission", permission));
+        renderSection();
+    }
+
+    async function changeDataMode(mode) {
+        await storage.setMode(mode);
+        if (mode === "api" && storage.backendStatus !== "online") {
+            toast("Backend недоступний", "Повертаю demo у локальний режим.");
+            await storage.setMode("local");
+        } else {
+            toast("Режим даних змінено", dataModeLabel(storage.mode));
+        }
+        renderSection();
+    }
+
+    async function updateApiBaseUrl(value) {
+        await storage.setApiBaseUrl(value);
+    }
+
+    function loginWithGoogle() {
+        try {
+            storage.loginWithGoogle();
+        } catch (error) {
+            toast("API URL не налаштовано", "Додай backend URL у налаштуваннях перед Google OAuth.");
+        }
+    }
+
+    async function logout() {
+        try {
+            await storage.logout();
+            toast("Вихід виконано", "У demo mode активний користувач лишається локальним.");
+        } catch (error) {
+            toast("Backend недоступний", "Локальний demo mode продовжує працювати.");
+        }
     }
 
     function exportData() {
@@ -1347,12 +1390,12 @@
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = `gym-os-export-${dateInput(new Date())}.json`;
+        anchor.download = `gymos-export-${dateInput(new Date())}.json`;
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(url);
-        toast("Data exported", "JSON file downloaded.");
+        toast("Дані експортовано", "JSON-файл завантажено.");
     }
 
     async function importData(file) {
@@ -1370,15 +1413,15 @@
             state.profileUserId = data.currentUserId;
             await persist();
             renderSection();
-            toast("Data imported", "Local database updated.");
+            toast("Дані імпортовано", "Локальну базу оновлено.");
         } catch (error) {
             console.error(error);
-            toast("Import failed", "The JSON structure is not valid for Gym OS.");
+            toast("Імпорт не вдався", "JSON-структура не підходить для GymOS.");
         }
     }
 
     async function resetData() {
-        if (!confirm("Reset all local demo data?")) {
+        if (!confirm("Скинути всі локальні demo data?")) {
             return;
         }
         await storage.reset();
@@ -1386,7 +1429,7 @@
         state.profileUserId = state.database.currentUserId;
         await persist();
         renderSection();
-        toast("Demo data reset", "Fresh local database created.");
+        toast("Demo data скинуто", "Створено свіжу локальну базу.");
     }
 
     function metric(title, value, icon, caption, span = "span-3") {
@@ -1406,50 +1449,50 @@
     }
 
     function recordCard(record) {
-        return `<article class="activity-item"><div class="activity-dot"></div><div><strong>${escapeHtml(record.exercise.name)}</strong><p class="card-caption">${number(record.estimatedOneRepMax)} kg estimated 1RM Â· ${record.weight} kg Ã— ${record.repetitions} Â· ${formatDate(record.date)}</p></div></article>`;
+        return `<article class="activity-item"><div class="activity-dot"></div><div><strong>${escapeHtml(record.exercise.name)}</strong><p class="card-caption">${number(record.estimatedOneRepMax)} кг розрах. 1ПМ · ${record.weight} кг × ${record.repetitions} · ${formatDate(record.date)}</p></div></article>`;
     }
 
     function templateCard(template) {
-        return `<article class="template-card"><div class="card-header"><div><h3>${escapeHtml(template.title)}</h3><p class="card-caption">${escapeHtml(template.description)}</p></div><span class="badge accent">${template.exerciseNames.length || "Free"}</span></div><div class="tag-row" style="margin:12px 0;">${template.exerciseNames.slice(0, 4).map((name) => `<span class="chip">${escapeHtml(name)}</span>`).join("")}</div><div class="inline-actions"><button class="button button-primary compact" type="button" data-action="start-template" data-template-id="${template.id}">Start</button><button class="button button-secondary compact" type="button" data-action="plan-template" data-template-id="${template.id}">Plan</button></div></article>`;
+        return `<article class="template-card"><div class="card-header"><div><h3>${escapeHtml(template.title)}</h3><p class="card-caption">${escapeHtml(template.description)}</p></div><span class="badge accent">${template.exerciseNames.length || "Вільно"}</span></div><div class="tag-row" style="margin:12px 0;">${template.exerciseNames.slice(0, 4).map((name) => `<span class="chip">${escapeHtml(name)}</span>`).join("")}</div><div class="inline-actions"><button class="button button-primary compact" type="button" data-action="start-template" data-template-id="${template.id}">Почати</button><button class="button button-secondary compact" type="button" data-action="plan-template" data-template-id="${template.id}">Запланувати</button></div></article>`;
     }
 
     function exerciseCard(exercise) {
-        return `<article class="exercise-card" data-action="open-exercise" data-exercise-id="${exercise.id}"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.description)}</p></div>${exercise.isCustom ? `<span class="badge accent">Custom</span>` : ""}</div><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></article>`;
+        return `<article class="exercise-card" data-action="open-exercise" data-exercise-id="${exercise.id}"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.description)}</p></div>${exercise.isCustom ? `<span class="badge accent">Власна</span>` : ""}</div><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></article>`;
     }
 
     function userCard(user) {
         const summary = userStats(user.id);
         const isCurrent = user.id === currentUser().id;
-        return `<article class="user-card" data-action="view-user" data-user-id="${user.id}"><div class="list-row">${avatar(user)}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal)}</p></div></div><div style="margin-top:14px;">${kpi([{ label: "Workouts", value: summary.completedWorkouts }, { label: "Volume", value: number(summary.totalVolume) }, { label: "Cardio", value: summary.cardioMinutes }])}</div><div class="tag-row" style="margin-top:12px;"><span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Current" : "Read only"}</span><span class="chip">${escapeHtml(mainRank(user.id))}</span></div></article>`;
+        return `<article class="user-card" data-action="view-user" data-user-id="${user.id}"><div class="list-row">${avatar(user)}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal)}</p></div></div><div style="margin-top:14px;">${kpi([{ label: "Тренування", value: summary.completedWorkouts }, { label: "Обсяг", value: number(summary.totalVolume) }, { label: "Кардіо", value: summary.cardioMinutes }])}</div><div class="tag-row" style="margin-top:12px;"><span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Поточний" : "Лише перегляд"}</span><span class="chip">${escapeHtml(mainRank(user.id))}</span></div></article>`;
     }
 
     function userSwitcherCard(user) {
         const isCurrent = user.id === currentUser().id;
-        return `<article class="user-card"><div class="list-row">${avatar(user, "small")}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.name)}</p></div></div><button class="button ${isCurrent ? "button-secondary" : "button-primary"} compact" type="button" data-action="switch-user" data-user-id="${user.id}" style="margin-top:12px;" ${isCurrent ? "disabled" : ""}>${isCurrent ? "Active" : "Switch"}</button></article>`;
+        return `<article class="user-card"><div class="list-row">${avatar(user, "small")}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.name)}</p></div></div><button class="button ${isCurrent ? "button-secondary" : "button-primary"} compact" type="button" data-action="switch-user" data-user-id="${user.id}" style="margin-top:12px;" ${isCurrent ? "disabled" : ""}>${isCurrent ? "Активний" : "Перемкнути"}</button></article>`;
     }
 
     function achievementCard(item) {
-        const percent = Math.min(100, Math.round(item.currentValue / item.target * 100));
-        return `<article class="achievement-card ${item.isUnlocked ? "" : "locked"}"><div class="achievement-icon">${item.icon}</div><div class="card-header"><h3>${escapeHtml(item.title)}</h3><span class="badge ${item.isUnlocked ? "unlocked" : "locked"}">${item.isUnlocked ? "Unlocked" : "Locked"}</span></div><p class="card-caption">${escapeHtml(item.description)}</p><div class="progress-track" style="margin:12px 0 8px;"><div class="progress-fill" style="width:${percent}%;"></div></div><p class="profile-meta">${number(Math.min(item.currentValue, item.target))}/${number(item.target)} Â· ${item.unlockedAt ? `Unlocked ${formatDate(item.unlockedAt)}` : item.category}</p></article>`;
+        const percent = item.target ? Math.min(100, Math.round(item.currentValue / item.target * 100)) : 0;
+        return `<article class="achievement-card ${item.isUnlocked ? "" : "locked"}"><div class="achievement-icon">${item.icon}</div><div class="card-header"><h3>${escapeHtml(item.title)}</h3><span class="badge ${item.isUnlocked ? "unlocked" : "locked"}">${item.isUnlocked ? "Відкрито" : "Locked"}</span></div><p class="card-caption">${escapeHtml(item.description)}</p><div class="progress-track" style="margin:12px 0 8px;"><div class="progress-fill" style="width:${percent}%;"></div></div><p class="profile-meta">${number(Math.min(item.currentValue, item.target))}/${number(item.target)} · ${item.unlockedAt ? `Відкрито ${formatDate(item.unlockedAt)}` : item.category}</p></article>`;
     }
 
     function rankCard(user, exercise) {
         const rank = rankingFor(user.id, exercise.id);
-        const current = rank.currentLevel ? rankLabel(rank.currentLevel.level) : "No result yet";
-        const next = rank.nextLevel ? rankLabel(rank.nextLevel.level) : "Top level";
-        return `<article class="ranking-card"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${exercise.primaryMuscleGroup} Â· ${exercise.movementPattern}</p></div><span class="badge accent">${current}</span></div>${kpi([{ label: "Best approx", value: rank.best ? `${number(rank.best.estimatedOneRepMax)} kg` : "â€”" }, { label: "Next req.", value: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} kg` : "â€”" }])}<div class="progress-track" style="margin-top:12px;"><div class="progress-fill" style="width:${Math.min(100, rank.progress)}%;"></div></div><p class="profile-meta" style="margin-top:8px;">Next: ${next} Â· ${Math.round(rank.progress)}% Â· ${rank.best?.isEstimated ? "estimated value" : "direct value"}</p></article>`;
+        const current = rank.currentLevel ? rankLabel(rank.currentLevel.level) : "Поки немає результату";
+        const next = rank.nextLevel ? rankLabel(rank.nextLevel.level) : "Верхній demo-рівень";
+        return `<article class="ranking-card"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern}</p></div><span class="badge accent">${current}</span></div>${kpi([{ label: "Найкращий", value: rank.best ? `${number(rank.best.estimatedOneRepMax)} кг` : "—" }, { label: "Наступний рівень", value: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} кг` : "—" }])}<div class="progress-track" style="margin-top:12px;"><div class="progress-fill" style="width:${Math.min(100, rank.progress)}%;"></div></div><p class="profile-meta" style="margin-top:8px;">Далі: ${next} · ${Math.round(rank.progress)}% · ${rank.best?.isEstimated ? "розрахункове 1ПМ" : "прямий результат"}</p></article>`;
     }
 
     function timerCard() {
         const progress = state.timer.running ? Math.max(0, Math.min(100, (1 - state.timer.remaining / state.timer.duration) * 100)) : 0;
-        return `<section class="card"><div class="timer-card"><div><h2>Rest timer</h2><p class="card-caption">Starts automatically after completing a set.</p></div><div class="timer-ring" style="--timer-progress:${progress}%"><div class="timer-value">${seconds(state.timer.remaining)}</div></div></div></section>`;
+        return `<section class="card"><div class="timer-card"><div><h2>Таймер відпочинку</h2><p class="card-caption">Запускається автоматично після завершення підходу.</p></div><div class="timer-ring" style="--timer-progress:${progress}%"><div class="timer-value">${seconds(state.timer.remaining)}</div></div></div></section>`;
     }
 
     function media(exercise) {
         if (exercise.mediaUrl && exercise.mediaType !== "none") {
             return `<div class="media-placeholder"><img src="${escapeHtml(exercise.mediaUrl)}" alt="${escapeHtml(exercise.name)} demonstration"></div>`;
         }
-        return `<div class="media-placeholder"><div class="media-placeholder-label">Future GIF/WebP demo slot Â· animated placeholder</div></div>`;
+        return `<div class="media-placeholder"><div class="media-placeholder-label">Місце для майбутнього GIF/WebP демо · анімований placeholder</div></div>`;
     }
 
     function emptyInline(title, caption) {
@@ -1459,7 +1502,19 @@
     function activityFeed() {
         return state.database.workouts.filter((item) => item.status === "completed").sort(byDateDesc).slice(0, 8).map((workoutItem) => {
             const owner = userById(workoutItem.userId);
-            return `<article class="activity-item"><div class="activity-dot"></div><div style="flex:1;"><strong>${escapeHtml(owner.displayName)} completed ${escapeHtml(workoutItem.title)}</strong><p class="card-caption">${formatDate(workoutItem.date)} Â· ${number(workoutVolume(workoutItem))} kg Â· ${workoutItem.exercises.length} exercises</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Open</button></article>`;
+            return `<article class="activity-item"><div class="activity-dot"></div><div style="flex:1;"><strong>${escapeHtml(owner.displayName)} завершив ${escapeHtml(workoutItem.title)}</strong><p class="card-caption">${formatDate(workoutItem.date)} · ${number(workoutVolume(workoutItem))} кг · ${workoutItem.exercises.length} вправ</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Відкрити</button></article>`;
+        }).join("");
+    }
+
+    function workoutHistoryList(workouts) {
+        if (!workouts.length) {
+            return emptyInline("Історія порожня", "Створи або заверши тренування, щоб воно з'явилося тут.");
+        }
+
+        return workouts.map((workoutItem) => {
+            const owner = userById(workoutItem.userId);
+            const readonly = workoutItem.userId !== currentUser().id;
+            return `<article class="history-card" data-action="open-workout" data-workout-id="${workoutItem.id}"><div class="card-header"><div><div class="tag-row" style="margin-bottom:8px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}</div><h3>${escapeHtml(workoutItem.title)}</h3><p class="card-caption">${formatDate(workoutItem.date)} · ${escapeHtml(owner.displayName)}</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button></div>${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: workoutSetCount(workoutItem) }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${workoutCardioMinutes(workoutItem)} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption history-notes">${escapeHtml(workoutItem.notes).slice(0, 140)}</p>` : ""}</article>`;
         }).join("");
     }
 
@@ -1492,12 +1547,12 @@
     function weeklyVolumeChart(id, userId) {
         const labels = Array.from({ length: 7 }, (_, index) => dateInput(addDays(startWeek(new Date()), index)));
         const data = labels.map((label) => workoutsFor(userId).filter((item) => item.status === "completed" && item.date === label).reduce((sum, item) => sum + workoutVolume(item), 0));
-        barChart(id, labels.map(shortDate), data, "Volume kg");
+        barChart(id, labels.map(shortDate), data, "Обсяг, кг");
     }
 
     function volumeChart(id, userId) {
         const workouts = filteredWorkouts(userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-14);
-        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map(workoutVolume), "Volume kg");
+        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map(workoutVolume), "Обсяг, кг");
     }
 
     function muscleDistributionChart(id, userId) {
@@ -1507,28 +1562,28 @@
 
     function bodyweightChart(id, userId = currentUser().id) {
         const entries = state.database.bodyweightEntries.filter((item) => item.userId === userId).sort(byDateAsc);
-        lineChart(id, entries.map((item) => shortDate(item.date)), entries.map((item) => item.bodyweight), "Bodyweight kg");
+        lineChart(id, entries.map((item) => shortDate(item.date)), entries.map((item) => item.bodyweight), "Вага тіла, кг");
     }
 
     function cardioChart(id, userId = currentUser().id) {
         const workouts = workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc).slice(-10);
-        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => item.cardioSessions.reduce((sum, session) => sum + session.durationMinutes, 0)), "Cardio min");
+        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => item.cardioSessions.reduce((sum, session) => sum + session.durationMinutes, 0)), "Кардіо, хв");
     }
 
     function progressChart(id, userId) {
-        const exerciseId = state.filters.statsExerciseId !== "all" ? state.filters.statsExerciseId : exerciseByName("Bench Press").id;
+        const exerciseId = state.filters.statsExerciseId !== "all" ? state.filters.statsExerciseId : exerciseByName("Жим лежачи").id;
         const points = progressData(userId, exerciseId);
-        lineChart(id, points.map((point) => shortDate(point.date)), points.map((point) => point.value), "Approx 1RM");
+        lineChart(id, points.map((point) => shortDate(point.date)), points.map((point) => point.value), "Розрах. 1ПМ");
     }
 
     function maxTrendChart(id, userId) {
-        const points = progressData(userId, exerciseByName("Bench Press").id);
-        lineChart(id, points.map((point) => shortDate(point.date)), points.map((point) => point.value), "Bench approx 1RM");
+        const points = progressData(userId, exerciseByName("Жим лежачи").id);
+        lineChart(id, points.map((point) => shortDate(point.date)), points.map((point) => point.value), "Жим лежачи, розрах. 1ПМ");
     }
 
     function consistencyChart(id, userId) {
         const workouts = filteredWorkouts(userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-10);
-        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => item.exercises.length), "Exercises");
+        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => item.exercises.length), "Вправи");
     }
 
     function barChart(id, labels, data, label) {
@@ -1545,6 +1600,16 @@
 
     function createChart(id, config) {
         if (!window.Chart || !element(id)) {
+            return;
+        }
+        const labels = config.data?.labels || [];
+        const values = config.data?.datasets?.[0]?.data || [];
+        if (!labels.length || !values.some((value) => Number(value) > 0)) {
+            const parent = element(id).parentElement;
+            if (parent) {
+                parent.innerHTML = emptyInline("Недостатньо даних", "Графік оновиться після створення або завершення тренувань.");
+                icons();
+            }
             return;
         }
         const chart = new Chart(element(id), config);
@@ -1731,6 +1796,9 @@
         }
         if (state.filters.statsExerciseId !== "all") {
             items = items.filter((item) => item.exercises.some((exercise) => exercise.exerciseId === state.filters.statsExerciseId));
+        }
+        if (state.filters.statsWorkoutType !== "all") {
+            items = items.filter((item) => item.workoutType === state.filters.statsWorkoutType);
         }
         return items;
     }
