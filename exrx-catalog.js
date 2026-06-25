@@ -1,4 +1,4 @@
-{
+window.GYMOS_EXRX_CATALOG = {
     "schemaVersion": 1,
     "product": "GymOS",
     "source": {
