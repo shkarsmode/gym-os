@@ -230,7 +230,7 @@
         }
 
         saveWorkout(id, payload) {
-            return this.request(`/workouts/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+            return this.request(`/workouts/${id}/save`, { method: "POST", body: JSON.stringify(payload) });
         }
 
         updateWorkout(id, payload) {
