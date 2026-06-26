@@ -150,10 +150,18 @@
                 throw new Error("API base URL is not configured");
             }
 
+            let authToken = "";
+            try {
+                authToken = localStorage.getItem("gymos-auth-token") || "";
+            } catch (error) {
+                authToken = "";
+            }
+
             const response = await fetch(`${this.baseUrl}${path}`, {
                 credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
+                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
                     ...(options.headers || {})
                 },
                 ...options
@@ -234,11 +242,11 @@
         }
 
         updateWorkout(id, payload) {
-            return this.request(`/workouts/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+            return this.request(`/workouts/${id}/update`, { method: "POST", body: JSON.stringify(payload) });
         }
 
         deleteWorkout(id) {
-            return this.request(`/workouts/${id}`, { method: "DELETE" });
+            return this.request(`/workouts/${id}/delete`, { method: "POST" });
         }
 
         createExercise(payload) {
@@ -250,7 +258,7 @@
         }
 
         updateProfile(payload) {
-            return this.request("/users/me/profile", { method: "PATCH", body: JSON.stringify(payload) });
+            return this.request("/users/me/profile", { method: "POST", body: JSON.stringify(payload) });
         }
 
         startWorkout(id) {
@@ -738,7 +746,22 @@
 
     document.addEventListener("DOMContentLoaded", initialize);
 
+    function captureAuthToken() {
+        try {
+            const fromHash = (window.location.hash || "").match(/[#&]token=([^&]+)/);
+            const fromQuery = new URLSearchParams(window.location.search || "").get("token");
+            const token = fromHash ? decodeURIComponent(fromHash[1]) : (fromQuery || "");
+            if (token) {
+                localStorage.setItem("gymos-auth-token", token);
+                window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+            }
+        } catch (error) {
+            console.warn("Auth token capture failed", error);
+        }
+    }
+
     async function initialize() {
+        captureAuthToken();
         const overlay = showBusyOverlay({
             title: "Запускаємо GymOS",
             message: "Перевіряємо backend і сесію.",
@@ -1910,6 +1933,7 @@
         if (!confirm("Видалити це тренування? Дію не можна скасувати.")) {
             return;
         }
+        cancelWorkoutSave(workoutId);
         state.database.workouts = state.database.workouts.filter((item) => item.id !== workoutId);
         if (state.editingWorkoutId === workoutId) {
             state.editingWorkoutId = null;
@@ -2181,10 +2205,19 @@
 
     async function logout() {
         try {
+            localStorage.removeItem("gymos-auth-token");
+        } catch (error) {
+            console.warn("Token clear failed", error);
+        }
+        try {
             await storage.logout();
-            toast("Вихід виконано", "У деморежимі активний користувач лишається локальним.");
+            toast("Вихід виконано", "Сесію завершено.");
         } catch (error) {
             toast("Бекенд недоступний", "Локальний деморежим продовжує працювати.");
+        }
+        if (storage.config.requireAuth) {
+            state.database = createEmptyDatabase();
+            renderAuthGate();
         }
     }
 
@@ -3592,53 +3625,110 @@
         };
     }
 
-    // Persist a SINGLE workout via its own atomic endpoint (API mode) or the full
-    // local snapshot (local mode). This replaces the global wipe-and-reimport so a
-    // failed save can never delete other workouts.
-    async function persistWorkout(workoutItem, options = {}) {
-        if (!workoutItem) {
-            return;
-        }
-        workoutItem.updatedAt = new Date().toISOString();
-        state.database.updatedAt = new Date().toISOString();
+    // ---- Coalescing, serialized per-workout saver ----
+    // Each workout has at most ONE save in flight. Rapid edits collapse into a
+    // single trailing save that always sends the LATEST full state. The "saved"
+    // (green) indicator only appears once the queue is fully drained, so it never
+    // lies while later saves are still pending/failing. Failed saves retry a few
+    // times (covers transient 500s) before surfacing an error.
+    const workoutSavers = new Map();
+    let localPersistTimeoutId = null;
 
-        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
-            if (!options.silent) {
-                showSyncIndicator("loading", "Зберігаємо зміни");
-            }
-            try {
-                await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem));
-                storage.backendStatus = "online";
-                if (!options.silent) {
-                    showSyncIndicator("success", "Зміни збережено");
-                }
-            } catch (error) {
-                showSyncIndicator("error", friendlyError(error));
-                throw error;
-            }
-            return;
+    function getWorkoutSaver(workoutId) {
+        let saver = workoutSavers.get(workoutId);
+        if (!saver) {
+            saver = { running: false, dirty: false, retries: 0, timer: null, lastError: null };
+            workoutSavers.set(workoutId, saver);
         }
-
-        await persist({ silent: options.silent !== false });
+        return saver;
     }
 
-    let workoutPersistTimeoutId = null;
-    let workoutPersistTarget = null;
-
-    function schedulePersistWorkout(workoutItem) {
+    function requestWorkoutSave(workoutItem, debounceMs = 0) {
         if (!workoutItem) {
             return;
         }
-        workoutPersistTarget = workoutItem;
-        clearTimeout(workoutPersistTimeoutId);
-        workoutPersistTimeoutId = setTimeout(() => {
-            const target = workoutPersistTarget;
-            workoutPersistTarget = null;
-            persistWorkout(target, { silent: true }).catch((error) => {
-                console.error(error);
-                showSyncIndicator("error", friendlyError(error));
-            });
-        }, 400);
+        state.database.updatedAt = new Date().toISOString();
+
+        if (!(storage.mode === "api" && storage.apiClient.hasBaseUrl())) {
+            clearTimeout(localPersistTimeoutId);
+            localPersistTimeoutId = setTimeout(() => {
+                persist({ silent: true }).catch((error) => {
+                    console.error(error);
+                    showSyncIndicator("error", friendlyError(error));
+                });
+            }, Math.max(150, debounceMs));
+            return;
+        }
+
+        const saver = getWorkoutSaver(workoutItem.id);
+        showSyncIndicator("loading", "Зберігаємо…");
+        clearTimeout(saver.timer);
+        saver.timer = setTimeout(() => runWorkoutSave(workoutItem.id), debounceMs);
+    }
+
+    async function runWorkoutSave(workoutId) {
+        const saver = getWorkoutSaver(workoutId);
+        if (saver.running) {
+            saver.dirty = true;
+            return;
+        }
+        const workoutItem = state.database.workouts.find((item) => item.id === workoutId && item.userId === currentUser().id);
+        if (!workoutItem) {
+            return;
+        }
+
+        saver.running = true;
+        saver.dirty = false;
+        let ok = false;
+        try {
+            workoutItem.updatedAt = new Date().toISOString();
+            await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem));
+            storage.backendStatus = "online";
+            ok = true;
+            saver.retries = 0;
+        } catch (error) {
+            saver.lastError = error;
+            console.error(error);
+            if (Number(error?.status) === 401 && storage.config.requireAuth) {
+                saver.running = false;
+                handleUserFacingError(error, "save-workout");
+                return;
+            }
+        } finally {
+            saver.running = false;
+            if (saver.dirty) {
+                runWorkoutSave(workoutId);
+            } else if (ok) {
+                showSyncIndicator("success", "Збережено");
+            } else if (saver.retries < 3) {
+                saver.retries += 1;
+                showSyncIndicator("loading", "Повтор збереження…");
+                setTimeout(() => runWorkoutSave(workoutId), 1000 * saver.retries);
+            } else {
+                saver.retries = 0;
+                showSyncIndicator("error", friendlyError(saver.lastError));
+            }
+        }
+    }
+
+    function cancelWorkoutSave(workoutId) {
+        const saver = workoutSavers.get(workoutId);
+        if (saver) {
+            clearTimeout(saver.timer);
+            workoutSavers.delete(workoutId);
+        }
+    }
+
+    // Thin wrappers kept so existing call sites stay unchanged. Saves are now
+    // optimistic + coalesced (fire-and-forget) — the UI updates instantly and the
+    // serializer guarantees one in-flight save with the latest state.
+    function persistWorkout(workoutItem) {
+        requestWorkoutSave(workoutItem, 0);
+        return Promise.resolve();
+    }
+
+    function schedulePersistWorkout(workoutItem) {
+        requestWorkoutSave(workoutItem, 650);
     }
 })();
 
