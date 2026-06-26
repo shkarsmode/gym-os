@@ -2320,6 +2320,9 @@
 
     function renderCalendar() {
         const container = element("calendarContainer");
+        if (!container) {
+            return;
+        }
         if (!window.FullCalendar) {
             container.innerHTML = emptyInline("Календар недоступний", "Потрібен доступ до FullCalendar CDN або локальний bundle.");
             icons();
