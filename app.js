@@ -739,21 +739,34 @@
     document.addEventListener("DOMContentLoaded", initialize);
 
     async function initialize() {
-        await storage.initialize();
-        bindEvents();
-        state.authUser = storage.currentUser;
-        if (storage.requiresAuthentication()) {
-            state.database = createEmptyDatabase();
-            renderAuthGate();
-            return;
-        }
+        const overlay = showBusyOverlay({
+            title: "Запускаємо GymOS",
+            message: "Перевіряємо backend і сесію.",
+            detail: "Дані доступні після авторизації Google.",
+            progress: 15
+        });
         try {
+            await storage.initialize();
+            bindEvents();
+            state.authUser = storage.currentUser;
+            if (storage.requiresAuthentication()) {
+                state.database = createEmptyDatabase();
+                renderAuthGate();
+                return;
+            }
+            updateBusyOverlay(overlay, {
+                message: "Завантажуємо тренування.",
+                detail: "Каталог і історія приходять з backend.",
+                progress: 60
+            });
             state.database = await storage.load() || createSeedDatabase();
         } catch (error) {
             console.error(error);
             state.database = createEmptyDatabase();
-            renderAuthGate("Бекенд відповів помилкою під час завантаження даних.");
+            renderAuthGate(friendlyError(error));
             return;
+        } finally {
+            hideBusyOverlay(overlay);
         }
         if (!state.database.version || state.database.version < 3) {
             state.database = createSeedDatabase();
