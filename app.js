@@ -49,7 +49,9 @@
             statsRange: "90",
             statsMuscle: "all",
             statsExerciseId: "all",
-            statsWorkoutType: "all"
+            statsWorkoutType: "all",
+            pickerMuscle: "all",
+            pickerEquipment: "all"
         },
         timer: {
             id: null,
@@ -1321,6 +1323,7 @@
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": openAddExerciseModal,
+            "picker-filter": () => setPickerFilter(actionElement.dataset.key, actionElement.dataset.value),
             "add-exercise": () => addExercise(actionElement.dataset.exerciseId),
             "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
             "open-custom-exercise": openCustomExercise,
@@ -1442,6 +1445,7 @@
             "edit-workout",
             "open-day-sheet",
             "open-add-exercise-modal",
+            "picker-filter",
             "open-custom-exercise",
             "open-exercise",
             "select-knowledge",
@@ -1616,15 +1620,57 @@
     }
 
     function openAddExerciseModal() {
-        openModal(`<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="search" placeholder="Пошук вправи" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-picker-search"><div class="exercise-picker-grid" id="exercisePickerGrid" style="margin-top:14px;">${exercisePickerCards()}</div>`);
+        openModal(`<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою + фільтри за групою м'язів і обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody">${pickerBody()}</div>`);
+    }
+
+    function pickerBody() {
+        const muscleGroups = unique(state.database.exercises.map((exercise) => exercise.primaryMuscleGroup).filter(Boolean));
+        const equipmentList = unique(state.database.exercises.map((exercise) => exercise.equipment).filter(Boolean));
+        const chip = (key, value, label) => `<button class="segment-button ${state.filters[key] === value ? "active" : ""}" type="button" data-action="picker-filter" data-key="${key}" data-value="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
+        return `<input type="search" placeholder="Пошук за назвою або alias" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-picker-search">
+            <div class="picker-filter-block"><span class="picker-filter-label">Група м'язів</span><div class="picker-chips">${chip("pickerMuscle", "all", "Усі")}${muscleGroups.map((value) => chip("pickerMuscle", value, value)).join("")}</div></div>
+            <div class="picker-filter-block"><span class="picker-filter-label">Обладнання</span><div class="picker-chips">${chip("pickerEquipment", "all", "Усі")}${equipmentList.map((value) => chip("pickerEquipment", value, value)).join("")}</div></div>
+            <div class="exercise-picker-grid" id="exercisePickerGrid">${exercisePickerCards()}</div>`;
+    }
+
+    function setPickerFilter(key, value) {
+        state.filters[key] = value;
+        const body = element("exercisePickerBody");
+        if (body) {
+            body.innerHTML = pickerBody();
+            icons();
+        }
+    }
+
+    function pickerExercises() {
+        const search = state.filters.exerciseSearch.trim().toLowerCase();
+        const muscle = state.filters.pickerMuscle;
+        const equip = state.filters.pickerEquipment;
+        return state.database.exercises.filter((exercise) => {
+            if (muscle !== "all" && exercise.primaryMuscleGroup !== muscle) {
+                return false;
+            }
+            if (equip !== "all" && exercise.equipment !== equip) {
+                return false;
+            }
+            if (!search) {
+                return true;
+            }
+            return [exercise.name, exercise.aliases.join(" "), exercise.primaryMuscleGroup, exercise.secondaryMuscleGroups.join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search);
+        });
     }
 
     function exercisePickerCards() {
-        const items = filteredExercises();
+        const items = pickerExercises();
         if (!items.length) {
-            return emptyInline("Нічого не знайдено", "Спробуй назву, alias, м'язову групу, патерн руху або обладнання.");
+            return emptyInline("Нічого не знайдено", "Спробуй іншу назву, групу м'язів або обладнання.");
         }
-        return items.map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
+        const limit = 60;
+        const shown = items.slice(0, limit);
+        const note = items.length > limit
+            ? `<p class="card-caption picker-count">Показано ${limit} з ${items.length} — уточни пошук або фільтри.</p>`
+            : `<p class="card-caption picker-count">Знайдено: ${items.length}</p>`;
+        return note + shown.map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
     }
 
     function openCustomExercise() {
