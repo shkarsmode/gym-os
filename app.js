@@ -9,7 +9,6 @@
         ["knowledge", "База знань", "book-open"],
         ["stats", "Статистика", "bar-chart-3"],
         ["rankings", "Рейтинги", "trophy"],
-        ["achievements", "Досягнення", "badge-check"],
         ["users", "Команда", "users"],
         ["profile", "Профіль", "user-round"],
         ["settings", "Налаштування", "settings"]
@@ -35,28 +34,11 @@
         ["custom", "Custom", "Порожній шаблон для власного плану.", []]
     ].map(([id, title, description, exerciseNames]) => ({ id, title, description, exerciseNames, type: id }));
 
-    const achievements = [
-        ["first-workout", "Перше тренування", "Завершити перше тренування.", "01", "Ритм", 1, "completedWorkouts"],
-        ["three-workouts", "3 завершені тренування", "Побудувати перший стабільний ритм.", "03", "Ритм", 3, "completedWorkouts"],
-        ["ten-workouts", "10 завершених тренувань", "Закріпити помітну тренувальну звичку.", "10", "Ритм", 10, "completedWorkouts"],
-        ["first-pr", "Перший особистий рекорд", "Зафіксувати будь-який PR.", "PR", "Сила", 1, "personalRecords"],
-        ["bench-pr", "PR у жимі лежачи", "Поставити рекорд у жимі лежачи.", "BP", "Сила", 1, "benchRecords"],
-        ["pulldown-pr", "PR у тязі верхнього блока", "Поставити рекорд у тязі верхнього блока.", "LD", "Сила", 1, "pulldownRecords"],
-        ["pulldown-progress", "Прогрес у тязі верхнього блока", "Залогувати тягу верхнього блока три рази.", "LD", "Сила", 3, "pulldownSessions"],
-        ["volume-10k", "10 000 кг обсягу", "Зібрати перший великий блок роботи.", "10K", "Обсяг", 10000, "totalVolume"],
-        ["volume-50k", "50 000 кг обсягу", "Показати накопичений силовий обсяг.", "50K", "Обсяг", 50000, "totalVolume"],
-        ["first-cardio", "Перше кардіо", "Додати перший кардіо-блок.", "C1", "Кардіо", 1, "cardioSessions"],
-        ["cardio-100", "100 хвилин кардіо", "Побудувати базу кондиції.", "C100", "Кардіо", 100, "cardioMinutes"],
-        ["full-week", "Повний тренувальний тиждень", "Завершити три тренування за один тиждень.", "WK", "Ритм", 1, "fullTrainingWeeks"],
-        ["push-pull", "Push / Pull", "Закрити push і pull у завершених сесіях.", "P/P", "Техніка", 2, "pushPull"],
-        ["warmup", "Дисципліна розминки", "Виконати 10 розминкових підходів.", "WU", "Техніка", 10, "warmupSets"],
-        ["notes", "Якісні нотатки", "Додати корисні нотатки до тренувань.", "NT", "Техніка", 5, "notesCount"],
-        ["profile", "Заповнений профіль", "Заповнити ключові поля профілю.", "ID", "Профіль", 1, "profileCompleteness"]
-    ].map(([id, title, description, icon, category, target, metric]) => ({ id, title, description, icon, category, target, metric }));
     const state = {
         section: "dashboard",
         knowledgeExerciseId: "exercise-bench-press",
         profileUserId: null,
+        editingWorkoutId: null,
         authUser: null,
         database: null,
         charts: new Map(),
@@ -67,15 +49,15 @@
             statsRange: "90",
             statsMuscle: "all",
             statsExerciseId: "all",
-            statsWorkoutType: "all",
-            achievementCategory: "all"
+            statsWorkoutType: "all"
         },
         timer: {
             id: null,
             duration: 90,
             remaining: 90,
             startedAt: 0,
-            running: false
+            running: false,
+            paused: false
         }
     };
 
@@ -1160,7 +1142,7 @@
         const item = sectionItems.find((section) => section.id === state.section) || sectionItems[0];
         element("sectionEyebrow").textContent = "Gym Progress OS";
         element("sectionTitle").textContent = item.title;
-        const renderers = { dashboard, workout, calendar, exercises, knowledge, stats, rankings, achievementsPage, users, profile, settings };
+        const renderers = { dashboard, workout, calendar, exercises, knowledge, stats, rankings, users, profile, settings };
         renderers[state.section]();
         icons();
     }
@@ -1173,19 +1155,18 @@
         content(`
             <div class="grid dashboard-grid">
                 ${metric("Сьогодні", todayLabel(user.id), "calendar-check", todayCaption(user.id), "span-3")}
-                ${metric("Поточне тренування", activeWorkoutFor(user.id)?.title || "Немає активного", "activity", activeWorkoutFor(user.id) ? "Таймер тренування працює" : "Можна почати з шаблону", "span-3")}
+                ${metric("Поточне тренування", activeWorkoutFor(user.id)?.title || "Немає активного", "activity", activeWorkoutFor(user.id) ? "Триває зараз" : "Можна почати нове", "span-3")}
                 ${metric("Обсяг за тиждень", `${number(stats.weekVolume)} кг`, "boxes", `${stats.weekSets} підходів цього тижня`, "span-3")}
                 ${metric("Кардіо за тиждень", `${stats.weekCardioMinutes} хв`, "heart-pulse", "Кондиція врахована", "span-3")}
                 <section class="card span-12">
                     <div class="card-header">
                         <div>
                             <h2>Швидкий старт</h2>
-                            <p class="card-caption">Основні дії для демо: почати, запланувати або перейти до календаря.</p>
+                            <p class="card-caption">Почни нову сесію або переглянь історію в календарі.</p>
                         </div>
                     </div>
-                    <div class="action-row">
-                        <button class="button button-primary large-workout-button" type="button" data-action="start-empty-workout"><i data-lucide="play"></i>Почати тренування</button>
-                        <button class="button button-secondary large-workout-button" type="button" data-action="open-planning-modal"><i data-lucide="calendar-plus"></i>Запланувати тренування</button>
+                    <div class="action-row wrap">
+                        <button class="button button-primary large-workout-button" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button>
                         <button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Перейти до календаря</button>
                     </div>
                 </section>
@@ -1208,45 +1189,47 @@
     }
 
     function workout() {
-        const activeWorkout = activeWorkoutFor(currentUser().id);
-        content(`
-            <div class="workout-layout">
-                <div class="workout-stack">${activeWorkout ? workoutEditor(activeWorkout) : workoutStarter()}</div>
-                <aside class="workout-stack">
-                    ${timerCard()}
-                    <section class="card"><h2>Аналітика тренування</h2><div class="insight-grid">${insights(currentUser().id).map(insightCard).join("")}</div></section>
-                    <section class="card"><h2>Швидкі шаблони</h2><div class="template-grid">${templates.map(templateCard).join("")}</div></section>
-                </aside>
-            </div>
-        `);
+        const workoutItem = editWorkout();
+        content(`<div class="workout-stack">${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
     }
 
     function workoutStarter() {
-        return `<section class="empty-state"><i data-lucide="dumbbell"></i><h2>Немає активного тренування</h2><p>Почни з чистої сесії, шаблону або заплануй роботу в календарі. Кнопки збільшені для використання в залі.</p><div class="action-row" style="justify-content:center;margin-top:16px;"><button class="button button-primary large-workout-button" type="button" data-action="start-empty-workout"><i data-lucide="play"></i>Почати тренування</button><button class="button button-secondary large-workout-button" type="button" data-action="open-template-modal"><i data-lucide="layers"></i>Обрати шаблон</button><button class="button button-secondary large-workout-button" type="button" data-action="open-planning-modal"><i data-lucide="calendar-plus"></i>Запланувати</button></div></section>`;
+        return `<section class="empty-state"><i data-lucide="dumbbell"></i><h2>Немає активного тренування</h2><p>Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усі тренування потім можна редагувати або видалити.</p><div class="action-row" style="justify-content:center;margin-top:16px;"><button class="button button-primary large-workout-button" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button><button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>`;
     }
 
     function workoutEditor(workoutItem) {
         const owner = userById(workoutItem.userId);
         const readonly = workoutItem.userId !== state.database.currentUserId;
         const completedSets = workoutItem.exercises.flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
+        const active = activeWorkoutFor(currentUser().id);
+        const isOtherThanActive = !readonly && active && active.id !== workoutItem.id;
+        const contextBanner = !readonly && workoutItem.status !== "active"
+            ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutItem.status).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
+            : isOtherThanActive ? `<div class="readonly-layer info">У вас є активне тренування. <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Відкрити активне</button></div>` : "";
         return `
-            <section class="card">
+            <section class="card workout-head">
                 <div class="card-header">
-                    <div><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<span class="chip">${escapeHtml(owner.displayName)}</span></div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг · ${completedSets} завершених підходів</p></div>
-                    <div class="inline-actions"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i>Додати вправу</button><button class="button button-primary compact" type="button" data-action="finish-workout" ${readonly ? "disabled" : ""}><i data-lucide="flag"></i>Завершити тренування</button></div>
+                    <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<span class="chip">${escapeHtml(owner.displayName)}</span></div>${readonly ? `<h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг</p>` : `<input class="title-input" type="text" value="${escapeHtml(workoutItem.title)}" placeholder="Назва тренування" data-action="edit-workout-title" data-workout-id="${workoutItem.id}"><p class="card-caption">${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг · ${completedSets} завершених підходів</p>`}</div>
                 </div>
-                ${readonly ? `<div class="readonly-layer">Це тренування можна переглядати, але редагувати може лише власник.</div>` : ""}
-                <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
+                ${contextBanner}
+                ${readonly ? "" : `<div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата</label><input type="date" value="${escapeHtml(workoutItem.date)}" data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></div><div class="field"><label>Тип</label><select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</select></div></div>`}
+                ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i>Додати вправу</button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button></div>`}
+                <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
-            ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item) => workoutExerciseEditor(workoutItem, item, readonly)).join("") : emptyInline("Вправ ще немає", "Додай вправу, щоб зібрати сесію.")}
-            <section class="card"><div class="card-header"><div><h2>Кардіо в тренуванні</h2><p class="card-caption">Фіксуй кондицію без виходу з поточної сесії.</p></div><button class="button button-secondary compact" type="button" data-action="add-cardio" ${readonly ? "disabled" : ""}>Додати кардіо</button></div>${workoutItem.cardioSessions.length ? workoutItem.cardioSessions.map((session) => `<div class="activity-item"><div class="activity-dot"></div><div><strong>${cardioTypeLabel(session.type)}</strong><p class="card-caption">${session.durationMinutes} хв · ${session.distance} км · ${session.calories} ккал · ${intensityLabel(session.intensity)}</p></div></div>`).join("") : `<p class="card-caption">У цьому тренуванні ще немає кардіо-блоків.</p>`}</section>
+            ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item) => workoutExerciseEditor(workoutItem, item, readonly)).join("") : emptyInline("Вправ ще немає", "Натисни «Додати вправу», щоб зібрати сесію.")}
+            ${cardioBlock(workoutItem, readonly)}
         `;
+    }
+
+    function cardioBlock(workoutItem, readonly) {
+        const sessions = workoutItem.cardioSessions || [];
+        return `<section class="card"><div class="card-header"><div><h2>Кардіо</h2><p class="card-caption">Бігова доріжка, велотренажер та інше. Вкажи час і деталі.</p></div><button class="button button-secondary compact" type="button" data-action="open-cardio-modal" data-workout-id="${workoutItem.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i>Додати кардіо</button></div>${sessions.length ? `<div class="cardio-list">${sessions.map((session) => `<div class="cardio-row"><div class="cardio-icon"><i data-lucide="${cardioIcon(session.type)}"></i></div><div style="flex:1;min-width:0;"><strong>${cardioTypeLabel(session.type)} · ${session.durationMinutes} хв</strong><p class="card-caption">${[session.distance ? `${session.distance} км` : "", session.calories ? `${session.calories} ккал` : "", session.averageHeartRate ? `${session.averageHeartRate} уд/хв` : "", session.intensity ? intensityLabel(session.intensity) : ""].filter(Boolean).join(" · ") || "Без деталей"}</p></div>${readonly ? "" : `<div class="inline-actions"><button class="icon-button" type="button" title="Редагувати" data-action="open-cardio-modal" data-workout-id="${workoutItem.id}" data-cardio-id="${session.id}"><i data-lucide="pen-line"></i></button><button class="icon-button" type="button" title="Видалити" data-action="delete-cardio" data-workout-id="${workoutItem.id}" data-cardio-id="${session.id}"><i data-lucide="trash-2"></i></button></div>`}</div>`).join("")}</div>` : `<p class="card-caption">У цьому тренуванні ще немає кардіо-блоків.</p>`}</section>`;
     }
 
     function workoutExerciseEditor(workoutItem, workoutExercise, readonly) {
         const exercise = exerciseById(workoutExercise.exerciseId);
         const previous = previousPerformance(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
-        return `<article class="workout-exercise"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span><span class="chip">${exercise.movementPattern}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · розрах. 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг${previous ? ` · попередньо ${number(previous.weight)} кг × ${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Повторити підхід" data-action="duplicate-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="copy"></i></button></div></div><div class="set-grid-header"><span>Тип</span><span>Вага</span><span>Повт.</span><span>RPE</span><span>Відпоч.</span><span>Готово</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Нотатки до вправи</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        return `<article class="workout-exercise"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг${previous ? ` · попередньо ${number(previous.weight)}×${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="set-grid-header"><span>Тип</span><span>Вага</span><span>Повт.</span><span>RPE</span><span>Відпоч.</span><span>Готово</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Нотатки до вправи</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly) {
@@ -1255,8 +1238,8 @@
 
     function calendar() {
         const overview = calendarOverview();
-        const history = state.database.workouts.sort(byDateDesc).slice(0, 8);
-        content(`<div class="grid dashboard-grid">${metric("Тренувань цього тижня", overview.weekWorkouts, "calendar-check", "Усі статуси", "span-3")}${metric("Завершено", overview.weekCompleted, "check-circle-2", "За поточний тиждень", "span-3")}${metric("Заплановано", overview.weekPlanned, "calendar-plus", "Майбутні сесії", "span-3")}${metric("Серія", `${overview.streak} дн.`, "flame", "Будь-яке завершене тренування", "span-3")}<section class="calendar-shell span-8"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар тренувань</h2><p class="card-caption">Клік по дню відкриває планування. Клік по тренуванню відкриває деталі.</p></div><button class="button button-secondary compact" type="button" data-action="open-planning-modal"><i data-lucide="calendar-plus"></i>Запланувати тренування</button></div><div id="calendarContainer"></div></section><section class="card span-4"><h2>Огляд</h2>${kpi([{ label: "Тиждень", value: overview.weekWorkouts }, { label: "Місяць", value: overview.monthWorkouts }, { label: "Кардіо дні", value: overview.cardioDays }, { label: "Заплановано", value: overview.monthPlanned }])}<div class="legend-list"><span><i class="legend-dot planned"></i>Заплановано</span><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span></div></section><section class="card span-12"><div class="card-header"><div><h2>Історія з календаря</h2><p class="card-caption">Видно тренування всіх користувачів. Редагування доступне лише власнику.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
+        const history = workoutsFor(currentUser().id).sort(byDateDesc).slice(0, 8);
+        content(`<div class="grid dashboard-grid">${metric("Цього тижня", overview.weekWorkouts, "calendar-check", "Тренувань", "span-3")}${metric("Завершено", overview.weekCompleted, "check-circle-2", "За поточний тиждень", "span-3")}${metric("Цього місяця", overview.monthWorkouts, "calendar-range", "Усі тренування", "span-3")}${metric("Серія", `${overview.streak} дн.`, "flame", "Завершені тренування поспіль", "span-3")}<section class="calendar-shell span-8"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div><button class="button button-primary compact" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button></div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-4"><h2>Огляд</h2>${kpi([{ label: "Тиждень", value: overview.weekWorkouts }, { label: "Місяць", value: overview.monthWorkouts }, { label: "Кардіо дні", value: overview.cardioDays }, { label: "Усього", value: workoutsFor(currentUser().id).length }])}</section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
         requestAnimationFrame(renderCalendar);
     }
 
@@ -1290,13 +1273,6 @@
         content(`<section class="card"><div class="card-header"><div><h2>Силові рейтинги</h2><p class="card-caption">Демо-нормативи використовуються лише для прикладу. Їх можна оновити під реальні стандарти пізніше.</p></div><span class="badge accent">${user.bodyweight} кг · ${genderLabel(user.gender)}</span></div></section><section class="ranking-grid" style="margin-top:16px;">${rankedExerciseNames.map((name) => rankCard(user, exerciseByName(name))).join("")}</section><section class="card" style="margin-top:16px;"><div class="card-header"><div><h2>Командний рейтинг</h2><p class="card-caption">Рейтинг за регулярністю, обсягом і найкращим підйомом.</p></div></div><div class="table-wrap"><table><thead><tr><th>Користувач</th><th>Завершено</th><th>Загальний обсяг</th><th>Найкращий підйом</th><th>Основний рівень</th><th>Бал</th></tr></thead><tbody>${leaderboard().map((row, index) => `<tr><td><div class="list-row">${avatar(row.user, "small")}<strong>${index + 1}. ${escapeHtml(row.user.displayName)}</strong></div></td><td>${row.completedWorkouts}</td><td>${number(row.totalVolume)} кг</td><td>${row.bestLift ? `${escapeHtml(row.bestLift.exercise.name)} · ${number(row.bestLift.estimatedOneRepMax)} кг` : "Поки немає результату"}</td><td>${escapeHtml(row.mainRank)}</td><td>${number(row.score)}</td></tr>`).join("")}</tbody></table></div></section>`);
     }
 
-    function achievementsPage() {
-        const items = achievementsFor(currentUser().id);
-        const categories = ["all", ...unique(achievements.map((achievement) => achievement.category))];
-        const filtered = state.filters.achievementCategory === "all" ? items : items.filter((item) => item.category === state.filters.achievementCategory);
-        content(`<section class="card"><div class="card-header"><div><h2>Досягнення</h2><p class="card-caption">Стримані бейджі зі станами відкрито/закрито, прогресом і датою відкриття.</p></div><span class="badge accent">${items.filter((item) => item.isUnlocked).length}/${items.length} відкрито</span></div><div class="tab-row">${categories.map((category) => `<button class="segment-button ${state.filters.achievementCategory === category ? "active" : ""}" type="button" data-action="achievement-filter" data-category="${category}">${category === "all" ? "Усі" : category}</button>`).join("")}</div></section><section class="achievement-grid" style="margin-top:16px;">${filtered.map(achievementCard).join("")}</section>`);
-    }
-
     function users() {
         const team = teamStats();
         content(`<div class="grid dashboard-grid">${metric("Командний обсяг", `${number(team.totalVolume)} кг`, "boxes", "Спільний результат", "span-3")}${metric("Тренування команди", team.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Найактивніший", team.mostActiveUser.displayName, "flame", "За завершеними тренуваннями", "span-3")}${metric("Кардіо", `${team.cardioMinutes} хв`, "heart-pulse", "Командна кондиція", "span-3")}</div><section class="user-grid" style="margin-top:16px;">${state.database.users.map(userCard).join("")}</section>`);
@@ -1307,7 +1283,7 @@
         const summary = userStats(user.id);
         const isCurrent = user.id === currentUser().id;
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span><span class="status-badge ${isCurrent ? "completed" : "readonly"}">${isCurrent ? "Можна редагувати" : "Лише перегляд"}</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><button class="button button-primary" type="button" data-action="open-profile-editor" ${isCurrent ? "" : "disabled"}><i data-lucide="pen-line"></i>Редагувати профіль</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-6"><h2>Особисті рекорди</h2><div class="workout-stack">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-6"><h2>Бейджі</h2><div class="achievement-grid">${achievementsFor(user.id).filter((item) => item.isUnlocked).slice(0, 4).map(achievementCard).join("") || emptyInline("Бейджів ще немає", "Завершуй тренування, щоб відкривати досягнення.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span><span class="status-badge ${isCurrent ? "completed" : "readonly"}">${isCurrent ? "Можна редагувати" : "Лише перегляд"}</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><button class="button button-primary" type="button" data-action="open-profile-editor" ${isCurrent ? "" : "disabled"}><i data-lucide="pen-line"></i>Редагувати профіль</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
@@ -1338,34 +1314,34 @@
         const action = actionElement.dataset.action;
         const actions = {
             navigate: () => navigate(actionElement.dataset.section),
-            "open-template-modal": openTemplateModal,
-            "open-planning-modal": () => openPlanningModal(actionElement.dataset.date || dateInput(new Date()), actionElement.dataset.workoutId || null),
-            "create-planned-workout": () => savePlanningWorkout("planned"),
-            "create-and-start-planned-workout": () => savePlanningWorkout("active"),
-            "save-planned-workout": () => savePlanningWorkout("planned", actionElement.dataset.workoutId),
-            "start-planned-workout": () => startPlannedWorkout(actionElement.dataset.workoutId),
+            "start-workout": startNewWorkout,
+            "edit-workout": () => openWorkoutEditor(actionElement.dataset.workoutId),
+            "reopen-workout": () => reopenWorkout(actionElement.dataset.workoutId),
+            "start-existing-workout": () => startExistingWorkout(actionElement.dataset.workoutId),
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
-            "start-template": () => startFromTemplate(actionElement.dataset.templateId, "active"),
-            "plan-template": () => startFromTemplate(actionElement.dataset.templateId, "planned"),
-            "start-empty-workout": () => startFromTemplate("custom", "active"),
+            "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": openAddExerciseModal,
             "add-exercise": () => addExercise(actionElement.dataset.exerciseId),
+            "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
             "open-custom-exercise": openCustomExercise,
             "save-custom-exercise": saveCustomExercise,
             "open-exercise": () => openExercise(actionElement.dataset.exerciseId),
             "select-knowledge": () => selectKnowledge(actionElement.dataset.exerciseId),
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
-            "duplicate-set": () => duplicateSet(actionElement.dataset.workoutExerciseId),
             "toggle-set": () => toggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
             "delete-set": () => deleteSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
-            "finish-workout": finishWorkout,
-            "add-cardio": addCardioToWorkout,
+            "finish-workout": () => finishWorkout(actionElement.dataset.workoutId),
+            "open-cardio-modal": () => openCardioModal(actionElement.dataset.workoutId, actionElement.dataset.cardioId || null),
+            "save-cardio": () => saveCardio(actionElement.dataset.workoutId, actionElement.dataset.cardioId || null),
+            "delete-cardio": () => deleteCardio(actionElement.dataset.workoutId, actionElement.dataset.cardioId),
+            "timer-add": () => addTimerTime(Number(actionElement.dataset.delta)),
+            "timer-toggle": toggleTimerPause,
+            "timer-stop": stopTimer,
             "switch-user": () => switchUser(actionElement.dataset.userId),
             "view-user": () => viewUser(actionElement.dataset.userId),
             "open-profile-editor": openProfileEditor,
             "save-profile": saveProfile,
             "save-bodyweight": saveBodyweight,
-            "achievement-filter": () => filterAchievements(actionElement.dataset.category),
             "open-workout": () => openWorkout(actionElement.dataset.workoutId),
             notifications: requestNotifications,
             "check-backend": checkBackendConnection,
@@ -1392,6 +1368,10 @@
         await runChangeAction(actionElement, async () => {
             if (actionElement.dataset.action === "set-field") {
                 await updateSetField(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "edit-workout-meta") {
+                await updateWorkoutMeta(actionElement.dataset.workoutId, actionElement.dataset.field, actionElement.value);
             }
 
             if (actionElement.dataset.action === "stats-filter") {
@@ -1459,38 +1439,38 @@
     function actionNeedsLoader(action) {
         return !new Set([
             "navigate",
-            "open-template-modal",
-            "open-planning-modal",
+            "edit-workout",
+            "open-day-sheet",
             "open-add-exercise-modal",
             "open-custom-exercise",
             "open-exercise",
             "select-knowledge",
             "open-profile-editor",
-            "achievement-filter",
             "open-workout",
             "open-standards",
+            "open-cardio-modal",
+            "timer-add",
+            "timer-toggle",
+            "timer-stop",
             "close-overlay"
         ]).has(action);
     }
 
     function actionProgressLabel(action) {
         const labels = {
-            "create-planned-workout": "Плануємо тренування",
-            "create-and-start-planned-workout": "Плануємо і запускаємо",
-            "save-planned-workout": "Зберігаємо план",
-            "start-planned-workout": "Запускаємо тренування",
+            "start-workout": "Створюємо тренування",
+            "reopen-workout": "Відновлюємо тренування",
+            "start-existing-workout": "Запускаємо тренування",
             "delete-workout": "Видаляємо тренування",
-            "start-template": "Створюємо тренування",
-            "plan-template": "Плануємо тренування",
-            "start-empty-workout": "Створюємо порожнє тренування",
             "add-exercise": "Додаємо вправу",
+            "remove-workout-exercise": "Видаляємо вправу",
             "save-custom-exercise": "Зберігаємо вправу",
             "add-set": "Додаємо підхід",
-            "duplicate-set": "Повторюємо підхід",
             "toggle-set": "Оновлюємо підхід",
             "delete-set": "Видаляємо підхід",
             "finish-workout": "Завершуємо тренування",
-            "add-cardio": "Додаємо кардіо",
+            "save-cardio": "Зберігаємо кардіо",
+            "delete-cardio": "Видаляємо кардіо",
             "switch-user": "Змінюємо користувача",
             "save-profile": "Зберігаємо профіль",
             "save-bodyweight": "Додаємо замір ваги",
@@ -1558,17 +1538,26 @@
             }
         }
 
+        if (actionElement.dataset.action === "edit-workout-title") {
+            const workoutItem = ownWorkout(actionElement.dataset.workoutId);
+            if (workoutItem) {
+                workoutItem.title = actionElement.value;
+                workoutItem.updatedAt = new Date().toISOString();
+                schedulePersist();
+            }
+        }
+
         if (actionElement.dataset.action === "update-workout-notes") {
-            const active = activeWorkoutFor(currentUser().id);
-            if (active) {
-                active.notes = actionElement.value;
+            const workoutItem = editWorkout();
+            if (workoutItem) {
+                workoutItem.notes = actionElement.value;
                 schedulePersist();
             }
         }
 
         if (actionElement.dataset.action === "update-exercise-notes") {
-            const active = activeWorkoutFor(currentUser().id);
-            const workoutExercise = active?.exercises.find((item) => item.id === actionElement.dataset.workoutExerciseId);
+            const workoutItem = editWorkout();
+            const workoutExercise = workoutItem?.exercises.find((item) => item.id === actionElement.dataset.workoutExerciseId);
             if (workoutExercise) {
                 workoutExercise.notes = actionElement.value;
                 schedulePersist();
@@ -1583,32 +1572,47 @@
 
     function navigate(section) {
         state.section = section;
+        if (section === "workout") {
+            state.editingWorkoutId = null;
+        }
         closeOverlay();
         renderSection();
     }
 
     function openQuickAction() {
-        openModal(`<div class="modal-header"><div><h2>Швидка дія</h2><p class="card-caption">Почати, запланувати або перейти в потрібний розділ.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="template-grid"><button class="template-card" type="button" data-action="start-empty-workout"><h3>Почати порожнє тренування</h3><p class="card-caption">Чиста сесія без заздалегідь заданих вправ.</p></button><button class="template-card" type="button" data-action="open-planning-modal"><h3>Запланувати тренування</h3><p class="card-caption">Дата, тип, шаблон і нотатки.</p></button><button class="template-card" type="button" data-action="open-template-modal"><h3>Обрати шаблон</h3><p class="card-caption">Push, Pull, Legs, Full Body і не тільки.</p></button><button class="template-card" type="button" data-action="navigate" data-section="rankings"><h3>Відкрити рейтинги</h3><p class="card-caption">Перевірити поточний силовий рівень.</p></button><button class="template-card" type="button" data-action="navigate" data-section="knowledge"><h3>База техніки</h3><p class="card-caption">Форма, помилки і безпечне виконання.</p></button></div>`);
+        openModal(`<div class="modal-header"><div><h2>Швидка дія</h2><p class="card-caption">Почати тренування або перейти в потрібний розділ.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="quick-grid"><button class="quick-card" type="button" data-action="start-workout"><i data-lucide="play"></i><h3>Почати тренування</h3><p class="card-caption">Нова сесія — додавай вправи та підходи.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i><h3>Календар</h3><p class="card-caption">Історія та керування тренуваннями.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i><h3>Рейтинги</h3><p class="card-caption">Поточний силовий рівень.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="knowledge"><i data-lucide="book-open"></i><h3>База техніки</h3><p class="card-caption">Форма, помилки і безпека.</p></button></div>`);
     }
 
     function openUserSwitcher() {
         openModal(`<div class="modal-header"><div><h2>Змінити активного користувача</h2><p class="card-caption">Права в деморежимі імітуються через активного користувача.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="user-grid">${state.database.users.map(userSwitcherCard).join("")}</div>`);
     }
 
-    function openTemplateModal() {
-        openModal(`<div class="modal-header"><div><h2>Шаблони тренувань</h2><p class="card-caption">Створи заплановане або активне тренування. Усе можна редагувати після створення.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="template-grid">${templates.map(templateCard).join("")}</div>`);
+    function openDaySheet(date) {
+        const items = state.database.workouts.filter((item) => item.date === date).sort((left, right) => statusRank(left.status) - statusRank(right.status));
+        const isToday = date === dateInput(new Date());
+        const rows = items.map((workoutItem) => {
+            const owner = userById(workoutItem.userId);
+            const own = workoutItem.userId === currentUser().id;
+            return `<article class="day-row"><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? "" : `<span class="chip">${escapeHtml(owner.displayName)}</span>`}</div><strong>${escapeHtml(workoutItem.title)}</strong><p class="card-caption">${number(workoutVolume(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions">${own ? `<button class="button button-secondary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button><button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : `<button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button>`}</div></article>`;
+        }).join("");
+        openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div>${isToday ? `<div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-primary" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button></div>` : ""}`);
     }
 
-    function openPlanningModal(date = dateInput(new Date()), workoutId = null) {
-        const workoutItem = workoutId ? state.database.workouts.find((item) => item.id === workoutId) : null;
-        const readonly = workoutItem && workoutItem.userId !== currentUser().id;
-        const selectedTemplateId = workoutItem ? templateByType(workoutItem.workoutType).id : "custom";
-        const selectedType = workoutItem?.workoutType || templateById(selectedTemplateId).type;
-        const title = workoutItem?.title || "";
-        const notes = workoutItem?.notes || "";
-        const targetDate = workoutItem?.date || date;
+    function openStartWorkoutModal() {
+        startNewWorkout();
+    }
 
-        openModal(`<div class="modal-header"><div><h2>${workoutItem ? "Деталі плану" : "Запланувати тренування"}</h2><p class="card-caption">${readonly ? "Чуже тренування доступне лише для перегляду." : "Обери дату, тип і шаблон. Можна одразу почати сесію."}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: редагувати може тільки власник тренування.</div>` : ""}<div class="field-grid"><div class="field"><label>Дата</label><input id="planDate" type="date" value="${escapeHtml(targetDate)}" ${readonly ? "disabled" : ""}></div><div class="field"><label>Назва тренування</label><input id="planTitle" type="text" value="${escapeHtml(title)}" placeholder="Наприклад: Push сила" ${readonly ? "disabled" : ""}></div><div class="field"><label>Тип тренування</label><select id="planType" ${readonly ? "disabled" : ""}>${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${selectedType === value ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Шаблон</label><select id="planTemplate" ${readonly ? "disabled" : ""}>${templates.map((template) => `<option value="${template.id}" ${selectedTemplateId === template.id ? "selected" : ""}>${escapeHtml(template.title)}</option>`).join("")}</select></div></div><div class="field" style="margin-top:14px;"><label>Нотатки</label><textarea id="planNotes" placeholder="Що важливо пам'ятати перед сесією" ${readonly ? "disabled" : ""}>${escapeHtml(notes)}</textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button>${workoutItem && !readonly ? `<button class="button button-danger" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}">Видалити</button><button class="button button-secondary" type="button" data-action="start-planned-workout" data-workout-id="${workoutItem.id}">Почати</button><button class="button button-primary" type="button" data-action="save-planned-workout" data-workout-id="${workoutItem.id}">Зберегти</button>` : ""}${!workoutItem ? `<button class="button button-secondary" type="button" data-action="create-planned-workout">Запланувати</button><button class="button button-primary" type="button" data-action="create-and-start-planned-workout">Запланувати і почати</button>` : ""}</div>`);
+    function openCardioModal(workoutId, cardioId = null) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem) {
+            toast("Лише перегляд", "Кардіо можна додавати тільки у власні тренування.");
+            return;
+        }
+        const session = cardioId ? (workoutItem.cardioSessions || []).find((item) => item.id === cardioId) : null;
+        const types = [["treadmill", "Бігова доріжка"], ["bike", "Велотренажер"], ["running", "Біг"], ["walking", "Ходьба"], ["rower", "Гребний тренажер"], ["elliptical", "Еліпс"], ["other", "Інше"]];
+        const type = session?.type || "treadmill";
+        const intensity = session?.intensity || "medium";
+        openModal(`<div class="modal-header"><div><h2>${session ? "Редагувати кардіо" : "Додати кардіо"}</h2><p class="card-caption">Вкажи тип і тривалість. Решта — за бажанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Тип</label><select id="cardioType">${types.map(([value, label]) => `<option value="${value}" ${type === value ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field"><label>Час, хв</label><input id="cardioDuration" type="number" min="1" step="1" value="${session ? session.durationMinutes : 20}"></div><div class="field"><label>Дистанція, км</label><input id="cardioDistance" type="number" min="0" step="0.1" value="${session?.distance || ""}" placeholder="Необов'язково"></div><div class="field"><label>Калорії</label><input id="cardioCalories" type="number" min="0" step="1" value="${session?.calories || ""}" placeholder="Необов'язково"></div><div class="field"><label>Середній пульс</label><input id="cardioHeartRate" type="number" min="0" step="1" value="${session?.averageHeartRate || ""}" placeholder="уд/хв"></div><div class="field"><label>Інтенсивність</label><select id="cardioIntensity">${[["low", "низька"], ["medium", "середня"], ["high", "висока"]].map(([value, label]) => `<option value="${value}" ${intensity === value ? "selected" : ""}>${label}</option>`).join("")}</select></div></div><div class="field" style="margin-top:14px;"><label>Нотатки</label><textarea id="cardioNotes" placeholder="Нахил, темп, відчуття">${escapeHtml(session?.notes || "")}</textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-cardio" data-workout-id="${workoutId}" ${session ? `data-cardio-id="${session.id}"` : ""}><i data-lucide="check"></i>Зберегти</button></div>`);
     }
 
     function openAddExerciseModal() {
@@ -1700,52 +1704,54 @@
         }
     }
 
-    async function savePlanningWorkout(status, workoutId = null) {
-        const template = templateById(inputValue("planTemplate") || "custom");
-        const date = inputValue("planDate") || dateInput(new Date());
-        const title = inputValue("planTitle").trim() || template.title;
-        const workoutType = inputValue("planType") || template.type;
-        const notes = inputValue("planNotes").trim();
-
-        if (workoutId) {
-            const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
-            if (!workoutItem || workoutItem.userId !== currentUser().id) {
-                toast("Лише перегляд", "Редагувати можна тільки власні тренування.");
-                return;
-            }
-            workoutItem.date = date;
-            workoutItem.title = title;
-            workoutItem.workoutType = workoutType;
-            workoutItem.notes = notes;
-            workoutItem.updatedAt = new Date().toISOString();
-            await persist();
-            closeOverlay();
-            renderSection();
-            toast("План оновлено", workoutItem.title);
+    async function startNewWorkout() {
+        const canStart = await ensureSingleActiveWorkout();
+        if (!canStart) {
             return;
         }
-
-        const workoutItem = createTemplateWorkout(currentUser().id, template, status, date, state.database.exercises);
-        workoutItem.title = title;
-        workoutItem.workoutType = workoutType;
-        workoutItem.notes = notes || (status === "active" ? "Почато з планування." : "Заплановано вручну.");
-        if (status === "active") {
-            const canStart = await ensureSingleActiveWorkout();
-            if (!canStart) {
-                return;
-            }
-        }
+        const now = new Date();
+        const workoutItem = {
+            id: createId("workout"),
+            userId: currentUser().id,
+            date: dateInput(now),
+            title: "Тренування",
+            status: "active",
+            workoutType: "custom",
+            startedAt: now.toISOString(),
+            finishedAt: null,
+            notes: "",
+            exercises: [],
+            cardioSessions: [],
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+        };
         state.database.workouts.push(workoutItem);
+        state.editingWorkoutId = workoutItem.id;
         await persist();
         closeOverlay();
-        navigate(status === "active" ? "workout" : "calendar");
-        toast(status === "active" ? "Тренування почато" : "Тренування заплановано", workoutItem.title);
+        state.section = "workout";
+        renderSection();
+        toast("Тренування почато", "Додай вправи, підходи або кардіо.");
     }
 
-    async function startPlannedWorkout(workoutId) {
+    function openWorkoutEditor(workoutId) {
         const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
-        if (!workoutItem || workoutItem.userId !== currentUser().id) {
-            toast("Лише перегляд", "Почати можна тільки власне тренування.");
+        if (!workoutItem) {
+            return;
+        }
+        if (workoutItem.userId !== currentUser().id) {
+            openWorkout(workoutId);
+            return;
+        }
+        state.editingWorkoutId = workoutId;
+        state.section = "workout";
+        closeOverlay();
+        renderSection();
+    }
+
+    async function reopenWorkout(workoutId) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem) {
             return;
         }
         const canStart = await ensureSingleActiveWorkout(workoutItem.id);
@@ -1753,13 +1759,19 @@
             return;
         }
         workoutItem.status = "active";
-        workoutItem.startedAt = new Date().toISOString();
         workoutItem.finishedAt = null;
+        if (!workoutItem.startedAt) {
+            workoutItem.startedAt = new Date().toISOString();
+        }
         workoutItem.updatedAt = new Date().toISOString();
+        state.editingWorkoutId = workoutItem.id;
         await persist();
-        closeOverlay();
-        navigate("workout");
-        toast("Тренування почато", workoutItem.title);
+        renderSection();
+        toast("Тренування відновлено", workoutItem.title);
+    }
+
+    async function startExistingWorkout(workoutId) {
+        await reopenWorkout(workoutId);
     }
 
     async function deleteWorkout(workoutId) {
@@ -1768,10 +1780,13 @@
             toast("Лише перегляд", "Видаляти можна тільки власні тренування.");
             return;
         }
-        if (!confirm("Видалити це тренування?")) {
+        if (!confirm("Видалити це тренування? Дію не можна скасувати.")) {
             return;
         }
         state.database.workouts = state.database.workouts.filter((item) => item.id !== workoutId);
+        if (state.editingWorkoutId === workoutId) {
+            state.editingWorkoutId = null;
+        }
         await persist();
         closeOverlay();
         renderSection();
@@ -1792,40 +1807,36 @@
         return true;
     }
 
-    async function startFromTemplate(templateId, status) {
-        const existing = activeWorkoutFor(currentUser().id);
-        if (status === "active" && existing) {
-            if (!confirm("У тебе вже є активне тренування. Завершити його і почати нове?")) {
-                return;
-            }
-            existing.status = "completed";
-            existing.finishedAt = new Date().toISOString();
-        }
-        const workoutItem = createTemplateWorkout(currentUser().id, templateById(templateId), status, dateInput(new Date()), state.database.exercises);
-        state.database.workouts.push(workoutItem);
-        await persist();
-        closeOverlay();
-        navigate(status === "active" ? "workout" : "calendar");
-        toast(status === "active" ? "Тренування почато" : "Тренування заплановано", workoutItem.title);
-    }
-
     async function addExercise(exerciseId) {
-        const active = activeWorkoutFor(currentUser().id);
-        if (!active) {
-            toast("Спочатку почни тренування", "Додати вправу можна тільки в активну сесію.");
+        const workoutItem = editWorkout();
+        if (!workoutItem || workoutItem.userId !== currentUser().id) {
+            toast("Спочатку почни тренування", "Відкрий або почни тренування, щоб додати вправу.");
             return;
         }
         const exercise = exerciseById(exerciseId);
-        active.exercises.push({ id: createId("workout-exercise"), exerciseId, order: active.exercises.length + 1, notes: suggestionNote(currentUser().id, exerciseId), sets: suggestedSets(exercise) });
-        active.updatedAt = new Date().toISOString();
+        workoutItem.exercises.push({ id: createId("workout-exercise"), exerciseId, order: workoutItem.exercises.length + 1, notes: suggestionNote(currentUser().id, exerciseId), sets: suggestedSets(exercise) });
+        workoutItem.updatedAt = new Date().toISOString();
+        state.editingWorkoutId = workoutItem.id;
         await persist();
         closeOverlay();
-        navigate("workout");
+        state.section = "workout";
+        renderSection();
         toast("Вправу додано", exercise.name);
     }
 
+    async function removeWorkoutExercise(workoutExerciseId) {
+        const workoutItem = editWorkout();
+        if (!workoutItem || !confirm("Видалити цю вправу з тренування?")) {
+            return;
+        }
+        workoutItem.exercises = workoutItem.exercises.filter((item) => item.id !== workoutExerciseId);
+        workoutItem.updatedAt = new Date().toISOString();
+        await persist();
+        renderSection();
+    }
+
     async function addSet(workoutExerciseId) {
-        const workoutExercise = activeWorkoutExercise(workoutExerciseId);
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
         if (!workoutExercise) {
             return;
         }
@@ -1835,19 +1846,14 @@
         renderSection();
     }
 
-    async function duplicateSet(workoutExerciseId) {
-        await addSet(workoutExerciseId);
-        toast("Підхід повторено", "Попередній підхід скопійовано.");
-    }
-
     async function toggleSet(workoutExerciseId, setId) {
-        const set = setByIds(workoutExerciseId, setId);
+        const set = editSetByIds(workoutExerciseId, setId);
         if (!set) {
             return;
         }
         set.isCompleted = !set.isCompleted;
         await persist();
-        if (set.isCompleted) {
+        if (set.isCompleted && editWorkout()?.status === "active") {
             startTimer(set.restSeconds || 90);
             toast("Підхід завершено", `Таймер відпочинку: ${seconds(set.restSeconds || 90)}`);
         }
@@ -1855,7 +1861,7 @@
     }
 
     async function deleteSet(workoutExerciseId, setId) {
-        const workoutExercise = activeWorkoutExercise(workoutExerciseId);
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
         if (!workoutExercise || !confirm("Видалити цей підхід?")) {
             return;
         }
@@ -1865,7 +1871,7 @@
     }
 
     async function updateSetField(workoutExerciseId, setId, field, value) {
-        const set = setByIds(workoutExerciseId, setId);
+        const set = editSetByIds(workoutExerciseId, setId);
         if (!set) {
             return;
         }
@@ -1873,29 +1879,73 @@
         await persist();
     }
 
-    async function finishWorkout() {
-        const active = activeWorkoutFor(currentUser().id);
-        if (!active) {
+    async function updateWorkoutMeta(workoutId, field, value) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem) {
             return;
         }
-        active.status = "completed";
-        active.finishedAt = new Date().toISOString();
-        active.updatedAt = new Date().toISOString();
+        workoutItem[field] = value;
+        workoutItem.updatedAt = new Date().toISOString();
+        await persist();
+        renderSection();
+    }
+
+    async function finishWorkout(workoutId) {
+        const workoutItem = workoutId ? ownWorkout(workoutId) : (editWorkout() || activeWorkoutFor(currentUser().id));
+        if (!workoutItem) {
+            return;
+        }
+        workoutItem.status = "completed";
+        workoutItem.finishedAt = new Date().toISOString();
+        workoutItem.updatedAt = new Date().toISOString();
         stopTimer();
         await persist();
         renderSection();
-        toast("Тренування завершено", "PR, досягнення і статистику перераховано.");
+        toast("Тренування завершено", "Статистику та рекорди перераховано.");
     }
 
-    async function addCardioToWorkout() {
-        const active = activeWorkoutFor(currentUser().id);
-        if (!active) {
+    async function saveCardio(workoutId, cardioId = null) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem) {
             return;
         }
-        active.cardioSessions.push(createCardio(1));
+        const duration = Math.max(1, Math.round(numberValue("cardioDuration", 0)));
+        if (!duration) {
+            toast("Вкажи час", "Тривалість кардіо обов'язкова.");
+            return;
+        }
+        const data = {
+            type: inputValue("cardioType") || "treadmill",
+            durationMinutes: duration,
+            distance: round(numberValue("cardioDistance", 0), 2),
+            calories: Math.round(numberValue("cardioCalories", 0)),
+            averageHeartRate: Math.round(numberValue("cardioHeartRate", 0)),
+            intensity: inputValue("cardioIntensity") || "medium",
+            notes: inputValue("cardioNotes").trim()
+        };
+        workoutItem.cardioSessions = workoutItem.cardioSessions || [];
+        const existing = cardioId ? workoutItem.cardioSessions.find((item) => item.id === cardioId) : null;
+        if (existing) {
+            Object.assign(existing, data);
+        } else {
+            workoutItem.cardioSessions.push({ id: createId("cardio"), ...data });
+        }
+        workoutItem.updatedAt = new Date().toISOString();
+        await persist();
+        closeOverlay();
+        renderSection();
+        toast(existing ? "Кардіо оновлено" : "Кардіо додано", `${cardioTypeLabel(data.type)} · ${data.durationMinutes} хв`);
+    }
+
+    async function deleteCardio(workoutId, cardioId) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem || !confirm("Видалити цей кардіо-блок?")) {
+            return;
+        }
+        workoutItem.cardioSessions = (workoutItem.cardioSessions || []).filter((item) => item.id !== cardioId);
+        workoutItem.updatedAt = new Date().toISOString();
         await persist();
         renderSection();
-        toast("Кардіо додано", "Блок кондиції додано до тренування.");
     }
 
     async function switchUser(userId) {
@@ -1917,11 +1967,6 @@
         renderSection();
     }
 
-    function filterAchievements(category) {
-        state.filters.achievementCategory = category;
-        renderSection();
-    }
-
     function openExercise(exerciseId) {
         const exercise = exerciseById(exerciseId);
         const currentBest = bestResult(currentUser().id, exerciseId);
@@ -1935,7 +1980,7 @@
         const readonly = workoutItem.userId !== currentUser().id;
         const totalSets = workoutSetCount(workoutItem);
         const cardioMinutes = workoutCardioMinutes(workoutItem);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${escapeHtml(owner.displayName)} · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: totalSets }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${cardioMinutes} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row" style="margin-top:14px;">${!readonly && workoutItem.status === "planned" ? `<button class="button button-primary compact" type="button" data-action="start-planned-workout" data-workout-id="${workoutItem.id}">Почати</button><button class="button button-secondary compact" type="button" data-action="open-planning-modal" data-date="${workoutItem.date}" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}">Видалити</button>` : ""}${!readonly && workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="navigate" data-section="workout">Перейти до поточного</button><button class="button button-secondary compact" type="button" data-action="finish-workout">Завершити</button>` : ""}</div></section><div class="workout-stack" style="margin-top:14px;">${workoutItem.exercises.length ? workoutItem.exercises.map((workoutExercise) => `<article class="panel"><h3>${escapeHtml(exerciseById(workoutExercise.exerciseId).name)}</h3><p class="card-caption">${workoutExercise.sets.length} підходів · ${number(exerciseVolume(workoutExercise))} кг</p><div class="tag-row">${workoutExercise.sets.map((set) => `<span class="chip">${setTypeLabel(set.type)} · ${set.weight} × ${set.repetitions}${set.isCompleted ? " · готово" : ""}</span>`).join("")}</div></article>`).join("") : emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.")}</div>`);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${escapeHtml(owner.displayName)} · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: totalSets }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${cardioMinutes} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="workout-stack" style="margin-top:14px;">${workoutItem.exercises.length ? workoutItem.exercises.map((workoutExercise) => `<article class="panel"><h3>${escapeHtml(exerciseById(workoutExercise.exerciseId).name)}</h3><p class="card-caption">${workoutExercise.sets.length} підходів · ${number(exerciseVolume(workoutExercise))} кг</p><div class="tag-row">${workoutExercise.sets.map((set) => `<span class="chip">${setTypeLabel(set.type)} · ${set.weight} × ${set.repetitions}${set.isCompleted ? " · готово" : ""}</span>`).join("")}</div></article>`).join("") : emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.")}</div>`);
     }
 
     function openStandards() {
@@ -1943,7 +1988,11 @@
     }
 
     function requestNotifications() {
-        toast("Таймер працює без дозволів", "GymOS покаже visual toast навіть без browser notifications.");
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission().catch(() => {});
+        }
+        startTimer(10);
+        toast("Таймер запущено", "10-секундний тест таймера відпочинку.");
     }
 
     async function checkBackendConnection() {
@@ -2209,10 +2258,6 @@
         return `<article class="activity-item"><div class="activity-dot"></div><div><strong>${escapeHtml(record.exercise.name)}</strong><p class="card-caption">${number(record.estimatedOneRepMax)} кг розрах. 1ПМ · ${record.weight} кг × ${record.repetitions} · ${formatDate(record.date)}</p></div></article>`;
     }
 
-    function templateCard(template) {
-        return `<article class="template-card"><div class="card-header"><div><h3>${escapeHtml(template.title)}</h3><p class="card-caption">${escapeHtml(template.description)}</p></div><span class="badge accent">${template.exerciseNames.length || "Вільно"}</span></div><div class="tag-row" style="margin:12px 0;">${template.exerciseNames.slice(0, 4).map((name) => `<span class="chip">${escapeHtml(name)}</span>`).join("")}</div><div class="inline-actions"><button class="button button-primary compact" type="button" data-action="start-template" data-template-id="${template.id}">Почати</button><button class="button button-secondary compact" type="button" data-action="plan-template" data-template-id="${template.id}">Запланувати</button></div></article>`;
-    }
-
     function exerciseCard(exercise) {
         return `<article class="exercise-card" data-action="open-exercise" data-exercise-id="${exercise.id}"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.description)}</p></div>${exercise.isCustom ? `<span class="badge accent">Власна</span>` : ""}</div><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></article>`;
     }
@@ -2228,21 +2273,11 @@
         return `<article class="user-card"><div class="list-row">${avatar(user, "small")}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.name)}</p></div></div><button class="button ${isCurrent ? "button-secondary" : "button-primary"} compact" type="button" data-action="switch-user" data-user-id="${user.id}" style="margin-top:12px;" ${isCurrent ? "disabled" : ""}>${isCurrent ? "Активний" : "Перемкнути"}</button></article>`;
     }
 
-    function achievementCard(item) {
-        const percent = item.target ? Math.min(100, Math.round(item.currentValue / item.target * 100)) : 0;
-        return `<article class="achievement-card ${item.isUnlocked ? "" : "locked"}"><div class="achievement-icon">${item.icon}</div><div class="card-header"><h3>${escapeHtml(item.title)}</h3><span class="badge ${item.isUnlocked ? "unlocked" : "locked"}">${item.isUnlocked ? "Відкрито" : "Закрито"}</span></div><p class="card-caption">${escapeHtml(item.description)}</p><div class="progress-track" style="margin:12px 0 8px;"><div class="progress-fill" style="width:${percent}%;"></div></div><p class="profile-meta">${number(Math.min(item.currentValue, item.target))}/${number(item.target)} · ${item.unlockedAt ? `Відкрито ${formatDate(item.unlockedAt)}` : item.category}</p></article>`;
-    }
-
     function rankCard(user, exercise) {
         const rank = rankingFor(user.id, exercise.id);
         const current = rank.currentLevel ? rankLabel(rank.currentLevel.level) : "Поки немає результату";
         const next = rank.nextLevel ? rankLabel(rank.nextLevel.level) : "Верхній demo-рівень";
         return `<article class="ranking-card"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern}</p></div><span class="badge accent">${current}</span></div>${kpi([{ label: "Найкращий", value: rank.best ? `${number(rank.best.estimatedOneRepMax)} кг` : "—" }, { label: "Наступний рівень", value: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} кг` : "—" }])}<div class="progress-track" style="margin-top:12px;"><div class="progress-fill" style="width:${Math.min(100, rank.progress)}%;"></div></div><p class="profile-meta" style="margin-top:8px;">Далі: ${next} · ${Math.round(rank.progress)}% · ${rank.best?.isEstimated ? "розрахункове 1ПМ" : "прямий результат"}</p></article>`;
-    }
-
-    function timerCard() {
-        const progress = state.timer.running ? Math.max(0, Math.min(100, (1 - state.timer.remaining / state.timer.duration) * 100)) : 0;
-        return `<section class="card"><div class="timer-card"><div><h2>Таймер відпочинку</h2><p class="card-caption">Запускається автоматично після завершення підходу.</p></div><div class="timer-ring" style="--timer-progress:${progress}%"><div class="timer-value">${seconds(state.timer.remaining)}</div></div></div></section>`;
     }
 
     function media(exercise) {
@@ -2293,20 +2328,23 @@
         if (state.calendar) {
             state.calendar.destroy();
         }
+        const mobile = window.innerWidth < 760;
         state.calendar = new FullCalendar.Calendar(container, {
-            initialView: window.innerWidth < 700 ? "listWeek" : "dayGridMonth",
+            initialView: mobile ? "listMonth" : "dayGridMonth",
             height: "auto",
             firstDay: 1,
-            headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,listWeek" },
-            events: state.database.workouts.map((workoutItem) => ({ id: workoutItem.id, title: `${userById(workoutItem.userId).displayName}: ${workoutItem.title}`, start: workoutItem.date, classNames: [`workout-status-${workoutItem.status}`], extendedProps: { workoutId: workoutItem.id } })),
-            dateClick: (info) => openPlanningModal(info.dateStr),
-            eventClick: (info) => openWorkout(info.event.extendedProps.workoutId)
+            locale: "uk",
+            buttonText: { today: "Сьогодні", month: "Місяць", week: "Тиждень", list: "Список" },
+            headerToolbar: mobile ? { left: "prev,next", center: "title", right: "today" } : { left: "prev,next today", center: "title", right: "dayGridMonth,listMonth" },
+            displayEventTime: false,
+            events: state.database.workouts.map((workoutItem) => ({ id: workoutItem.id, title: workoutItem.userId === currentUser().id ? workoutItem.title : `${userById(workoutItem.userId).displayName}: ${workoutItem.title}`, start: workoutItem.date, classNames: [`workout-status-${workoutItem.status}`], extendedProps: { workoutId: workoutItem.id, date: workoutItem.date } })),
+            dateClick: (info) => openDaySheet(info.dateStr),
+            eventClick: (info) => {
+                info.jsEvent.preventDefault();
+                openDaySheet(info.event.extendedProps.date);
+            }
         });
         state.calendar.render();
-    }
-
-    async function planOnDate(date) {
-        openPlanningModal(date);
     }
 
     function weeklyVolumeChart(id, userId) {
@@ -2463,33 +2501,6 @@
         return [...map.values()].sort((left, right) => right.estimatedOneRepMax - left.estimatedOneRepMax);
     }
 
-    function achievementsFor(userId) {
-        const summary = userStats(userId);
-        const records = recordsFor(userId);
-        const completed = workoutsFor(userId).filter((item) => item.status === "completed");
-        const bench = exerciseByName("Жим лежачи");
-        const pulldown = exerciseByName("Тяга верхнього блока");
-        const metrics = {
-            completedWorkouts: summary.completedWorkouts,
-            personalRecords: records.length,
-            benchRecords: records.some((record) => record.exerciseId === bench.id) ? 1 : 0,
-            pulldownRecords: records.some((record) => record.exerciseId === pulldown.id) ? 1 : 0,
-            pulldownSessions: completed.filter((workoutItem) => workoutItem.exercises.some((item) => item.exerciseId === pulldown.id)).length,
-            totalVolume: summary.totalVolume,
-            cardioSessions: summary.cardioSessions,
-            cardioMinutes: summary.cardioMinutes,
-            fullTrainingWeeks: fullWeek(completed) ? 1 : 0,
-            pushPull: new Set(completed.map((item) => item.workoutType).filter((type) => ["push", "pull"].includes(type))).size,
-            warmupSets: summary.warmupSets,
-            notesCount: summary.notesCount,
-            profileCompleteness: profileComplete(userById(userId)) ? 1 : 0
-        };
-        return achievements.map((achievement) => {
-            const currentValue = metrics[achievement.metric] || 0;
-            return { ...achievement, currentValue, isUnlocked: currentValue >= achievement.target, unlockedAt: currentValue >= achievement.target ? summary.lastWorkoutDate || userById(userId).updatedAt : null };
-        });
-    }
-
     function rankingFor(userId, exerciseId) {
         const user = userById(userId);
         if (!user || !exerciseId) {
@@ -2584,7 +2595,30 @@
     }
 
     function oneRepMax(weight, repetitions) {
-        return weight ? round(weight * (1 + repetitions / 30), 1) : 0;
+        const load = Number(weight) || 0;
+        const reps = Math.round(Number(repetitions) || 0);
+        if (load <= 0 || reps <= 0) {
+            return 0;
+        }
+        if (reps === 1) {
+            return round(load, 1);
+        }
+        // Average of validated estimation formulas for higher accuracy.
+        // Reps are capped at 12 — predictions diverge sharply beyond that.
+        const cappedReps = Math.min(reps, 12);
+        const estimates = [
+            load * (1 + cappedReps / 30),                                 // Epley
+            load * 36 / (37 - cappedReps),                                // Brzycki
+            load * Math.pow(cappedReps, 0.10),                            // Lombardi
+            load * (1 + cappedReps / 40),                                 // O'Conner
+            100 * load / (48.8 + 53.8 * Math.exp(-0.075 * cappedReps)),   // Wathen
+            100 * load / (101.3 - 2.67123 * cappedReps)                   // Lander
+        ].filter((value) => Number.isFinite(value) && value > 0);
+        if (!estimates.length) {
+            return round(load, 1);
+        }
+        const average = estimates.reduce((sum, value) => sum + value, 0) / estimates.length;
+        return round(Math.max(average, load), 1);
     }
 
     function duration(workoutItem) {
@@ -2697,50 +2731,147 @@
         return count;
     }
 
-    function fullWeek(workouts) {
-        const map = new Map();
-        workouts.forEach((item) => {
-            const key = dateInput(startWeek(new Date(item.date)));
-            map.set(key, (map.get(key) || 0) + 1);
-        });
-        return [...map.values()].some((count) => count >= 3);
-    }
-
-    function profileComplete(user) {
-        return Boolean(user.name && user.displayName && user.height && user.bodyweight && user.trainingGoal && user.trainingExperience && user.favoriteMuscleGroup);
-    }
-
     function startTimer(duration) {
-        stopTimer();
+        clearInterval(state.timer.id);
         state.timer.duration = duration;
         state.timer.remaining = duration;
         state.timer.startedAt = Date.now();
         state.timer.running = true;
-        state.timer.id = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - state.timer.startedAt) / 1000);
-            state.timer.remaining = Math.max(0, state.timer.duration - elapsed);
-            const value = document.querySelector(".timer-value");
-            const ring = document.querySelector(".timer-ring");
-            if (value && ring) {
-                value.textContent = seconds(state.timer.remaining);
-                ring.style.setProperty("--timer-progress", `${(1 - state.timer.remaining / state.timer.duration) * 100}%`);
+        state.timer.paused = false;
+        state.timer.id = setInterval(timerTick, 250);
+        renderFloatingTimer();
+    }
+
+    function timerTick() {
+        if (state.timer.paused) {
+            return;
+        }
+        const elapsed = Math.floor((Date.now() - state.timer.startedAt) / 1000);
+        state.timer.remaining = Math.max(0, state.timer.duration - elapsed);
+        updateFloatingTimer();
+        if (state.timer.remaining <= 0) {
+            stopTimer();
+            timerDone();
+        }
+    }
+
+    function timerDone() {
+        toast("Відпочинок завершено", "Можна переходити до наступного підходу.");
+        try {
+            const audioContext = window.AudioContext || window.webkitAudioContext;
+            if (audioContext) {
+                const context = new audioContext();
+                const oscillator = context.createOscillator();
+                const gain = context.createGain();
+                oscillator.connect(gain);
+                gain.connect(context.destination);
+                oscillator.frequency.value = 880;
+                gain.gain.setValueAtTime(0.0001, context.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.25, context.currentTime + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.6);
+                oscillator.start();
+                oscillator.stop(context.currentTime + 0.62);
             }
-            if (state.timer.remaining <= 0) {
-                stopTimer();
-                toast("Відпочинок завершено", "Можна переходити до наступного підходу.");
-                if ("Notification" in window && Notification.permission === "granted") {
-                    new Notification("GymOS", { body: "Відпочинок завершено. Можна переходити до наступного підходу." });
-                }
-            }
-        }, 1000);
+        } catch (error) {
+            console.warn("Timer sound unavailable", error);
+        }
+        if (navigator.vibrate) {
+            navigator.vibrate([180, 90, 180]);
+        }
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("GymOS", { body: "Відпочинок завершено." });
+        }
     }
 
     function stopTimer() {
-        if (state.timer.id) {
-            clearInterval(state.timer.id);
-        }
+        clearInterval(state.timer.id);
         state.timer.id = null;
         state.timer.running = false;
+        state.timer.paused = false;
+        renderFloatingTimer();
+    }
+
+    function pauseTimer() {
+        if (!state.timer.running || state.timer.paused) {
+            return;
+        }
+        state.timer.paused = true;
+        renderFloatingTimer();
+    }
+
+    function resumeTimer() {
+        if (!state.timer.running || !state.timer.paused) {
+            return;
+        }
+        state.timer.paused = false;
+        state.timer.startedAt = Date.now() - (state.timer.duration - state.timer.remaining) * 1000;
+        renderFloatingTimer();
+    }
+
+    function toggleTimerPause() {
+        state.timer.paused ? resumeTimer() : pauseTimer();
+    }
+
+    function addTimerTime(delta) {
+        if (!state.timer.running) {
+            if (delta > 0) {
+                startTimer(delta);
+            }
+            return;
+        }
+        state.timer.duration = Math.max(5, state.timer.duration + delta);
+        state.timer.remaining = Math.max(1, state.timer.remaining + delta);
+        state.timer.startedAt = Date.now() - (state.timer.duration - state.timer.remaining) * 1000;
+        updateFloatingTimer();
+    }
+
+    function renderFloatingTimer() {
+        let node = document.getElementById("floatingTimer");
+        if (!state.timer.running) {
+            if (node) {
+                node.classList.remove("visible");
+            }
+            return;
+        }
+        if (!node) {
+            node = document.createElement("div");
+            node.id = "floatingTimer";
+            node.className = "floating-timer";
+            document.body.appendChild(node);
+        }
+        node.innerHTML = `
+            <div class="floating-timer-bar"><span id="floatingTimerProgress"></span></div>
+            <div class="floating-timer-body">
+                <div class="floating-timer-label"><i data-lucide="timer"></i><span>Відпочинок</span></div>
+                <div class="floating-timer-value" id="floatingTimerValue">${seconds(state.timer.remaining)}</div>
+                <div class="floating-timer-actions">
+                    <button class="icon-button" type="button" data-action="timer-add" data-delta="-15" title="-15 с"><i data-lucide="minus"></i></button>
+                    <button class="icon-button" type="button" data-action="timer-toggle" title="Пауза / продовжити"><i data-lucide="${state.timer.paused ? "play" : "pause"}"></i></button>
+                    <button class="icon-button" type="button" data-action="timer-add" data-delta="15" title="+15 с"><i data-lucide="plus"></i></button>
+                    <button class="icon-button" type="button" data-action="timer-stop" title="Зупинити"><i data-lucide="x"></i></button>
+                </div>
+            </div>`;
+        node.classList.add("visible");
+        node.classList.toggle("paused", state.timer.paused);
+        updateFloatingTimer();
+        icons();
+    }
+
+    function updateFloatingTimer() {
+        const node = document.getElementById("floatingTimer");
+        if (!node) {
+            return;
+        }
+        const value = node.querySelector("#floatingTimerValue");
+        const progress = node.querySelector("#floatingTimerProgress");
+        if (value) {
+            value.textContent = seconds(state.timer.remaining);
+        }
+        if (progress) {
+            const percent = state.timer.duration ? Math.max(0, Math.min(100, (state.timer.remaining / state.timer.duration) * 100)) : 0;
+            progress.style.width = `${percent}%`;
+        }
+        node.classList.toggle("paused", state.timer.paused);
     }
 
     function userById(id) {
@@ -2793,12 +2924,36 @@
         return state.database.workouts.find((workoutItem) => workoutItem.userId === userId && workoutItem.status === "active");
     }
 
-    function activeWorkoutExercise(id) {
-        return activeWorkoutFor(currentUser().id)?.exercises.find((item) => item.id === id);
+    function ownWorkout(workoutId) {
+        const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
+        return workoutItem && workoutItem.userId === currentUser().id ? workoutItem : null;
     }
 
-    function setByIds(workoutExerciseId, setId) {
-        return activeWorkoutExercise(workoutExerciseId)?.sets.find((set) => set.id === setId);
+    function editWorkout() {
+        const id = state.editingWorkoutId;
+        if (id) {
+            const owned = ownWorkout(id);
+            if (owned) {
+                return owned;
+            }
+        }
+        return activeWorkoutFor(currentUser().id) || null;
+    }
+
+    function editWorkoutExercise(id) {
+        return editWorkout()?.exercises.find((item) => item.id === id);
+    }
+
+    function editSetByIds(workoutExerciseId, setId) {
+        return editWorkoutExercise(workoutExerciseId)?.sets.find((set) => set.id === setId);
+    }
+
+    function statusRank(status) {
+        return ({ active: 0, planned: 1, completed: 2 })[status] ?? 3;
+    }
+
+    function cardioIcon(type) {
+        return ({ treadmill: "footprints", running: "footprints", walking: "footprints", bike: "bike", rower: "waves", elliptical: "activity", other: "heart-pulse" })[type] || "heart-pulse";
     }
 
     function templateById(id) {
