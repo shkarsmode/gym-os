@@ -1157,8 +1157,9 @@
     function renderCurrentUserButton() {
         const user = currentUser();
         const button = element("openUserSwitcherButton");
-        button.textContent = user.avatarInitials;
+        const url = imageUrl(user.avatarUrl);
         button.style.background = user.avatarColor;
+        button.innerHTML = `${escapeHtml(user.avatarInitials)}${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}`;
     }
 
     function renderSidebarProfile() {
@@ -1709,7 +1710,7 @@
         const note = items.length > limit
             ? `<p class="card-caption picker-count">Показано ${limit} з ${items.length} — уточни пошук або фільтри.</p>`
             : `<p class="card-caption picker-count">Знайдено: ${items.length}</p>`;
-        return note + shown.map((exercise) => `<article class="exercise-card"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
+        return note + shown.map((exercise) => `<article class="exercise-card${exerciseMedia(exercise) ? " has-thumb" : ""}">${exerciseThumb(exercise)}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
     }
 
     function openCustomExercise() {
@@ -2435,7 +2436,7 @@
     }
 
     function exerciseCard(exercise) {
-        return `<article class="exercise-card" data-action="open-exercise" data-exercise-id="${exercise.id}"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.description)}</p></div>${exercise.isCustom ? `<span class="badge accent">Власна</span>` : ""}</div><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></article>`;
+        return `<article class="exercise-card${exerciseMedia(exercise) ? " has-thumb" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}<div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.description)}</p></div>${exercise.isCustom ? `<span class="badge accent">Власна</span>` : ""}</div><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></article>`;
     }
 
     function userCard(user) {
@@ -2456,9 +2457,34 @@
         return `<article class="ranking-card"><div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern}</p></div><span class="badge accent">${current}</span></div>${kpi([{ label: "Найкращий", value: rank.best ? `${number(rank.best.estimatedOneRepMax)} кг` : "—" }, { label: "Наступний рівень", value: rank.nextLevel ? `${number(rank.nextLevel.requiredWeight)} кг` : "—" }])}<div class="progress-track" style="margin-top:12px;"><div class="progress-fill" style="width:${Math.min(100, rank.progress)}%;"></div></div><p class="profile-meta" style="margin-top:8px;">Далі: ${next} · ${Math.round(rank.progress)}% · ${rank.best?.isEstimated ? "розрахункове 1ПМ" : "прямий результат"}</p></article>`;
     }
 
+    function exerciseMedia(exercise) {
+        const direct = imageUrl(exercise?.mediaUrl);
+        if (direct) {
+            return direct;
+        }
+        const references = Array.isArray(exercise?.mediaReferences) ? exercise.mediaReferences : [];
+        for (const reference of references) {
+            const candidate = typeof reference === "string" ? reference : (reference?.url || reference?.src || reference?.href || "");
+            const url = imageUrl(candidate);
+            if (url) {
+                return url;
+            }
+        }
+        return "";
+    }
+
+    function exerciseThumb(exercise) {
+        const url = exerciseMedia(exercise);
+        if (!url) {
+            return "";
+        }
+        return `<div class="exercise-thumb"><img src="${escapeHtml(url)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" onerror="this.closest('.exercise-thumb')?.remove()"></div>`;
+    }
+
     function media(exercise) {
-        if (exercise.mediaUrl && exercise.mediaType !== "none") {
-            return `<div class="media-placeholder"><img src="${escapeHtml(exercise.mediaUrl)}" alt="Демонстрація вправи ${escapeHtml(exercise.name)}"></div>`;
+        const url = exerciseMedia(exercise);
+        if (url) {
+            return `<div class="media-placeholder has-media"><img src="${escapeHtml(url)}" alt="Демонстрація вправи ${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" onerror="this.closest('.media-placeholder')?.classList.remove('has-media'); this.remove();"></div>`;
         }
         return `<div class="media-placeholder"><div class="media-placeholder-label">Місце для майбутнього GIF/WebP демо · анімований placeholder</div></div>`;
     }

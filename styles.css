@@ -245,6 +245,8 @@ textarea:focus-visible {
 }
 
 .avatar {
+    position: relative;
+    overflow: hidden;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
@@ -255,6 +257,17 @@ textarea:focus-visible {
     font-family: var(--font-display);
     font-weight: 800;
     font-size: 15px;
+}
+
+.avatar img,
+.avatar-button img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
 }
 
 .avatar.small {
@@ -272,6 +285,10 @@ textarea:focus-visible {
 }
 
 .avatar-button {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
     width: 42px;
     height: 42px;
     border: 1px solid var(--color-border-strong);
@@ -1029,8 +1046,26 @@ select option {
 }
 
 .media-placeholder img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+    object-fit: cover;
+}
+
+/* Exercise media thumbnail (catalog cards + "Додати вправу" picker) */
+.exercise-thumb {
+    margin: -15px -15px 12px;
+    overflow: hidden;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    background: var(--color-elevated);
+    line-height: 0;
+}
+
+.exercise-thumb img {
+    display: block;
+    width: 100%;
+    height: 150px;
     object-fit: cover;
 }
 
