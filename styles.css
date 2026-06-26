@@ -271,8 +271,8 @@ textarea:focus-visible {
 }
 
 .avatar.small {
-    width: 32px;
-    height: 32px;
+    width: 70px;
+    height: 70px;
     border-radius: var(--radius-sm);
     font-size: 12px;
 }
