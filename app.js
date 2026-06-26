@@ -1351,7 +1351,7 @@
         const user = currentUser();
         const summary = userStats(user.id);
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span><span class="status-badge completed">Можна редагувати</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><button class="button button-primary" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати профіль</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span><span class="status-badge completed">Можна редагувати</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
@@ -2005,7 +2005,7 @@
             toast("Лише перегляд", "Видаляти можна тільки власні тренування.");
             return;
         }
-        if (!confirm("Видалити це тренування? Дію не можна скасувати.")) {
+        if (!(await confirmDialog("Видалити це тренування? Дію не можна скасувати.", { confirmLabel: "Видалити" }))) {
             return;
         }
         cancelWorkoutSave(workoutId);
@@ -2037,7 +2037,7 @@
         if (!existing || existing.id === excludedWorkoutId) {
             return true;
         }
-        if (!confirm("У тебе вже є активне тренування. Завершити його і почати нове?")) {
+        if (!(await confirmDialog("У тебе вже є активне тренування. Завершити його і почати нове?", { confirmLabel: "Завершити і почати", danger: false }))) {
             return false;
         }
         existing.status = "completed";
@@ -2070,7 +2070,10 @@
 
     async function removeWorkoutExercise(workoutExerciseId) {
         const workoutItem = editWorkout();
-        if (!workoutItem || !confirm("Видалити цю вправу з тренування?")) {
+        if (!workoutItem) {
+            return;
+        }
+        if (!(await confirmDialog("Видалити цю вправу з тренування?", { confirmLabel: "Видалити" }))) {
             return;
         }
         workoutItem.exercises = workoutItem.exercises.filter((item) => item.id !== workoutExerciseId);
@@ -2106,7 +2109,10 @@
 
     async function deleteSet(workoutExerciseId, setId) {
         const workoutExercise = editWorkoutExercise(workoutExerciseId);
-        if (!workoutExercise || !confirm("Видалити цей підхід?")) {
+        if (!workoutExercise) {
+            return;
+        }
+        if (!(await confirmDialog("Видалити цей підхід?", { confirmLabel: "Видалити" }))) {
             return;
         }
         workoutExercise.sets = workoutExercise.sets.filter((set) => set.id !== setId);
@@ -2183,7 +2189,10 @@
 
     async function deleteCardio(workoutId, cardioId) {
         const workoutItem = ownWorkout(workoutId);
-        if (!workoutItem || !confirm("Видалити цей кардіо-блок?")) {
+        if (!workoutItem) {
+            return;
+        }
+        if (!(await confirmDialog("Видалити цей кардіо-блок?", { confirmLabel: "Видалити" }))) {
             return;
         }
         workoutItem.cardioSessions = (workoutItem.cardioSessions || []).filter((item) => item.id !== cardioId);
@@ -2413,7 +2422,7 @@
     }
 
     async function resetCuratedExercises() {
-        if (!confirm("Залишити тільки жим лежачи і тягу верхнього блока? Залежні зв'язки зі старими вправами будуть очищені.")) {
+        if (!(await confirmDialog("Залишити тільки жим лежачи і тягу верхнього блока? Залежні зв'язки зі старими вправами будуть очищені.", { confirmLabel: "Очистити" }))) {
             return;
         }
 
@@ -2459,7 +2468,7 @@
     }
 
     async function resetData() {
-        if (!confirm(storage.mode === "api" ? "Очистити локальний кеш і перечитати дані з backend?" : "Скинути всі локальні demo data?")) {
+        if (!(await confirmDialog(storage.mode === "api" ? "Очистити локальний кеш і перечитати дані з backend?" : "Скинути всі локальні demo data?", { confirmLabel: "Скинути" }))) {
             return;
         }
         await storage.reset();
@@ -3456,6 +3465,34 @@
         element("modalLayer").innerHTML = html;
         element("modalLayer").classList.remove("hidden");
         icons();
+    }
+
+    // Reliable in-app confirmation (native confirm() is unreliable/blocked on mobile).
+    function confirmDialog(message, options = {}) {
+        const { title = "Підтвердження", confirmLabel = "Підтвердити", cancelLabel = "Скасувати", danger = true } = options;
+        return new Promise((resolve) => {
+            closeOverlay();
+            const backdrop = element("modalBackdrop");
+            const layer = element("modalLayer");
+            backdrop.classList.remove("hidden");
+            layer.innerHTML = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
+            layer.classList.remove("hidden");
+            icons();
+            let settled = false;
+            const finish = (result) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                backdrop.removeEventListener("click", onBackdrop);
+                closeOverlay();
+                resolve(result);
+            };
+            const onBackdrop = () => finish(false);
+            backdrop.addEventListener("click", onBackdrop);
+            element("confirmOkBtn").addEventListener("click", () => finish(true));
+            element("confirmCancelBtn").addEventListener("click", () => finish(false));
+        });
     }
 
     function openDrawer(html) {

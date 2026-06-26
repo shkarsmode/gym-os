@@ -45,11 +45,14 @@
 html {
     min-height: 100%;
     background: var(--color-page);
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
 }
 
 body {
     min-height: 100vh;
     margin: 0;
+    max-width: 100%;
     background:
         radial-gradient(900px circle at 100% -5%, rgba(52, 211, 153, 0.06), transparent 60%),
         var(--color-page);
@@ -58,6 +61,7 @@ body {
     font-size: 15px;
     line-height: 1.5;
     overflow-x: hidden;
+    overscroll-behavior-x: none;
     -webkit-font-smoothing: antialiased;
 }
 
@@ -393,6 +397,7 @@ h3 {
 }
 
 .action-row.wrap,
+.inline-actions.wrap,
 .tag-row,
 .filter-row,
 .tab-row {
@@ -636,6 +641,8 @@ input,
 select,
 textarea {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     padding: 11px 12px;
@@ -797,10 +804,13 @@ select option {
     display: flex;
     align-items: center;
     gap: 9px;
+    flex: 1 1 auto;
     min-width: 0;
 }
 
 .workout-actionbar-title {
+    flex: 0 1 auto;
+    min-width: 0;
     font-family: var(--font-display);
     font-weight: 800;
     font-size: 15px;
@@ -1449,6 +1459,13 @@ tr:last-child td {
     overflow: auto;
     border-radius: var(--radius-lg);
     padding: 20px;
+}
+
+.confirm-message {
+    margin: 0;
+    color: var(--color-text);
+    font-size: 14px;
+    line-height: 1.55;
 }
 
 .modal-header,
