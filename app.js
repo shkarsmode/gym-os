@@ -16,7 +16,7 @@
     ].map(([id, title, icon]) => ({ id, title, icon }));
 
     const mobileSectionIds = ["dashboard", "workout", "calendar", "stats", "profile"];
-    const rankedExerciseNames = ["Жим лежачи", "Присідання зі штангою", "Румунська тяга", "Підтягування", "Жим над головою", "Тяга штанги в нахилі"];
+    const rankedExerciseNames = ["Жим лежачи", "Тяга верхнього блока"];
     const rankOrder = ["beginner", "novice", "third_class", "second_class", "first_class", "candidate_master", "master"];
     const statusLabels = { planned: "Заплановано", active: "Активне", completed: "Завершено" };
     const setTypeLabels = { warmup: "Розминка", working: "Робочий", drop: "Дроп", failure: "Відмова", backoff: "Відкат" };
@@ -25,13 +25,13 @@
     const dataModeLabels = { local: "локальний", api: "backend" };
 
     const templates = [
-        ["push", "Push", "Груди, плечі та трицепс.", ["Жим лежачи", "Жим гантелей під кутом", "Жим над головою", "Підйом гантелей в сторони", "Розгинання на блоці"]],
-        ["pull", "Pull", "Спина та біцепс із чистою тяговою механікою.", ["Підтягування", "Тяга штанги в нахилі", "Тяга верхнього блока", "Розведення на задню дельту", "Молоткові згинання"]],
-        ["legs", "Legs", "Присідання, hinge і нижня частина тіла.", ["Присідання зі штангою", "Румунська тяга", "Жим ногами", "Згинання ніг", "Підйом на литки"]],
-        ["upper", "Upper", "Збалансована силова робота для верху.", ["Жим лежачи", "Підтягування", "Жим над головою", "Горизонтальна тяга блока", "Згинання зі штангою"]],
-        ["lower", "Lower", "Контрольований обсяг для низу тіла.", ["Присідання зі штангою", "Жим ногами", "Румунська тяга", "Розгинання ніг", "Підйом на литки"]],
-        ["full_body", "Full Body", "Компактна силова сесія на все тіло.", ["Жим лежачи", "Підтягування", "Присідання зі штангою", "Планка"]],
-        ["cardio", "Cardio", "Тренування з фокусом на кондицію.", ["Бігова доріжка", "Велотренажер"]],
+        ["push", "Push", "Базовий жим для грудей.", ["Жим лежачи"]],
+        ["pull", "Pull", "Вертикальна тяга для спини.", ["Тяга верхнього блока"]],
+        ["legs", "Legs", "Порожній шаблон для майбутніх вправ ніг.", []],
+        ["upper", "Upper", "Компактна сесія верху з двох базових рухів.", ["Жим лежачи", "Тяга верхнього блока"]],
+        ["lower", "Lower", "Порожній шаблон для власного плану.", []],
+        ["full_body", "Full Body", "Мінімальна силова сесія з curated-каталогу.", ["Жим лежачи", "Тяга верхнього блока"]],
+        ["cardio", "Cardio", "Кардіо можна вести окремим блоком у тренуванні.", []],
         ["custom", "Custom", "Порожній шаблон для власного плану.", []]
     ].map(([id, title, description, exerciseNames]) => ({ id, title, description, exerciseNames, type: id }));
 
@@ -41,8 +41,8 @@
         ["ten-workouts", "10 завершених тренувань", "Закріпити помітну тренувальну звичку.", "10", "Ритм", 10, "completedWorkouts"],
         ["first-pr", "Перший особистий рекорд", "Зафіксувати будь-який PR.", "PR", "Сила", 1, "personalRecords"],
         ["bench-pr", "PR у жимі лежачи", "Поставити рекорд у жимі лежачи.", "BP", "Сила", 1, "benchRecords"],
-        ["squat-pr", "PR у присіданні", "Поставити рекорд у присіданні.", "SQ", "Сила", 1, "squatRecords"],
-        ["pullup-progress", "Прогрес у підтягуваннях", "Залогувати підтягування три рази.", "PU", "Сила", 3, "pullupSessions"],
+        ["pulldown-pr", "PR у тязі верхнього блока", "Поставити рекорд у тязі верхнього блока.", "LD", "Сила", 1, "pulldownRecords"],
+        ["pulldown-progress", "Прогрес у тязі верхнього блока", "Залогувати тягу верхнього блока три рази.", "LD", "Сила", 3, "pulldownSessions"],
         ["volume-10k", "10 000 кг обсягу", "Зібрати перший великий блок роботи.", "10K", "Обсяг", 10000, "totalVolume"],
         ["volume-50k", "50 000 кг обсягу", "Показати накопичений силовий обсяг.", "50K", "Обсяг", 50000, "totalVolume"],
         ["first-cardio", "Перше кардіо", "Додати перший кардіо-блок.", "C1", "Кардіо", 1, "cardioSessions"],
@@ -175,15 +175,30 @@
                 ...options
             });
 
+            const responseText = await response.text();
+            const payload = responseText ? this.parseResponse(responseText) : null;
+
             if (!response.ok) {
-                throw new Error(`API request failed: ${response.status}`);
+                const message = Array.isArray(payload?.message) ? payload.message.join(" ") : payload?.message || payload?.error || response.statusText || `HTTP ${response.status}`;
+                const error = new Error(message);
+                error.status = response.status;
+                error.payload = payload;
+                throw error;
             }
 
             if (response.status === 204) {
                 return null;
             }
 
-            return response.json();
+            return payload;
+        }
+
+        parseResponse(responseText) {
+            try {
+                return JSON.parse(responseText);
+            } catch (error) {
+                return responseText;
+            }
         }
 
         health() {
@@ -220,6 +235,10 @@
 
         importExercises(payload) {
             return this.request("/import/exercises", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        resetCuratedExercises() {
+            return this.request("/exercises/reset-curated", { method: "POST" });
         }
 
         createWorkout(payload) {
@@ -520,6 +539,14 @@
             return importSummary;
         }
 
+        async resetCuratedExercises() {
+            if (this.mode !== "api") {
+                return null;
+            }
+
+            return this.apiClient.resetCuratedExercises();
+        }
+
         extractExerciseCatalogRows(payload) {
             if (Array.isArray(payload)) {
                 return payload;
@@ -746,7 +773,7 @@
     function createSeedDatabase() {
         const now = new Date();
         const users = createUsers();
-        const exercises = mergeImportedExerciseCatalog(createExercises(), window.GYMOS_EXRX_CATALOG || null).exercises;
+        const exercises = createExercises();
         return {
             version: 3,
             currentUserId: "user-daniil",
@@ -775,34 +802,7 @@
     function createExercises() {
         const rows = [
             ["bench-press", "Жим лежачи", "Bench Press,Barbell Bench,Flat Bench", "Груди", "Трицепс,Плечі", "Горизонтальний жим", "Штанга", "Сила", "Середній"],
-            ["incline-dumbbell-press", "Жим гантелей під кутом", "Incline Dumbbell Press,Incline DB Press", "Груди", "Плечі,Трицепс", "Горизонтальний жим", "Гантелі", "Гіпертрофія", "Середній"],
-            ["chest-press-machine", "Жим у тренажері", "Chest Press Machine,Machine Press", "Груди", "Трицепс", "Горизонтальний жим", "Тренажер", "Гіпертрофія", "Початковий"],
-            ["cable-fly", "Зведення в кросовері", "Cable Fly,Cable Crossover", "Груди", "Плечі", "Ізоляція", "Блок", "Ізоляція", "Початковий"],
-            ["pull-ups", "Підтягування", "Pull-ups,Pullup,Chin over bar", "Спина", "Біцепс,Передпліччя", "Вертикальна тяга", "Вага тіла", "Сила", "Середній"],
-            ["lat-pulldown", "Тяга верхнього блока", "Lat Pulldown,Pulldown", "Спина", "Біцепс", "Вертикальна тяга", "Блок", "Гіпертрофія", "Початковий"],
-            ["barbell-row", "Тяга штанги в нахилі", "Barbell Row,Bent-over Row", "Спина", "Біцепс,Передпліччя", "Горизонтальна тяга", "Штанга", "Сила", "Середній"],
-            ["seated-cable-row", "Горизонтальна тяга блока", "Seated Cable Row,Cable Row", "Спина", "Біцепс", "Горизонтальна тяга", "Блок", "Гіпертрофія", "Початковий"],
-            ["shoulder-press", "Жим над головою", "Shoulder Press,Overhead Press,OHP", "Плечі", "Трицепс", "Вертикальний жим", "Штанга", "Сила", "Середній"],
-            ["lateral-raise", "Підйом гантелей в сторони", "Lateral Raise,Side Raise", "Плечі", "", "Підйом", "Гантелі", "Ізоляція", "Початковий"],
-            ["rear-delt-fly", "Розведення на задню дельту", "Rear Delt Fly,Reverse Fly", "Плечі", "Спина", "Підйом", "Гантелі", "Ізоляція", "Початковий"],
-            ["barbell-squat", "Присідання зі штангою", "Barbell Squat,Back Squat", "Квадрицепс", "Сідниці,Задня поверхня стегна,Прес", "Присідання", "Штанга", "Сила", "Просунутий"],
-            ["leg-press", "Жим ногами", "Leg Press,Machine Leg Press", "Квадрицепс", "Сідниці,Задня поверхня стегна", "Присідання", "Тренажер", "Гіпертрофія", "Початковий"],
-            ["leg-extension", "Розгинання ніг", "Leg Extension,Quad Extension", "Квадрицепс", "", "Розгинання", "Тренажер", "Ізоляція", "Початковий"],
-            ["romanian-deadlift", "Румунська тяга", "Romanian Deadlift,RDL", "Задня поверхня стегна", "Сідниці,Спина", "Hinge", "Штанга", "Сила", "Середній"],
-            ["leg-curl", "Згинання ніг", "Leg Curl,Hamstring Curl", "Задня поверхня стегна", "", "Згинання", "Тренажер", "Ізоляція", "Початковий"],
-            ["calf-raise", "Підйом на литки", "Calf Raise,Standing Calf Raise", "Литки", "", "Підйом", "Тренажер", "Ізоляція", "Початковий"],
-            ["barbell-curl", "Згинання зі штангою", "Barbell Curl,EZ Curl", "Біцепс", "Передпліччя", "Згинання", "Штанга", "Ізоляція", "Початковий"],
-            ["dumbbell-curl", "Згинання з гантелями", "Dumbbell Curl,DB Curl", "Біцепс", "Передпліччя", "Згинання", "Гантелі", "Ізоляція", "Початковий"],
-            ["hammer-curl", "Молоткові згинання", "Hammer Curl,Neutral Curl", "Біцепс", "Передпліччя", "Згинання", "Гантелі", "Ізоляція", "Початковий"],
-            ["triceps-pushdown", "Розгинання на блоці", "Triceps Pushdown,Cable Pushdown", "Трицепс", "", "Розгинання", "Блок", "Ізоляція", "Початковий"],
-            ["overhead-triceps-extension", "Розгинання трицепса над головою", "Overhead Triceps Extension,Overhead Cable Extension", "Трицепс", "", "Розгинання", "Блок", "Ізоляція", "Початковий"],
-            ["plank", "Планка", "Plank,Front Plank", "Прес", "Все тіло", "Кор", "Вага тіла", "Кор", "Початковий"],
-            ["hanging-leg-raise", "Підйом ніг у висі", "Hanging Leg Raise,Leg Raise", "Прес", "Передпліччя", "Кор", "Вага тіла", "Кор", "Середній"],
-            ["treadmill", "Бігова доріжка", "Treadmill,Incline Walk", "Все тіло", "Литки", "Кардіо", "Тренажер", "Кардіо", "Початковий"],
-            ["bike", "Велотренажер", "Bike,Stationary Bike", "Квадрицепс", "Сідниці,Литки", "Кардіо", "Тренажер", "Кардіо", "Початковий"],
-            ["running", "Біг", "Running,Run", "Все тіло", "Литки,Квадрицепс", "Кардіо", "Вага тіла", "Кардіо", "Середній"],
-            ["walking", "Ходьба", "Walking,Walk", "Все тіло", "Литки", "Кардіо", "Вага тіла", "Кардіо", "Початковий"],
-            ["rowing-machine", "Гребний тренажер", "Rowing Machine,Rower", "Все тіло", "Спина,Квадрицепс,Біцепс", "Кардіо", "Тренажер", "Кардіо", "Середній"]
+            ["lat-pulldown", "Тяга верхнього блока", "Lat Pulldown,Pulldown", "Спина", "Біцепс", "Вертикальна тяга", "Блок", "Гіпертрофія", "Початковий"]
         ];
 
         return rows.map(([slug, name, aliases, primaryMuscleGroup, secondaryMuscles, movementPattern, equipment, category, difficulty]) => ({
@@ -945,20 +945,15 @@
     function createWorkouts(exercises, now) {
         const byName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
         const plan = [
-            ["user-daniil", 38, "Push сила", "push", ["Жим лежачи", "Жим гантелей під кутом", "Підйом гантелей в сторони", "Розгинання на блоці"]],
-            ["user-daniil", 35, "Pull обсяг", "pull", ["Підтягування", "Тяга штанги в нахилі", "Тяга верхнього блока", "Молоткові згинання"]],
-            ["user-daniil", 32, "Legs відновлення", "legs", ["Присідання зі штангою", "Румунська тяга", "Жим ногами", "Підйом на литки"]],
-            ["user-daniil", 28, "Upper контроль", "upper", ["Жим лежачи", "Горизонтальна тяга блока", "Жим над головою", "Згинання зі штангою"]],
-            ["user-daniil", 20, "Push гіпертрофія", "push", ["Жим гантелей під кутом", "Жим у тренажері", "Зведення в кросовері", "Розгинання на блоці"]],
-            ["user-daniil", 16, "Legs обсяг", "legs", ["Присідання зі штангою", "Розгинання ніг", "Згинання ніг", "Підйом на литки"]],
-            ["user-daniil", 7, "Push прогресія", "push", ["Жим лежачи", "Жим гантелей під кутом", "Жим над головою", "Розгинання трицепса над головою"]],
-            ["user-daniil", 3, "Pull точність", "pull", ["Підтягування", "Тяга штанги в нахилі", "Горизонтальна тяга блока", "Молоткові згинання"]],
-            ["user-anastasia", 31, "Lower контроль", "lower", ["Жим ногами", "Румунська тяга", "Згинання ніг", "Підйом на литки"]],
-            ["user-anastasia", 24, "Кардіо і кор", "cardio", ["Бігова доріжка", "Велотренажер", "Планка"]],
-            ["user-anastasia", 9, "Upper чисті повторення", "upper", ["Тяга верхнього блока", "Горизонтальна тяга блока", "Підйом гантелей в сторони", "Розгинання на блоці"]],
-            ["user-maxim", 36, "Важкий push", "push", ["Жим лежачи", "Жим над головою", "Розгинання на блоці"]],
-            ["user-maxim", 19, "Legs сила", "legs", ["Присідання зі штангою", "Румунська тяга", "Жим ногами"]],
-            ["user-maxim", 5, "Upper щільність", "upper", ["Жим лежачи", "Тяга штанги в нахилі", "Жим над головою", "Молоткові згинання"]]
+            ["user-daniil", 38, "Push сила", "push", ["Жим лежачи"]],
+            ["user-daniil", 35, "Pull обсяг", "pull", ["Тяга верхнього блока"]],
+            ["user-daniil", 28, "Upper контроль", "upper", ["Жим лежачи", "Тяга верхнього блока"]],
+            ["user-daniil", 7, "Push прогресія", "push", ["Жим лежачи"]],
+            ["user-daniil", 3, "Pull точність", "pull", ["Тяга верхнього блока"]],
+            ["user-anastasia", 24, "Кардіо і мобільність", "cardio", []],
+            ["user-anastasia", 9, "Upper чисті повторення", "upper", ["Тяга верхнього блока"]],
+            ["user-maxim", 36, "Важкий push", "push", ["Жим лежачи"]],
+            ["user-maxim", 5, "Upper щільність", "upper", ["Жим лежачи", "Тяга верхнього блока"]]
         ];
 
         const workouts = plan.map(([userId, daysAgo, title, workoutType, exerciseNames], workoutIndex) => {
@@ -973,7 +968,7 @@
                 startedAt: start.toISOString(),
                 finishedAt: addMinutes(start, 65 + workoutIndex % 25).toISOString(),
                 notes: workoutIndex % 2 ? "Хороша сесія. Додавати вагу тільки якщо контроль стабільний." : "Чиста техніка. Повторити сетап наступного разу.",
-                exercises: exerciseNames.map((name, index) => createWorkoutExercise(byName.get(name), workoutIndex, index)),
+                exercises: exerciseNames.map((name, index) => createWorkoutExercise(byName.get(name), workoutIndex, index)).filter(Boolean),
                 cardioSessions: workoutType === "cardio" || workoutIndex % 4 === 0 ? [createCardio(workoutIndex)] : [],
                 createdAt: start.toISOString(),
                 updatedAt: start.toISOString()
@@ -981,7 +976,7 @@
             return workout;
         });
 
-        workouts.push(createTemplateWorkout("user-daniil", templateById("legs"), "planned", dateInput(addDays(now, 2)), exercises));
+        workouts.push(createTemplateWorkout("user-daniil", templateById("pull"), "planned", dateInput(addDays(now, 2)), exercises));
         const activeWorkout = createTemplateWorkout("user-daniil", templateById("push"), "active", dateInput(now), exercises);
         activeWorkout.startedAt = addMinutes(now, -34).toISOString();
         activeWorkout.notes = "Активне demo-тренування. Можна завершити або додати роботу.";
@@ -990,6 +985,10 @@
     }
 
     function createWorkoutExercise(exercise, workoutIndex, index) {
+        if (!exercise) {
+            return null;
+        }
+
         if (exercise.movementPattern === "Кардіо") {
             return { id: createId("workout-exercise"), exerciseId: exercise.id, order: index + 1, notes: "Кардіо ведеться окремим блоком у тренуванні.", sets: [] };
         }
@@ -1024,8 +1023,11 @@
             notes: status === "planned" ? "Заплановано із шаблону." : "Почато із шаблону.",
             exercises: template.exerciseNames.map((name, index) => {
                 const exercise = byName.get(name);
+                if (!exercise) {
+                    return null;
+                }
                 return { id: createId("workout-exercise"), exerciseId: exercise.id, order: index + 1, notes: "Підказка із шаблону.", sets: suggestedSets(exercise) };
-            }),
+            }).filter(Boolean),
             cardioSessions: template.type === "cardio" ? [createCardio(0)] : [],
             createdAt: now.toISOString(),
             updatedAt: now.toISOString()
@@ -1036,7 +1038,7 @@
         const byName = new Map(exercises.map((exercise) => [exercise.name, exercise]));
         const ranges = [[50, 60], [60, 70], [70, 80], [80, 90], [90, 105], [105, 140]];
         const levelMultipliers = { beginner: 0.45, novice: 0.7, third_class: 0.95, second_class: 1.15, first_class: 1.35, candidate_master: 1.55, master: 1.8 };
-        const exerciseMultipliers = { "Жим лежачи": 1, "Присідання зі штангою": 1.28, "Румунська тяга": 1.2, "Підтягування": 1.05, "Жим над головою": 0.68, "Тяга штанги в нахилі": 0.95 };
+        const exerciseMultipliers = { "Жим лежачи": 1, "Тяга верхнього блока": 0.9 };
         const standards = [];
 
         rankedExerciseNames.forEach((name) => {
@@ -1302,7 +1304,7 @@
     function settings() {
         const modeOptions = storage.config.requireAuth ? `<option value="api" selected>Бекенд API</option>` : `<option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Бекенд API</option>`;
         const modeCaption = storage.config.requireAuth ? "Застосунок працює тільки через backend API. Зміни даних доступні після Google OAuth." : "Застосунок працює локально через IndexedDB/localStorage або через бекенд API.";
-        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Активний користувач</h2><p class="card-caption">Права редагування залежать від авторизованого Google акаунта.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">${modeCaption}</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode">${modeOptions}</select></div><div class="field"><label>Базовий URL API</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="https://gym-os-back.vercel.app" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Бекенд: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "backend API" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути локальний кеш</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп GymOS і окремий імпорт каталогу вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"><label class="button button-secondary" for="exerciseCatalogInput"><i data-lucide="file-up"></i>Імпортувати каталог вправ з JSON</label><input class="hidden" id="exerciseCatalogInput" type="file" accept="application/json" data-action="import-exercise-catalog"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником, нормативи лишаються налаштовуваними даними.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise">Додати власну вправу</button><button class="button button-secondary" type="button" data-action="open-standards">Відкрити нормативи</button></div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Активний користувач</h2><p class="card-caption">Права редагування залежать від авторизованого Google акаунта.</p><div class="user-grid" style="margin-top:14px;">${state.database.users.map(userSwitcherCard).join("")}</div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">${modeCaption}</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode">${modeOptions}</select></div><div class="field"><label>Базовий URL API</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="https://gym-os-back.vercel.app" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Бекенд: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "backend API" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути локальний кеш</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп GymOS і окремий імпорт каталогу вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"><label class="button button-secondary" for="exerciseCatalogInput"><i data-lucide="file-up"></i>Імпортувати каталог вправ з JSON</label><input class="hidden" id="exerciseCatalogInput" type="file" accept="application/json" data-action="import-exercise-catalog"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником, нормативи лишаються налаштовуваними даними.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise">Додати власну вправу</button><button class="button button-secondary" type="button" data-action="open-standards">Відкрити нормативи</button><button class="button button-danger" type="button" data-action="reset-curated-exercises"><i data-lucide="list-x"></i>Залишити 2 базові вправи</button></div></section></div>`);
     }
 
     function bindEvents() {
@@ -1357,13 +1359,14 @@
             "login-google": loginWithGoogle,
             logout: logout,
             "export-data": exportData,
+            "reset-curated-exercises": resetCuratedExercises,
             reset: resetData,
             "open-standards": openStandards,
             "close-overlay": closeOverlay
         };
 
         if (actions[action]) {
-            await actions[action]();
+            await runAction(actionElement, action, actions[action]);
         }
     }
 
@@ -1373,26 +1376,150 @@
             return;
         }
 
-        if (actionElement.dataset.action === "set-field") {
-            await updateSetField(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field, actionElement.value);
+        await runChangeAction(actionElement, async () => {
+            if (actionElement.dataset.action === "set-field") {
+                await updateSetField(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "stats-filter") {
+                state.filters[actionElement.dataset.filter] = actionElement.value;
+                renderSection();
+            }
+
+            if (actionElement.dataset.action === "import-data") {
+                await importData(actionElement.files[0]);
+            }
+
+            if (actionElement.dataset.action === "import-exercise-catalog") {
+                await importExerciseCatalog(actionElement.files[0]);
+            }
+
+            if (actionElement.dataset.action === "data-mode") {
+                await changeDataMode(actionElement.value);
+            }
+        });
+    }
+
+    async function runAction(actionElement, action, callback) {
+        const shouldShowLoader = actionNeedsLoader(action);
+        if (shouldShowLoader && actionElement.dataset.busy === "true") {
+            return;
         }
 
-        if (actionElement.dataset.action === "stats-filter") {
-            state.filters[actionElement.dataset.filter] = actionElement.value;
-            renderSection();
+        if (shouldShowLoader) {
+            setActionLoading(actionElement, true);
+            showSyncIndicator("loading", actionProgressLabel(action));
         }
 
-        if (actionElement.dataset.action === "import-data") {
-            await importData(actionElement.files[0]);
+        try {
+            const result = callback();
+            if (result && typeof result.then === "function") {
+                await result;
+            }
+            if (shouldShowLoader) {
+                showSyncIndicator("success", "Готово");
+            }
+        } catch (error) {
+            handleUserFacingError(error, action);
+        } finally {
+            if (shouldShowLoader) {
+                setActionLoading(actionElement, false);
+            }
+        }
+    }
+
+    async function runChangeAction(actionElement, callback) {
+        try {
+            const result = callback();
+            if (result && typeof result.then === "function") {
+                await result;
+            }
+        } catch (error) {
+            handleUserFacingError(error, actionElement.dataset.action);
+        } finally {
+            if (actionElement.type === "file") {
+                actionElement.value = "";
+            }
+        }
+    }
+
+    function actionNeedsLoader(action) {
+        return !new Set([
+            "navigate",
+            "open-template-modal",
+            "open-planning-modal",
+            "open-add-exercise-modal",
+            "open-custom-exercise",
+            "open-exercise",
+            "select-knowledge",
+            "open-profile-editor",
+            "achievement-filter",
+            "open-workout",
+            "open-standards",
+            "close-overlay"
+        ]).has(action);
+    }
+
+    function actionProgressLabel(action) {
+        const labels = {
+            "create-planned-workout": "Плануємо тренування",
+            "create-and-start-planned-workout": "Плануємо і запускаємо",
+            "save-planned-workout": "Зберігаємо план",
+            "start-planned-workout": "Запускаємо тренування",
+            "delete-workout": "Видаляємо тренування",
+            "start-template": "Створюємо тренування",
+            "plan-template": "Плануємо тренування",
+            "start-empty-workout": "Створюємо порожнє тренування",
+            "add-exercise": "Додаємо вправу",
+            "save-custom-exercise": "Зберігаємо вправу",
+            "add-set": "Додаємо підхід",
+            "duplicate-set": "Повторюємо підхід",
+            "toggle-set": "Оновлюємо підхід",
+            "delete-set": "Видаляємо підхід",
+            "finish-workout": "Завершуємо тренування",
+            "add-cardio": "Додаємо кардіо",
+            "switch-user": "Змінюємо користувача",
+            "save-profile": "Зберігаємо профіль",
+            "save-bodyweight": "Додаємо замір ваги",
+            notifications: "Перевіряємо таймер",
+            "check-backend": "Перевіряємо backend",
+            logout: "Виходимо з акаунта",
+            "export-data": "Готуємо експорт",
+            "reset-curated-exercises": "Очищаємо каталог вправ",
+            reset: "Оновлюємо сховище"
+        };
+        return labels[action] || "Виконуємо дію";
+    }
+
+    function setActionLoading(actionElement, isLoading) {
+        if (!actionElement) {
+            return;
         }
 
-        if (actionElement.dataset.action === "import-exercise-catalog") {
-            await importExerciseCatalog(actionElement.files[0]);
+        if (isLoading) {
+            actionElement.dataset.busy = "true";
+            actionElement.dataset.originalHtml = actionElement.innerHTML;
+            actionElement.classList.add("is-loading");
+            actionElement.setAttribute("aria-busy", "true");
+            if ("disabled" in actionElement) {
+                actionElement.disabled = true;
+            }
+            const label = actionElement.classList.contains("icon-button") ? "" : `<span>${escapeHtml(actionElement.textContent.trim() || "Зачекай")}</span>`;
+            actionElement.innerHTML = `<span class="square-loader" aria-hidden="true"></span>${label}`;
+            return;
         }
 
-        if (actionElement.dataset.action === "data-mode") {
-            await changeDataMode(actionElement.value);
+        actionElement.classList.remove("is-loading");
+        actionElement.removeAttribute("aria-busy");
+        if ("disabled" in actionElement) {
+            actionElement.disabled = false;
         }
+        if (actionElement.dataset.originalHtml) {
+            actionElement.innerHTML = actionElement.dataset.originalHtml;
+        }
+        delete actionElement.dataset.busy;
+        delete actionElement.dataset.originalHtml;
+        icons();
     }
 
     function handleInput(event) {
@@ -1980,6 +2107,52 @@
         }
     }
 
+    async function resetCuratedExercises() {
+        if (!confirm("Залишити тільки жим лежачи і тягу верхнього блока? Залежні зв'язки зі старими вправами будуть очищені.")) {
+            return;
+        }
+
+        let overlay = null;
+        try {
+            overlay = showBusyOverlay({
+                title: "Очищення каталогу",
+                message: "Залишаємо curated-набір вправ.",
+                detail: "Жим лежачи і тяга верхнього блока будуть доступні всім користувачам.",
+                progress: 25
+            });
+
+            if (storage.mode === "api") {
+                await storage.resetCuratedExercises();
+                updateBusyOverlay(overlay, {
+                    message: "Перечитуємо backend.",
+                    detail: "Оновлюємо каталог і пов'язані тренування.",
+                    progress: 85
+                });
+                state.database = await storage.load();
+            } else {
+                const curatedExercises = createExercises();
+                const curatedIds = new Set(curatedExercises.map((exercise) => exercise.id));
+                state.database.exercises = curatedExercises;
+                state.database.strengthStandards = createStandards(curatedExercises);
+                state.database.workouts.forEach((workoutItem) => {
+                    workoutItem.exercises = workoutItem.exercises.filter((workoutExercise) => curatedIds.has(workoutExercise.exerciseId));
+                });
+                await persist();
+            }
+
+            updateBusyOverlay(overlay, {
+                message: "Каталог оновлено.",
+                detail: "Зайві вправи прибрані з інтерфейсу.",
+                progress: 100
+            });
+            renderShell();
+            renderSection();
+            toast("Каталог очищено", "Залишено жим лежачи і тягу верхнього блока.");
+        } finally {
+            hideBusyOverlay(overlay);
+        }
+    }
+
     async function resetData() {
         if (!confirm(storage.mode === "api" ? "Очистити локальний кеш і перечитати дані з backend?" : "Скинути всі локальні demo data?")) {
             return;
@@ -2279,14 +2452,13 @@
         const records = recordsFor(userId);
         const completed = workoutsFor(userId).filter((item) => item.status === "completed");
         const bench = exerciseByName("Жим лежачи");
-        const squat = exerciseByName("Присідання зі штангою");
-        const pullups = exerciseByName("Підтягування");
+        const pulldown = exerciseByName("Тяга верхнього блока");
         const metrics = {
             completedWorkouts: summary.completedWorkouts,
             personalRecords: records.length,
             benchRecords: records.some((record) => record.exerciseId === bench.id) ? 1 : 0,
-            squatRecords: records.some((record) => record.exerciseId === squat.id) ? 1 : 0,
-            pullupSessions: completed.filter((workoutItem) => workoutItem.exercises.some((item) => item.exerciseId === pullups.id)).length,
+            pulldownRecords: records.some((record) => record.exerciseId === pulldown.id) ? 1 : 0,
+            pulldownSessions: completed.filter((workoutItem) => workoutItem.exercises.some((item) => item.exerciseId === pulldown.id)).length,
             totalVolume: summary.totalVolume,
             cardioSessions: summary.cardioSessions,
             cardioMinutes: summary.cardioMinutes,
@@ -2475,7 +2647,11 @@
     }
 
     function mainRank(userId) {
-        const levels = rankedExerciseNames.map((name) => rankingFor(userId, exerciseByName(name).id).currentLevel?.level).filter(Boolean);
+        const levels = rankedExerciseNames
+            .map((name) => exerciseByName(name))
+            .filter((exercise) => exercise && !String(exercise.id || "").startsWith("missing-"))
+            .map((exercise) => rankingFor(userId, exercise.id).currentLevel?.level)
+            .filter(Boolean);
         if (!levels.length) {
             return "Поки немає рівня";
         }
@@ -2886,6 +3062,64 @@
         return labels[resource] || "дані";
     }
 
+    let syncIndicatorTimeoutId = null;
+
+    function showSyncIndicator(status, message) {
+        let indicator = document.getElementById("syncIndicator");
+        if (!indicator) {
+            indicator = document.createElement("div");
+            indicator.id = "syncIndicator";
+            indicator.className = "sync-indicator";
+            document.body.appendChild(indicator);
+        }
+
+        indicator.className = `sync-indicator ${status}`;
+        indicator.innerHTML = `${status === "loading" ? `<span class="square-loader small" aria-hidden="true"></span>` : `<span class="sync-dot" aria-hidden="true"></span>`}<span>${escapeHtml(message)}</span>`;
+        indicator.classList.add("visible");
+
+        clearTimeout(syncIndicatorTimeoutId);
+        if (status !== "loading") {
+            syncIndicatorTimeoutId = setTimeout(() => indicator.classList.remove("visible"), status === "error" ? 6200 : 2200);
+        }
+    }
+
+    function handleUserFacingError(error, action = "") {
+        console.error(error);
+        const message = friendlyError(error);
+        showSyncIndicator("error", message);
+        toast("Дія не виконана", message);
+
+        if (Number(error?.status) === 401 && storage.config.requireAuth) {
+            renderAuthGate(message);
+        }
+    }
+
+    function friendlyError(error) {
+        const status = Number(error?.status || 0);
+        const rawMessage = String(error?.message || "").trim();
+
+        if (status === 401) {
+            return "Сесія неактивна. Увійди через Google ще раз.";
+        }
+        if (status === 403) {
+            return "Немає прав для цієї дії.";
+        }
+        if (status === 413) {
+            return "Дані завеликі для одного запиту. Спробуй імпорт маленькими пачками.";
+        }
+        if (status >= 500) {
+            return "Backend тимчасово недоступний. Спробуй ще раз за кілька секунд.";
+        }
+        if (/failed to fetch|networkerror|load failed/i.test(rawMessage)) {
+            return "Не вдалося підключитися до backend. Перевір інтернет або deployment.";
+        }
+        if (/api base url is not configured/i.test(rawMessage)) {
+            return "API URL не налаштовано.";
+        }
+
+        return rawMessage || "Запит не виконано. Спробуй ще раз.";
+    }
+
     function toast(title, message = "") {
         const toastElement = document.createElement("div");
         toastElement.className = "toast";
@@ -2995,12 +3229,29 @@
 
     function schedulePersist() {
         clearTimeout(persistTimeoutId);
-        persistTimeoutId = setTimeout(persist, 250);
+        persistTimeoutId = setTimeout(() => {
+            persist({ silent: true }).catch((error) => {
+                console.error(error);
+                showSyncIndicator("error", friendlyError(error));
+            });
+        }, 250);
     }
 
-    async function persist() {
+    async function persist(options = {}) {
         state.database.updatedAt = new Date().toISOString();
-        await storage.save(state.database);
+        if (!options.silent) {
+            showSyncIndicator("loading", "Зберігаємо зміни");
+        }
+
+        try {
+            await storage.save(state.database);
+            if (!options.silent) {
+                showSyncIndicator("success", "Зміни збережено");
+            }
+        } catch (error) {
+            showSyncIndicator("error", friendlyError(error));
+            throw error;
+        }
     }
 })();
 
