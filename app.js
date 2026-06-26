@@ -3229,7 +3229,14 @@
     }
 
     function avatar(user, size = "") {
-        return `<div class="avatar ${size}" style="background:${escapeHtml(user.avatarColor)};">${escapeHtml(user.avatarInitials)}</div>`;
+        const url = imageUrl(user?.avatarUrl);
+        const image = url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">` : "";
+        return `<div class="avatar ${size}" style="background:${escapeHtml(user.avatarColor)};">${escapeHtml(user.avatarInitials)}${image}</div>`;
+    }
+
+    function imageUrl(value) {
+        const url = String(value || "").trim();
+        return /^https?:\/\//i.test(url) ? url : "";
     }
 
     function ordered(items) {
