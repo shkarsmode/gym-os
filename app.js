@@ -48,7 +48,7 @@
         ["first-cardio", "Перше кардіо", "Додати перший кардіо-блок.", "C1", "Кардіо", 1, "cardioSessions"],
         ["cardio-100", "100 хвилин кардіо", "Побудувати базу кондиції.", "C100", "Кардіо", 100, "cardioMinutes"],
         ["full-week", "Повний тренувальний тиждень", "Завершити три тренування за один тиждень.", "WK", "Ритм", 1, "fullTrainingWeeks"],
-        ["ppl", "Push Pull Legs", "Закрити push, pull і legs у завершених сесіях.", "PPL", "Техніка", 3, "pushPullLegs"],
+        ["push-pull", "Push / Pull", "Закрити push і pull у завершених сесіях.", "P/P", "Техніка", 2, "pushPull"],
         ["warmup", "Дисципліна розминки", "Виконати 10 розминкових підходів.", "WU", "Техніка", 10, "warmupSets"],
         ["notes", "Якісні нотатки", "Додати корисні нотатки до тренувань.", "NT", "Техніка", 5, "notesCount"],
         ["profile", "Заповнений профіль", "Заповнити ключові поля профілю.", "ID", "Профіль", 1, "profileCompleteness"]
@@ -2479,7 +2479,7 @@
             cardioSessions: summary.cardioSessions,
             cardioMinutes: summary.cardioMinutes,
             fullTrainingWeeks: fullWeek(completed) ? 1 : 0,
-            pushPullLegs: new Set(completed.map((item) => item.workoutType).filter((type) => ["push", "pull", "legs"].includes(type))).size,
+            pushPull: new Set(completed.map((item) => item.workoutType).filter((type) => ["push", "pull"].includes(type))).size,
             warmupSets: summary.warmupSets,
             notesCount: summary.notesCount,
             profileCompleteness: profileComplete(userById(userId)) ? 1 : 0
