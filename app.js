@@ -1373,6 +1373,11 @@
             clearTimeout(bindEvents.resizeTimer);
             bindEvents.resizeTimer = setTimeout(updateTopbarOffset, 150);
         });
+        // iOS Safari ignores user-scalable=no but honours blocking these pinch
+        // gesture events — stops the page (and inputs) from zooming on phones.
+        ["gesturestart", "gesturechange", "gestureend"].forEach((eventName) => {
+            document.addEventListener(eventName, (event) => event.preventDefault(), { passive: false });
+        });
         element("modalBackdrop").addEventListener("click", closeOverlay);
         element("openQuickActionButton").addEventListener("click", openQuickAction);
         element("openUserSwitcherButton").addEventListener("click", () => navigate("profile"));
