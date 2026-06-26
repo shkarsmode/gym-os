@@ -229,12 +229,28 @@
             return this.request("/workouts", { method: "POST", body: JSON.stringify(payload) });
         }
 
+        saveWorkout(id, payload) {
+            return this.request(`/workouts/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+        }
+
         updateWorkout(id, payload) {
             return this.request(`/workouts/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
         }
 
         deleteWorkout(id) {
             return this.request(`/workouts/${id}`, { method: "DELETE" });
+        }
+
+        createExercise(payload) {
+            return this.request("/exercises", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        createBodyweight(payload) {
+            return this.request("/users/me/bodyweight", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        updateProfile(payload) {
+            return this.request("/users/me/profile", { method: "PATCH", body: JSON.stringify(payload) });
         }
 
         startWorkout(id) {
@@ -1547,7 +1563,7 @@
             if (workoutItem) {
                 workoutItem.title = actionElement.value;
                 workoutItem.updatedAt = new Date().toISOString();
-                schedulePersist();
+                schedulePersistWorkout(workoutItem);
             }
         }
 
@@ -1555,7 +1571,7 @@
             const workoutItem = editWorkout();
             if (workoutItem) {
                 workoutItem.notes = actionElement.value;
-                schedulePersist();
+                schedulePersistWorkout(workoutItem);
             }
         }
 
@@ -1564,7 +1580,7 @@
             const workoutExercise = workoutItem?.exercises.find((item) => item.id === actionElement.dataset.workoutExerciseId);
             if (workoutExercise) {
                 workoutExercise.notes = actionElement.value;
-                schedulePersist();
+                schedulePersistWorkout(workoutItem);
             }
         }
 
@@ -1706,8 +1722,38 @@
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
-        state.database.exercises.push(newExercise);
-        await persist();
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+            showSyncIndicator("loading", "Зберігаємо вправу");
+            try {
+                const created = await storage.apiClient.createExercise({
+                    name: newExercise.name,
+                    aliases: newExercise.aliases,
+                    primaryMuscleGroup: newExercise.primaryMuscleGroup,
+                    secondaryMuscleGroups: newExercise.secondaryMuscleGroups,
+                    movementPattern: newExercise.movementPattern,
+                    equipment: newExercise.equipment,
+                    category: newExercise.category,
+                    difficulty: newExercise.difficulty,
+                    description: newExercise.description,
+                    techniqueSteps: newExercise.techniqueSteps,
+                    commonMistakes: newExercise.commonMistakes,
+                    safetyTips: newExercise.safetyTips,
+                    isCustom: true
+                });
+                if (created?.id) {
+                    newExercise.id = created.id;
+                    newExercise.createdByUserId = created.createdByUserId || newExercise.createdByUserId;
+                }
+                state.database.exercises.push(newExercise);
+                showSyncIndicator("success", "Збережено");
+            } catch (error) {
+                showSyncIndicator("error", friendlyError(error));
+                throw error;
+            }
+        } else {
+            state.database.exercises.push(newExercise);
+            await persist({ silent: true });
+        }
         closeOverlay();
         renderSection();
         toast("Власну вправу створено", name);
@@ -1730,7 +1776,32 @@
         user.gender = inputValue("profileGender") || user.gender;
         user.updatedAt = new Date().toISOString();
         await saveBodyweight(false);
-        await persist();
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+            showSyncIndicator("loading", "Зберігаємо профіль");
+            try {
+                const payload = {
+                    name: user.name,
+                    displayName: user.displayName,
+                    gender: user.gender === "female" ? "female" : "male",
+                    trainingGoal: user.trainingGoal || "",
+                    trainingExperience: user.trainingExperience || "",
+                    favoriteMuscleGroup: user.favoriteMuscleGroup || ""
+                };
+                if (user.height >= 80 && user.height <= 240) {
+                    payload.height = user.height;
+                }
+                if (user.bodyweight >= 20 && user.bodyweight <= 300) {
+                    payload.bodyweight = user.bodyweight;
+                }
+                await storage.apiClient.updateProfile(payload);
+                showSyncIndicator("success", "Збережено");
+            } catch (error) {
+                showSyncIndicator("error", friendlyError(error));
+                throw error;
+            }
+        } else {
+            await persist({ silent: true });
+        }
         closeOverlay();
         renderSection();
         toast("Профіль збережено", user.displayName);
@@ -1741,10 +1812,20 @@
         if (!value) {
             return;
         }
-        state.database.bodyweightEntries.push({ id: createId("bodyweight"), userId: currentUser().id, date: inputValue("bodyweightDate") || dateInput(new Date()), bodyweight: value, notes: "Ручний запис" });
+        const date = inputValue("bodyweightDate") || dateInput(new Date());
+        state.database.bodyweightEntries.push({ id: createId("bodyweight"), userId: currentUser().id, date, bodyweight: value, notes: "Ручний запис" });
         currentUser().bodyweight = value;
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl() && value >= 20 && value <= 300) {
+            try {
+                await storage.apiClient.createBodyweight({ date, bodyweight: value, notes: "Ручний запис" });
+            } catch (error) {
+                console.error(error);
+            }
+        }
         if (shouldRender) {
-            await persist();
+            if (storage.mode !== "api") {
+                await persist({ silent: true });
+            }
             closeOverlay();
             renderSection();
         }
@@ -1773,7 +1854,7 @@
         };
         state.database.workouts.push(workoutItem);
         state.editingWorkoutId = workoutItem.id;
-        await persist();
+        await persistWorkout(workoutItem);
         closeOverlay();
         state.section = "workout";
         renderSection();
@@ -1811,7 +1892,7 @@
         }
         workoutItem.updatedAt = new Date().toISOString();
         state.editingWorkoutId = workoutItem.id;
-        await persist();
+        await persistWorkout(workoutItem);
         renderSection();
         toast("Тренування відновлено", workoutItem.title);
     }
@@ -1833,7 +1914,20 @@
         if (state.editingWorkoutId === workoutId) {
             state.editingWorkoutId = null;
         }
-        await persist();
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+            showSyncIndicator("loading", "Видаляємо тренування");
+            try {
+                await storage.apiClient.deleteWorkout(workoutId);
+                showSyncIndicator("success", "Видалено");
+            } catch (error) {
+                if (Number(error?.status) !== 404) {
+                    showSyncIndicator("error", friendlyError(error));
+                    throw error;
+                }
+            }
+        } else {
+            await persist({ silent: true });
+        }
         closeOverlay();
         renderSection();
         toast("Тренування видалено", workoutItem.title);
@@ -1863,7 +1957,7 @@
         workoutItem.exercises.push({ id: createId("workout-exercise"), exerciseId, order: workoutItem.exercises.length + 1, notes: suggestionNote(currentUser().id, exerciseId), sets: suggestedSets(exercise) });
         workoutItem.updatedAt = new Date().toISOString();
         state.editingWorkoutId = workoutItem.id;
-        await persist();
+        await persistWorkout(workoutItem);
         closeOverlay();
         state.section = "workout";
         renderSection();
@@ -1877,7 +1971,7 @@
         }
         workoutItem.exercises = workoutItem.exercises.filter((item) => item.id !== workoutExerciseId);
         workoutItem.updatedAt = new Date().toISOString();
-        await persist();
+        await persistWorkout(workoutItem);
         renderSection();
     }
 
@@ -1888,7 +1982,7 @@
         }
         const previousSet = workoutExercise.sets.at(-1);
         workoutExercise.sets.push(previousSet ? { ...previousSet, id: createId("set"), isCompleted: false } : createSet("working", 0, 8, 8, 90, false));
-        await persist();
+        await persistWorkout(editWorkout());
         renderSection();
     }
 
@@ -1898,11 +1992,11 @@
             return;
         }
         set.isCompleted = !set.isCompleted;
-        await persist();
         if (set.isCompleted && editWorkout()?.status === "active") {
             startTimer(set.restSeconds || 90);
             toast("Підхід завершено", `Таймер відпочинку: ${seconds(set.restSeconds || 90)}`);
         }
+        await persistWorkout(editWorkout());
         renderSection();
     }
 
@@ -1912,7 +2006,7 @@
             return;
         }
         workoutExercise.sets = workoutExercise.sets.filter((set) => set.id !== setId);
-        await persist();
+        await persistWorkout(editWorkout());
         renderSection();
     }
 
@@ -1922,7 +2016,7 @@
             return;
         }
         set[field] = ["weight", "repetitions", "rpe", "restSeconds"].includes(field) ? Number(value) || 0 : value;
-        await persist();
+        schedulePersistWorkout(editWorkout());
     }
 
     async function updateWorkoutMeta(workoutId, field, value) {
@@ -1932,7 +2026,7 @@
         }
         workoutItem[field] = value;
         workoutItem.updatedAt = new Date().toISOString();
-        await persist();
+        await persistWorkout(workoutItem);
         renderSection();
     }
 
@@ -1945,7 +2039,7 @@
         workoutItem.finishedAt = new Date().toISOString();
         workoutItem.updatedAt = new Date().toISOString();
         stopTimer();
-        await persist();
+        await persistWorkout(workoutItem);
         renderSection();
         toast("Тренування завершено", "Статистику та рекорди перераховано.");
     }
@@ -1977,7 +2071,7 @@
             workoutItem.cardioSessions.push({ id: createId("cardio"), ...data });
         }
         workoutItem.updatedAt = new Date().toISOString();
-        await persist();
+        await persistWorkout(workoutItem);
         closeOverlay();
         renderSection();
         toast(existing ? "Кардіо оновлено" : "Кардіо додано", `${cardioTypeLabel(data.type)} · ${data.durationMinutes} хв`);
@@ -1990,14 +2084,17 @@
         }
         workoutItem.cardioSessions = (workoutItem.cardioSessions || []).filter((item) => item.id !== cardioId);
         workoutItem.updatedAt = new Date().toISOString();
-        await persist();
+        await persistWorkout(workoutItem);
         renderSection();
     }
 
     async function switchUser(userId) {
         state.database.currentUserId = userId;
         state.profileUserId = userId;
-        await persist();
+        state.editingWorkoutId = null;
+        if (storage.mode !== "api") {
+            await persist({ silent: true });
+        }
         closeOverlay();
         renderSection();
         toast("Активного користувача змінено", userById(userId).displayName);
@@ -3445,18 +3542,6 @@
         return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
     }
 
-    let persistTimeoutId = null;
-
-    function schedulePersist() {
-        clearTimeout(persistTimeoutId);
-        persistTimeoutId = setTimeout(() => {
-            persist({ silent: true }).catch((error) => {
-                console.error(error);
-                showSyncIndicator("error", friendlyError(error));
-            });
-        }, 250);
-    }
-
     async function persist(options = {}) {
         state.database.updatedAt = new Date().toISOString();
         if (!options.silent) {
@@ -3472,6 +3557,88 @@
             showSyncIndicator("error", friendlyError(error));
             throw error;
         }
+    }
+
+    function workoutPayload(workoutItem) {
+        return {
+            date: workoutItem.date,
+            title: workoutItem.title || "Тренування",
+            status: workoutItem.status || "active",
+            workoutType: workoutItem.workoutType || "custom",
+            notes: workoutItem.notes || "",
+            exercises: (workoutItem.exercises || []).map((exercise, index) => ({
+                exerciseId: exercise.exerciseId,
+                order: exercise.order || index + 1,
+                notes: exercise.notes || "",
+                sets: (exercise.sets || []).map((set) => ({
+                    type: set.type || "working",
+                    weight: Number(set.weight) || 0,
+                    repetitions: Number(set.repetitions) || 0,
+                    rpe: Number(set.rpe) || 0,
+                    restSeconds: Number(set.restSeconds) || 90,
+                    isCompleted: Boolean(set.isCompleted),
+                    notes: set.notes || ""
+                }))
+            })),
+            cardioSessions: (workoutItem.cardioSessions || []).map((session) => ({
+                type: session.type || "treadmill",
+                durationMinutes: Number(session.durationMinutes) || 0,
+                distance: Number(session.distance) || 0,
+                calories: Number(session.calories) || 0,
+                averageHeartRate: Number(session.averageHeartRate) || 0,
+                intensity: session.intensity || "medium",
+                notes: session.notes || ""
+            }))
+        };
+    }
+
+    // Persist a SINGLE workout via its own atomic endpoint (API mode) or the full
+    // local snapshot (local mode). This replaces the global wipe-and-reimport so a
+    // failed save can never delete other workouts.
+    async function persistWorkout(workoutItem, options = {}) {
+        if (!workoutItem) {
+            return;
+        }
+        workoutItem.updatedAt = new Date().toISOString();
+        state.database.updatedAt = new Date().toISOString();
+
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+            if (!options.silent) {
+                showSyncIndicator("loading", "Зберігаємо зміни");
+            }
+            try {
+                await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem));
+                storage.backendStatus = "online";
+                if (!options.silent) {
+                    showSyncIndicator("success", "Зміни збережено");
+                }
+            } catch (error) {
+                showSyncIndicator("error", friendlyError(error));
+                throw error;
+            }
+            return;
+        }
+
+        await persist({ silent: options.silent !== false });
+    }
+
+    let workoutPersistTimeoutId = null;
+    let workoutPersistTarget = null;
+
+    function schedulePersistWorkout(workoutItem) {
+        if (!workoutItem) {
+            return;
+        }
+        workoutPersistTarget = workoutItem;
+        clearTimeout(workoutPersistTimeoutId);
+        workoutPersistTimeoutId = setTimeout(() => {
+            const target = workoutPersistTarget;
+            workoutPersistTarget = null;
+            persistWorkout(target, { silent: true }).catch((error) => {
+                console.error(error);
+                showSyncIndicator("error", friendlyError(error));
+            });
+        }, 400);
     }
 })();
 
