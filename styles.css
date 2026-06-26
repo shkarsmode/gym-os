@@ -1023,6 +1023,15 @@ select option {
     background: var(--color-elevated);
 }
 
+.user-card.static {
+    cursor: default;
+}
+
+.user-card.static:hover {
+    border-color: var(--color-border);
+    background: var(--color-surface-2);
+}
+
 .quick-card {
     display: grid;
     gap: 6px;
