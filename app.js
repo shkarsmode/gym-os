@@ -1517,8 +1517,11 @@
             if ("disabled" in actionElement) {
                 actionElement.disabled = true;
             }
-            const label = actionElement.classList.contains("icon-button") ? "" : `<span>${escapeHtml(actionElement.textContent.trim() || "Зачекай")}</span>`;
-            actionElement.innerHTML = `<span class="square-loader" aria-hidden="true"></span>${label}`;
+            const canUseInlineLoader = actionElement.classList.contains("button") || actionElement.classList.contains("icon-button");
+            if (canUseInlineLoader) {
+                const label = actionElement.classList.contains("icon-button") ? "" : `<span>${escapeHtml(actionElement.textContent.trim() || "Зачекай")}</span>`;
+                actionElement.innerHTML = `<span class="square-loader" aria-hidden="true"></span>${label}`;
+            }
             return;
         }
 
@@ -1621,7 +1624,7 @@
     }
 
     function openCustomExercise() {
-        openModal(`<div class="modal-header"><div><h2>Власна вправа</h2><p class="card-caption">Створи вправу для локального каталогу або майбутнього backend.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Назва</label><input id="customExerciseName" type="text" placeholder="Жим у Smith під кутом"></div><div class="field"><label>Aliases</label><input id="customExerciseAliases" type="text" placeholder="Через кому"></div><div class="field"><label>Основний м'яз</label>${select("customExerciseMuscle", muscles(), "Груди")}</div><div class="field"><label>Патерн руху</label>${select("customExercisePattern", patterns(), "Горизонтальний жим")}</div><div class="field"><label>Обладнання</label>${select("customExerciseEquipment", equipment(), "Тренажер")}</div><div class="field"><label>Складність</label>${select("customExerciseDifficulty", ["Початковий", "Середній", "Просунутий"], "Середній")}</div></div><div class="field" style="margin-top:14px;"><label>Опис</label><textarea id="customExerciseDescription" placeholder="Коротке пояснення"></textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-custom-exercise">Зберегти вправу</button></div>`);
+        openModal(`<div class="modal-header"><div><h2>Власна вправа</h2><p class="card-caption">Створи вправу для локального каталогу або майбутнього backend.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Назва</label><input id="customExerciseName" type="text" placeholder="Жим у Smith під кутом"></div><div class="field"><label>Аліаси</label><input id="customExerciseAliases" type="text" placeholder="Через кому"></div><div class="field"><label>Основний м'яз</label>${select("customExerciseMuscle", muscles(), "Груди")}</div><div class="field"><label>Патерн руху</label>${select("customExercisePattern", patterns(), "Горизонтальний жим")}</div><div class="field"><label>Обладнання</label>${select("customExerciseEquipment", equipment(), "Тренажер")}</div><div class="field"><label>Складність</label>${select("customExerciseDifficulty", ["Початковий", "Середній", "Просунутий"], "Середній")}</div></div><div class="field" style="margin-top:14px;"><label>Опис</label><textarea id="customExerciseDescription" placeholder="Коротке пояснення"></textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-custom-exercise">Зберегти вправу</button></div>`);
     }
 
     async function saveCustomExercise() {
@@ -2770,7 +2773,7 @@
             secondaryMuscleGroups: [],
             movementPattern: "Не налаштовано",
             equipment: "Інше",
-            category: "Custom",
+            category: "Власна",
             difficulty: "Середній",
             description: "Ця вправа відсутня у поточному каталозі backend.",
             techniqueSteps: [],
