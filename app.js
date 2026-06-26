@@ -206,6 +206,18 @@
             return this.request("/import", { method: "POST", body: JSON.stringify(database) });
         }
 
+        startImport(resources) {
+            return this.request("/import/start", { method: "POST", body: JSON.stringify({ resources }) });
+        }
+
+        importChunk(resource, items, meta = {}) {
+            return this.request("/import/chunk", { method: "POST", body: JSON.stringify({ resource, items, meta }) });
+        }
+
+        finishImport(summary) {
+            return this.request("/import/finish", { method: "POST", body: JSON.stringify(summary || {}) });
+        }
+
         importExercises(payload) {
             return this.request("/import/exercises", { method: "POST", body: JSON.stringify(payload) });
         }
@@ -320,7 +332,7 @@
         async save(database) {
             if (this.mode === "api" && this.backendStatus === "online") {
                 try {
-                    await this.apiProvider.save(database);
+                    await this.importUserData(database, { quiet: true });
                     return;
                 } catch (error) {
                     console.warn("API save fallback", error);
@@ -368,6 +380,98 @@
 
         requiresAuthentication() {
             return this.mode === "api" && this.config.requireAuth && !this.currentUser;
+        }
+
+        async importUserData(database, options = {}) {
+            if (this.mode !== "api") {
+                return null;
+            }
+
+            const payload = this.createUserImportPayload(database);
+            const resources = [
+                ["customExercises", payload.customExercises],
+                ["bodyweightEntries", payload.bodyweightEntries],
+                ["workouts", payload.workouts]
+            ];
+            const chunks = resources.flatMap(([resource, items]) => {
+                return this.createImportChunks(resource, items, 62 * 1024);
+            });
+            const summary = {
+                ok: true,
+                resources: resources.map(([resource]) => resource),
+                chunks: chunks.length,
+                imported: {
+                    customExercises: 0,
+                    bodyweightEntries: 0,
+                    workouts: 0
+                }
+            };
+
+            await this.apiClient.startImport(summary.resources);
+
+            for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+                const chunk = chunks[chunkIndex];
+                const result = await this.apiClient.importChunk(chunk.resource, chunk.items, {
+                    index: chunkIndex + 1,
+                    total: chunks.length
+                });
+                summary.imported[chunk.resource] += result?.imported || 0;
+
+                if (typeof options.onProgress === "function") {
+                    options.onProgress({
+                        current: chunkIndex + 1,
+                        total: chunks.length,
+                        resource: chunk.resource,
+                        items: chunk.items.length,
+                        result
+                    });
+                }
+
+                if (!options.quiet) {
+                    await this.wait(90);
+                }
+            }
+
+            const finished = await this.apiClient.finishImport(summary);
+            return { ...summary, finished };
+        }
+
+        createUserImportPayload(database) {
+            const currentUserId = this.currentUser?.id || database?.currentUserId || "";
+            const exercises = Array.isArray(database?.exercises) ? database.exercises : [];
+            const bodyweightEntries = Array.isArray(database?.bodyweightEntries) ? database.bodyweightEntries : [];
+            const workouts = Array.isArray(database?.workouts) ? database.workouts : [];
+
+            return {
+                currentUserId,
+                customExercises: exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === currentUserId),
+                bodyweightEntries: bodyweightEntries.filter((entry) => entry.userId === currentUserId),
+                workouts: workouts.filter((workout) => workout.userId === currentUserId)
+            };
+        }
+
+        createImportChunks(resource, items, maximumChunkBytes) {
+            const chunks = [];
+            let currentChunk = [];
+
+            for (const item of items) {
+                const nextChunk = [...currentChunk, item];
+                const nextPayloadSize = this.getJsonByteSize({ resource, items: nextChunk });
+
+                if (nextPayloadSize > maximumChunkBytes && currentChunk.length > 0) {
+                    chunks.push({ resource, items: currentChunk });
+                    currentChunk = [item];
+                    continue;
+                }
+
+                currentChunk = nextChunk;
+            }
+
+            if (currentChunk.length > 0) {
+                chunks.push({ resource, items: currentChunk });
+            }
+
+            return chunks;
         }
 
         async importExerciseCatalog(payload, options = {}) {
@@ -628,7 +732,9 @@
             state.database = createSeedDatabase();
         }
         state.profileUserId = state.database.currentUserId;
-        await persist();
+        if (storage.mode !== "api") {
+            await persist();
+        }
         renderShell();
         renderSection();
     }
@@ -1764,6 +1870,8 @@
         if (!file) {
             return;
         }
+
+        let overlay = null;
         try {
             const data = JSON.parse(await file.text());
             ["users", "exercises", "workouts", "bodyweightEntries", "strengthStandards"].forEach((key) => {
@@ -1771,6 +1879,36 @@
                     throw new Error(`Missing ${key}`);
                 }
             });
+
+            if (storage.mode === "api") {
+                overlay = showBusyOverlay({
+                    title: "Імпорт даних",
+                    message: "Готуємо безпечну передачу у backend.",
+                    detail: "Глобальний каталог не відправляється повторно.",
+                    progress: 0
+                });
+                const result = await storage.importUserData(data, {
+                    onProgress: (progress) => {
+                        updateBusyOverlay(overlay, {
+                            message: `Відправляємо ${resourceLabel(progress.resource)}.`,
+                            detail: `Пачка ${progress.current}/${progress.total}. Елементів у пачці: ${progress.items}.`,
+                            progress: progress.total ? Math.round((progress.current / progress.total) * 100) : 100
+                        });
+                    }
+                });
+                updateBusyOverlay(overlay, {
+                    message: "Оновлюємо дані з backend.",
+                    detail: "Фінальна перевірка після імпорту.",
+                    progress: 100
+                });
+                state.database = await storage.load();
+                state.profileUserId = state.database.currentUserId;
+                renderShell();
+                renderSection();
+                toast("Дані імпортовано", `Тренувань: ${result.imported.workouts}, замірів ваги: ${result.imported.bodyweightEntries}.`);
+                return;
+            }
+
             state.database = data;
             state.profileUserId = data.currentUserId;
             await persist();
@@ -1779,6 +1917,8 @@
         } catch (error) {
             console.error(error);
             toast("Імпорт не вдався", "JSON-структура не підходить для GymOS.");
+        } finally {
+            hideBusyOverlay(overlay);
         }
     }
 
@@ -1787,11 +1927,17 @@
             return;
         }
 
+        let overlay = null;
         try {
             const data = JSON.parse(await file.text());
 
             if (storage.mode === "api") {
-                toast("Імпорт каталогу запущено", "Фронт відправляє вправи маленькими пачками.");
+                overlay = showBusyOverlay({
+                    title: "Імпорт каталогу вправ",
+                    message: "Розбиваємо JSON на маленькі пачки.",
+                    detail: "ExRx media лишаються reference-only, без hotlink у production.",
+                    progress: 0
+                });
 
                 const result = await storage.importExerciseCatalog(data, {
                     onProgress: (progress) => {
@@ -1799,13 +1945,19 @@
                             `Exercise catalog import ${progress.current}/${progress.total}`,
                             progress
                         );
-
-                        if (progress.current === 1 || progress.current === progress.total || progress.current % 5 === 0) {
-                            toast("Імпорт каталогу", `Пачка ${progress.current}/${progress.total} відправлена.`);
-                        }
+                        updateBusyOverlay(overlay, {
+                            message: "Відправляємо каталог у backend.",
+                            detail: `Пачка ${progress.current}/${progress.total}. Вправ у пачці: ${progress.exercises}.`,
+                            progress: progress.total ? Math.round((progress.current / progress.total) * 100) : 100
+                        });
                     }
                 });
 
+                updateBusyOverlay(overlay, {
+                    message: "Оновлюємо каталог з backend.",
+                    detail: "Завантажуємо актуальний список вправ.",
+                    progress: 100
+                });
                 state.database = await storage.load();
 
                 toast(
@@ -1823,6 +1975,8 @@
         } catch (error) {
             console.error(error);
             toast("Імпорт каталогу не вдався", "Перевір JSON, авторизацію або розмір payload.");
+        } finally {
+            hideBusyOverlay(overlay);
         }
     }
 
@@ -2645,6 +2799,61 @@
         element("drawerLayer").classList.add("hidden");
         element("modalLayer").innerHTML = "";
         element("drawerLayer").innerHTML = "";
+    }
+
+    function showBusyOverlay(options = {}) {
+        let overlay = document.getElementById("busyOverlay");
+        if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "busyOverlay";
+            overlay.className = "busy-overlay hidden";
+            overlay.innerHTML = `<section class="busy-panel" role="status" aria-live="polite" aria-busy="true">
+                <div class="pixel-loader" aria-hidden="true">${Array.from({ length: 25 }, (_, index) => `<span style="--cell:${index};"></span>`).join("")}</div>
+                <div>
+                    <p class="busy-kicker">GymOS</p>
+                    <h2 id="busyTitle">Синхронізація</h2>
+                    <p class="busy-message" id="busyMessage">Готуємо дані.</p>
+                    <p class="busy-detail" id="busyDetail">Це займе кілька секунд.</p>
+                    <div class="busy-progress" aria-hidden="true"><span id="busyProgress"></span></div>
+                </div>
+            </section>`;
+            document.body.appendChild(overlay);
+        }
+
+        updateBusyOverlay(overlay, options);
+        overlay.classList.remove("hidden");
+        return overlay;
+    }
+
+    function updateBusyOverlay(overlay, options = {}) {
+        if (!overlay) {
+            return;
+        }
+
+        const progress = Math.max(0, Math.min(100, Number(options.progress || 0)));
+        overlay.querySelector("#busyTitle").textContent = options.title || overlay.querySelector("#busyTitle").textContent;
+        overlay.querySelector("#busyMessage").textContent = options.message || overlay.querySelector("#busyMessage").textContent;
+        overlay.querySelector("#busyDetail").textContent = options.detail || overlay.querySelector("#busyDetail").textContent;
+        overlay.querySelector("#busyProgress").style.width = `${progress}%`;
+    }
+
+    function hideBusyOverlay(overlay) {
+        if (!overlay) {
+            return;
+        }
+
+        window.setTimeout(() => {
+            overlay.classList.add("hidden");
+        }, 180);
+    }
+
+    function resourceLabel(resource) {
+        const labels = {
+            customExercises: "власні вправи",
+            bodyweightEntries: "замір ваги",
+            workouts: "тренування"
+        };
+        return labels[resource] || "дані";
     }
 
     function toast(title, message = "") {
