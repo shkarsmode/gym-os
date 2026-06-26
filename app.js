@@ -2304,6 +2304,10 @@
 
     function rankingFor(userId, exerciseId) {
         const user = userById(userId);
+        if (!user || !exerciseId) {
+            return { best: null, currentLevel: null, nextLevel: null, progress: 0 };
+        }
+
         const standards = state.database.strengthStandards.filter((standard) => standard.exerciseId === exerciseId && standard.gender === user.gender && user.bodyweight >= standard.bodyweightMin && user.bodyweight < standard.bodyweightMax).sort((left, right) => left.requiredWeight - right.requiredWeight);
         const best = bestResult(userId, exerciseId);
         if (!best || !standards.length) {
@@ -2556,11 +2560,37 @@
     }
 
     function exerciseById(id) {
-        return state.database.exercises.find((exercise) => exercise.id === id);
+        return state.database.exercises.find((exercise) => exercise.id === id) || missingExercise(id);
     }
 
     function exerciseByName(name) {
-        return state.database.exercises.find((exercise) => exercise.name === name);
+        const normalizedName = String(name || "").toLowerCase();
+        return state.database.exercises.find((exercise) => {
+            return exercise.name === name ||
+                String(exercise.originalName || "").toLowerCase() === normalizedName ||
+                (exercise.aliases || []).some((alias) => String(alias).toLowerCase() === normalizedName);
+        }) || missingExercise(`missing-${createSlug(name)}`, name);
+    }
+
+    function missingExercise(id, name = "Вправа недоступна") {
+        return {
+            id: id || "missing-exercise",
+            name,
+            aliases: [],
+            primaryMuscleGroup: "Не налаштовано",
+            secondaryMuscleGroups: [],
+            movementPattern: "Не налаштовано",
+            equipment: "Інше",
+            category: "Custom",
+            difficulty: "Середній",
+            description: "Ця вправа відсутня у поточному каталозі backend.",
+            techniqueSteps: [],
+            commonMistakes: [],
+            safetyTips: [],
+            mediaUrl: "",
+            mediaType: "none",
+            isMissing: true
+        };
     }
 
     function workoutsFor(userId) {
