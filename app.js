@@ -799,7 +799,7 @@
             await persist();
         }
         renderShell();
-        renderSection();
+        handleRoute();
     }
 
     function createEmptyDatabase() {
@@ -1178,6 +1178,8 @@
         `;
     }
 
+    let pendingExerciseScrollId = null;
+
     function renderSection() {
         destroyCharts();
         renderShell();
@@ -1187,6 +1189,19 @@
         const renderers = { dashboard, workout, calendar, exercises, knowledge, stats, rankings, users, profile, settings };
         renderers[state.section]();
         icons();
+        updateTopbarOffset();
+        requestAnimationFrame(updateTopbarOffset);
+
+        if (pendingExerciseScrollId) {
+            const targetId = pendingExerciseScrollId;
+            pendingExerciseScrollId = null;
+            requestAnimationFrame(() => {
+                const target = document.querySelector(`[data-workout-exercise-id="${targetId}"]`);
+                if (target) {
+                    target.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+            });
+        }
     }
 
     function dashboard() {
@@ -1248,17 +1263,22 @@
         const contextBanner = !readonly && workoutItem.status !== "active"
             ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutItem.status).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
             : isOtherThanActive ? `<div class="readonly-layer info">У вас є активне тренування. <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Відкрити активне</button></div>` : "";
+        const actionBar = readonly ? "" : `<div class="workout-actionbar">
+                <div class="workout-actionbar-info"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><strong class="workout-actionbar-title">${escapeHtml(workoutItem.title || "Тренування")}</strong></div>
+                <div class="workout-actionbar-actions"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
+            </div>`;
         return `
+            ${actionBar}
             <section class="card workout-head">
                 <div class="card-header">
                     <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<span class="chip">${escapeHtml(owner.displayName)}</span></div>${readonly ? `<h2>${escapeHtml(workoutItem.title)}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг</p>` : `<input class="title-input" type="text" value="${escapeHtml(workoutItem.title)}" placeholder="Назва тренування" data-action="edit-workout-title" data-workout-id="${workoutItem.id}"><p class="card-caption">${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг · ${completedSets} завершених підходів</p>`}</div>
                 </div>
                 ${contextBanner}
                 ${readonly ? "" : `<div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата</label><input type="date" value="${escapeHtml(workoutItem.date)}" data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></div><div class="field"><label>Тип</label><select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</select></div></div>`}
-                ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i>Додати вправу</button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button></div>`}
+                ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;"><button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
-            ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item) => workoutExerciseEditor(workoutItem, item, readonly)).join("") : emptyInline("Вправ ще немає", "Натисни «Додати вправу», щоб зібрати сесію.")}
+            ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item) => workoutExerciseEditor(workoutItem, item, readonly)).join("") : emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}
             ${cardioBlock(workoutItem, readonly)}
         `;
     }
@@ -1271,7 +1291,7 @@
     function workoutExerciseEditor(workoutItem, workoutExercise, readonly) {
         const exercise = exerciseById(workoutExercise.exerciseId);
         const previous = previousPerformance(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
-        return `<article class="workout-exercise"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг${previous ? ` · попередньо ${number(previous.weight)}×${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="set-grid-header"><span>Тип</span><span>Вага</span><span>Повт.</span><span>RPE</span><span>Відпоч.</span><span>Готово</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Нотатки до вправи</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг${previous ? ` · попередньо ${number(previous.weight)}×${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="set-grid-header"><span>Тип</span><span>Вага</span><span>Повт.</span><span>RPE</span><span>Відпоч.</span><span>Готово</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Нотатки до вправи</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly) {
@@ -1342,6 +1362,11 @@
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
+        window.addEventListener("hashchange", handleRoute);
+        window.addEventListener("resize", () => {
+            clearTimeout(bindEvents.resizeTimer);
+            bindEvents.resizeTimer = setTimeout(updateTopbarOffset, 150);
+        });
         element("modalBackdrop").addEventListener("click", closeOverlay);
         element("openQuickActionButton").addEventListener("click", openQuickAction);
         element("openUserSwitcherButton").addEventListener("click", openUserSwitcher);
@@ -1614,13 +1639,66 @@
         }
     }
 
-    function navigate(section) {
+    const routableSections = new Set(sectionItems.map((item) => item.id));
+
+    function parseRoute() {
+        const raw = String(window.location.hash || "").replace(/^#\/?/, "");
+        const [section, param] = raw.split("/");
+        if (section && routableSections.has(section)) {
+            return { section, param: param ? decodeURIComponent(param) : null };
+        }
+        return { section: "dashboard", param: null };
+    }
+
+    function handleRoute() {
+        if (!state.database || storage.requiresAuthentication()) {
+            return;
+        }
+        const { section, param } = parseRoute();
         state.section = section;
         if (section === "workout") {
-            state.editingWorkoutId = null;
+            state.editingWorkoutId = param || null;
         }
         closeOverlay();
         renderSection();
+        scrollToTop();
+    }
+
+    function scrollToTop() {
+        window.scrollTo(0, 0);
+        const main = document.querySelector(".main-shell");
+        if (main) {
+            main.scrollTop = 0;
+        }
+        const content = element("pageContent");
+        if (content) {
+            content.scrollTop = 0;
+        }
+    }
+
+    function navigate(section) {
+        const target = `#/${section}`;
+        if (window.location.hash === target) {
+            handleRoute();
+        } else {
+            window.location.hash = target;
+        }
+    }
+
+    function goToWorkoutEditor(workoutId) {
+        const target = `#/workout/${encodeURIComponent(workoutId)}`;
+        if (window.location.hash === target) {
+            handleRoute();
+        } else {
+            window.location.hash = target;
+        }
+    }
+
+    function updateTopbarOffset() {
+        const topbar = document.querySelector(".topbar");
+        if (topbar) {
+            document.documentElement.style.setProperty("--topbar-h", `${topbar.offsetHeight}px`);
+        }
     }
 
     function openQuickAction() {
@@ -1880,8 +1958,7 @@
         state.editingWorkoutId = workoutItem.id;
         await persistWorkout(workoutItem);
         closeOverlay();
-        state.section = "workout";
-        renderSection();
+        goToWorkoutEditor(workoutItem.id);
         toast("Тренування почато", "Додай вправи, підходи або кардіо.");
     }
 
@@ -1894,10 +1971,8 @@
             openWorkout(workoutId);
             return;
         }
-        state.editingWorkoutId = workoutId;
-        state.section = "workout";
         closeOverlay();
-        renderSection();
+        goToWorkoutEditor(workoutId);
     }
 
     async function reopenWorkout(workoutId) {
@@ -1917,7 +1992,7 @@
         workoutItem.updatedAt = new Date().toISOString();
         state.editingWorkoutId = workoutItem.id;
         await persistWorkout(workoutItem);
-        renderSection();
+        goToWorkoutEditor(workoutItem.id);
         toast("Тренування відновлено", workoutItem.title);
     }
 
@@ -1979,13 +2054,18 @@
             return;
         }
         const exercise = exerciseById(exerciseId);
-        workoutItem.exercises.push({ id: createId("workout-exercise"), exerciseId, order: workoutItem.exercises.length + 1, notes: suggestionNote(currentUser().id, exerciseId), sets: suggestedSets(exercise) });
+        const workoutExerciseId = createId("workout-exercise");
+        workoutItem.exercises.push({ id: workoutExerciseId, exerciseId, order: workoutItem.exercises.length + 1, notes: suggestionNote(currentUser().id, exerciseId), sets: suggestedSets(exercise) });
         workoutItem.updatedAt = new Date().toISOString();
         state.editingWorkoutId = workoutItem.id;
+        pendingExerciseScrollId = workoutExerciseId;
         await persistWorkout(workoutItem);
         closeOverlay();
-        state.section = "workout";
-        renderSection();
+        if (state.section === "workout") {
+            renderSection();
+        } else {
+            goToWorkoutEditor(workoutItem.id);
+        }
         toast("Вправу додано", exercise.name);
     }
 

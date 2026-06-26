@@ -776,8 +776,67 @@ select option {
     gap: 14px;
 }
 
+/* Sticky quick-action bar for the active/edited workout (desktop + mobile) */
+.workout-actionbar {
+    position: sticky;
+    top: calc(var(--topbar-h, 64px) - 6px);
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 10px 9px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: rgba(20, 20, 23, 0.86);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-soft);
+}
+
+.workout-actionbar-info {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+
+.workout-actionbar-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.workout-actionbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
 .workout-exercise {
     padding: 16px;
+    scroll-margin-top: calc(var(--topbar-h, 64px) + 60px);
+}
+
+@media (max-width: 560px) {
+    .workout-actionbar {
+        padding: 8px;
+        gap: 8px;
+    }
+
+    .workout-actionbar .button {
+        width: auto;
+        flex: 1 1 auto;
+        padding-inline: 10px;
+    }
+
+    .workout-actionbar-title {
+        font-size: 14px;
+    }
 }
 
 .exercise-title-line {
