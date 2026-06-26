@@ -1290,8 +1290,15 @@
 
     function workoutExerciseEditor(workoutItem, workoutExercise, readonly) {
         const exercise = exerciseById(workoutExercise.exerciseId);
-        const previous = previousPerformance(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
-        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг${previous ? ` · попередньо ${number(previous.weight)}×${previous.repetitions}` : ""}</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="set-grid-header"><span>Тип</span><span>Вага</span><span>Повт.</span><span>RPE</span><span>Відпоч.</span><span>Готово</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Нотатки до вправи</label><textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        const lastSets = lastExerciseSets(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
+        const lastNote = lastExerciseNote(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
+        const lastResults = lastSets && lastSets.sets.length
+            ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set) => `<span class="chip">${number(set.weight)}×${set.repetitions}</span>`).join("")}</div></div>`
+            : "";
+        const previousNote = lastNote
+            ? `<div class="previous-note"><span class="previous-note-label"><i data-lucide="sticky-note"></i>Остання нотатка · ${formatDate(lastNote.date)}</span><p>${escapeHtml(lastNote.notes)}</p></div>`
+            : "";
+        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div>${lastResults}<div class="set-grid-header"><span>Тип</span><span>Вага</span><span>Повт.</span><span>RPE</span><span>Відпоч.</span><span>Готово</span><span></span></div>${workoutExercise.sets.map((set) => setRow(workoutExercise.id, set, readonly)).join("")}<div class="field" style="margin-top:12px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly) {
@@ -2804,8 +2811,13 @@
             return [];
         }
         const currentUserId = state.database?.currentUserId;
-        const previous = currentUserId ? previousPerformance(currentUserId, exercise.id) : null;
-        const weight = previous?.weight || seedWeight(exercise.name, 0);
+        // Carry over the exact same sets (count + weight + reps + type) from the last
+        // time this exercise was done, just reset to not-completed.
+        const last = currentUserId ? lastExerciseSets(currentUserId, exercise.id) : null;
+        if (last && last.sets.length) {
+            return last.sets.map((set) => createSet(set.type || "working", Number(set.weight) || 0, Number(set.repetitions) || 0, set.rpe, Number(set.restSeconds) || 90, false));
+        }
+        const weight = seedWeight(exercise.name, 0);
         if (exercise.movementPattern === "Кор") {
             return [createSet("working", 0, 45, 7, 60, false), createSet("working", 0, 45, 8, 60, false)];
         }
@@ -2895,6 +2907,27 @@
         }
         const bestSet = latest.workoutExercise.sets.filter((set) => set.isCompleted && set.type !== "warmup").sort((left, right) => oneRepMax(right.weight, right.repetitions) - oneRepMax(left.weight, left.repetitions))[0];
         return bestSet ? { date: latest.workoutItem.date, weight: bestSet.weight, repetitions: bestSet.repetitions } : null;
+    }
+
+    // All prior instances of an exercise for a user (most recent first), excluding a workout.
+    function exerciseInstances(userId, exerciseId, excludedWorkoutId = null) {
+        if (!userId) {
+            return [];
+        }
+        return workoutsFor(userId)
+            .filter((item) => item.id !== excludedWorkoutId)
+            .sort(byDateDesc)
+            .flatMap((workoutItem) => workoutItem.exercises
+                .filter((workoutExercise) => workoutExercise.exerciseId === exerciseId)
+                .map((workoutExercise) => ({ date: workoutItem.date, sets: workoutExercise.sets || [], notes: String(workoutExercise.notes || "").trim() })));
+    }
+
+    function lastExerciseSets(userId, exerciseId, excludedWorkoutId = null) {
+        return exerciseInstances(userId, exerciseId, excludedWorkoutId).find((entry) => entry.sets.length) || null;
+    }
+
+    function lastExerciseNote(userId, exerciseId, excludedWorkoutId = null) {
+        return exerciseInstances(userId, exerciseId, excludedWorkoutId).find((entry) => entry.notes) || null;
     }
 
     function bestResult(userId, exerciseId) {
