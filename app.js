@@ -3289,7 +3289,8 @@
         if (!workoutItem) {
             return false;
         }
-        return workoutItem.userId === currentUser().id || isAdmin();
+        const me = currentUser();
+        return (Boolean(me) && workoutItem.userId === me.id) || isAdmin();
     }
 
     function workoutNumber(workoutItem) {
