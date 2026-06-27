@@ -290,6 +290,20 @@ textarea:focus-visible {
     font-size: 26px;
 }
 
+.avatar.xl {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-md);
+    font-size: 22px;
+}
+
+.avatar.tiny {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+}
+
 .avatar-button {
     position: relative;
     overflow: hidden;
@@ -565,6 +579,103 @@ h3 {
 .button.is-loading,
 .icon-button.is-loading {
     opacity: 0.8;
+}
+
+/* Clickable chip (e.g. workout owner -> user page) */
+.chip-button {
+    cursor: pointer;
+    font: inherit;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.chip-button:hover {
+    border-color: var(--color-accent-border);
+    color: var(--color-accent-strong);
+    background: var(--color-accent-dim);
+}
+
+/* Clickable table row (leaderboard -> user page) */
+tr.row-link {
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+tr.row-link:hover td {
+    background: var(--color-surface-2);
+}
+
+/* Empty "no active workout" starter */
+.workout-starter {
+    display: grid;
+    place-items: center;
+    gap: 4px;
+    padding: 34px 22px;
+    text-align: center;
+}
+
+.workout-starter-icon {
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    margin-bottom: 8px;
+    border-radius: var(--radius-lg);
+    color: var(--color-accent);
+    background: var(--color-accent-dim);
+}
+
+.workout-starter-icon svg {
+    width: 26px;
+    height: 26px;
+}
+
+.workout-starter h2 {
+    margin: 0;
+}
+
+.workout-starter p {
+    max-width: 440px;
+    margin: 4px 0 0;
+}
+
+.workout-starter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 18px;
+    width: 100%;
+}
+
+.workout-starter-actions .button {
+    flex: 0 1 auto;
+}
+
+/* Image-URL live preview (custom exercise) */
+.media-url-preview {
+    display: none;
+}
+
+.media-url-preview.has-image {
+    display: block;
+    margin-top: 10px;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+}
+
+.media-url-preview img {
+    display: block;
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    background: #0d0d0f;
+}
+
+.approval-list {
+    display: grid;
+    gap: 10px;
 }
 
 .link-button {
@@ -1523,31 +1634,49 @@ tr:last-child td {
     margin-bottom: 16px;
 }
 
-/* ---------- Toast ---------- */
+/* ---------- Toast (top-center) ---------- */
 .toast-stack {
     position: fixed;
-    right: 16px;
-    bottom: 16px;
-    z-index: 120;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    z-index: 200;
     display: grid;
     gap: 10px;
-    width: min(360px, calc(100vw - 32px));
+    width: min(420px, calc(100vw - 24px));
+    pointer-events: none;
 }
 
 .toast {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    padding: 13px 14px;
+    gap: 11px;
+    padding: 13px 15px;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-md);
-    background: var(--color-elevated);
-    box-shadow: var(--shadow-soft);
+    background: rgba(28, 28, 32, 0.97);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+    pointer-events: auto;
+    animation: toastIn 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    border-left: 3px solid var(--color-accent);
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateY(-14px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .toast svg {
-    width: 17px;
-    height: 17px;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
     flex: 0 0 auto;
     color: var(--color-accent);
 }
@@ -1670,29 +1799,30 @@ tr:last-child td {
     position: fixed;
     left: 18px;
     bottom: 18px;
-    z-index: 120;
+    z-index: 190;
     display: inline-flex;
     align-items: center;
-    gap: 9px;
-    min-height: 38px;
-    max-width: min(420px, calc(100vw - 36px));
-    padding: 9px 13px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    gap: 10px;
+    min-height: 42px;
+    max-width: min(440px, calc(100vw - 36px));
+    padding: 10px 16px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
     color: var(--color-text);
-    background: var(--color-elevated);
-    box-shadow: var(--shadow-soft);
-    font-size: 12px;
+    background: rgba(28, 28, 32, 0.97);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    font-size: 13px;
     font-weight: 600;
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(14px) scale(0.96);
     pointer-events: none;
-    transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+    transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
 }
 
 .sync-indicator.visible {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
 }
 
 .sync-indicator.success {
@@ -1706,12 +1836,15 @@ tr:last-child td {
 .sync-dot {
     width: 9px;
     height: 9px;
-    border-radius: 3px;
+    flex: 0 0 auto;
+    border-radius: var(--radius-pill);
     background: var(--color-accent);
+    box-shadow: 0 0 0 4px var(--color-accent-dim);
 }
 
 .sync-indicator.error .sync-dot {
     background: var(--color-danger);
+    box-shadow: 0 0 0 4px var(--color-danger-dim);
 }
 
 .busy-panel {
@@ -2013,10 +2146,11 @@ ul {
     }
 
     .toast-stack {
-        right: 10px;
         left: 10px;
+        right: 10px;
+        top: 10px;
+        transform: none;
         width: auto;
-        bottom: calc(var(--mobile-nav-height) + 84px);
     }
 
     .floating-timer {
