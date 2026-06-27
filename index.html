@@ -7,7 +7,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 
     <meta name="description" content="Преміальна платформа для планування тренувань, трекінгу підходів, особистих рекордів, кардіо та командної статистики.">
@@ -58,10 +57,10 @@
     <div class="drawer-layer hidden" id="drawerLayer" aria-live="polite"></div>
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Icons are needed on every render, so load them up front (pinned for stability).
+         Chart.js and FullCalendar are heavy and section-specific — app.js injects them
+         on demand only when the stats / calendar views open. date-fns was unused. -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide@1.21.0/dist/umd/lucide.js"></script>
     <script>
         window.FORGE_CONFIG = {
             appName: "GymOS",

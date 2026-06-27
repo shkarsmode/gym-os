@@ -2702,14 +2702,63 @@
         }).join("");
     }
 
+    const lazyScripts = new Map();
+    function loadScript(src) {
+        if (lazyScripts.has(src)) {
+            return lazyScripts.get(src);
+        }
+        const promise = new Promise((resolve, reject) => {
+            const tag = document.createElement("script");
+            tag.src = src;
+            tag.async = true;
+            tag.onload = () => resolve();
+            tag.onerror = () => reject(new Error("Не вдалося завантажити " + src));
+            document.head.appendChild(tag);
+        });
+        lazyScripts.set(src, promise);
+        return promise;
+    }
+
+    function loadStyle(href) {
+        if (document.querySelector(`link[data-lazy="${href}"]`)) {
+            return;
+        }
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = href;
+        link.dataset.lazy = href;
+        document.head.appendChild(link);
+    }
+
+    // Chart.js and FullCalendar are loaded on demand (only on stats / calendar views)
+    // instead of blocking the initial page load. The catch keeps a CDN failure from
+    // rejecting and breaking the caller; the entry points fall back gracefully.
+    function ensureChartLib() {
+        return window.Chart ? Promise.resolve() : loadScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js").catch(() => {});
+    }
+
+    function ensureCalendarLib() {
+        if (window.FullCalendar) {
+            return Promise.resolve();
+        }
+        loadStyle("https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css");
+        return loadScript("https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js").catch(() => {});
+    }
+
     function renderCalendar() {
         const container = element("calendarContainer");
         if (!container) {
             return;
         }
         if (!window.FullCalendar) {
-            container.innerHTML = emptyInline("Календар недоступний", "Потрібен доступ до FullCalendar CDN або локальний bundle.");
-            icons();
+            ensureCalendarLib().then(() => {
+                if (window.FullCalendar) {
+                    renderCalendar();
+                } else {
+                    container.innerHTML = emptyInline("Календар недоступний", "Не вдалося завантажити FullCalendar з CDN.");
+                    icons();
+                }
+            });
             return;
         }
         if (state.calendar) {
@@ -2793,7 +2842,7 @@
     }
 
     function createChart(id, config) {
-        if (!window.Chart || !element(id)) {
+        if (!element(id)) {
             return;
         }
         const labels = config.data?.labels || [];
@@ -2804,6 +2853,16 @@
                 parent.innerHTML = emptyInline("Недостатньо даних", "Графік оновиться після створення або завершення тренувань.");
                 icons();
             }
+            return;
+        }
+        if (!window.Chart) {
+            // Load Chart.js on demand, then retry once. The window.Chart guard stops a
+            // failed CDN load from re-entering forever.
+            ensureChartLib().then(() => {
+                if (window.Chart) {
+                    createChart(id, config);
+                }
+            });
             return;
         }
         const chart = new Chart(element(id), config);
