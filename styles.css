@@ -1301,6 +1301,14 @@ select option {
     gap: 12px;
 }
 
+/* Skip rendering off-screen catalog cards (big win on the long exercise list).
+   `auto` intrinsic-size learns each card's real height so the scrollbar stays
+   stable and nothing shifts visually. */
+.exercise-card-grid > .exercise-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 340px;
+}
+
 .picker-filter-block {
     margin-top: 12px;
 }
@@ -1777,6 +1785,7 @@ tr:last-child td {
     transform-origin: top center;
     animation: toastIn 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
     transition: transform 0.16s ease, box-shadow 0.16s ease;
+    will-change: transform, opacity;
 }
 
 .toast:hover {
@@ -3977,6 +3986,7 @@ ul {
     transform: translateY(-6px) scale(0.98);
     transform-origin: top center;
     transition: opacity 0.16s ease, transform 0.16s ease;
+    will-change: transform, opacity;
 }
 
 .gselect-panel.visible {
@@ -4079,6 +4089,7 @@ ul {
     transform: translateY(-6px) scale(0.98);
     transform-origin: top center;
     transition: opacity 0.16s ease, transform 0.16s ease;
+    will-change: transform, opacity;
 }
 
 .gdate-panel.visible {

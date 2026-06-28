@@ -1141,6 +1141,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         renderMobileNavigation();
         renderCurrentUserButton();
         renderSidebarProfile();
+        icons(); // one pass converts sidebar nav + mobile nav + profile icons
     }
 
     // Mobile bottom bar: "Тренування" sits in the centre as an elevated accent
@@ -1168,7 +1169,6 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
                 <span class="mnav-label">${label}</span>
             </button>`;
         }).join("");
-        icons();
     }
 
     function renderAuthGate(message = "") {
@@ -1255,7 +1255,6 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
                 ${item.id === "workout" && activeWorkout ? `<strong class="nav-badge">Активне</strong>` : ""}
             </button>
         `).join("");
-        icons();
     }
 
     function renderCurrentUserButton() {
@@ -1263,7 +1262,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         const button = element("openUserSwitcherButton");
         const url = imageUrl(user.avatarUrl);
         button.style.background = user.avatarColor;
-        button.innerHTML = `${escapeHtml(user.avatarInitials)}${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}`;
+        button.innerHTML = `${escapeHtml(user.avatarInitials)}${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" decoding="async" onerror="this.remove()">` : ""}`;
     }
 
     function renderSidebarProfile() {
@@ -1303,7 +1302,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         }
         const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, admin: adminPanel, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
-        icons();
+        iconsIn(element("pageContent")); // shell icons already converted in renderShell()
         // Subtle enter animation only when the section actually changes (not on
         // in-place data re-renders), so navigation feels smooth, edits don't flash.
         if (renderSection.lastSection !== state.section) {
@@ -3334,13 +3333,13 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         if (!url) {
             return "";
         }
-        return `<div class="exercise-thumb"><img src="${escapeHtml(url)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" onerror="this.closest('.exercise-thumb')?.remove()"></div>`;
+        return `<div class="exercise-thumb"><img src="${escapeHtml(url)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.exercise-thumb')?.remove()"></div>`;
     }
 
     function media(exercise) {
         const url = exerciseMedia(exercise);
         if (url) {
-            return `<div class="media-placeholder has-media"><img src="${escapeHtml(url)}" alt="Демонстрація вправи ${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" onerror="this.closest('.media-placeholder')?.classList.remove('has-media'); this.remove();"></div>`;
+            return `<div class="media-placeholder has-media"><img src="${escapeHtml(url)}" alt="Демонстрація вправи ${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.media-placeholder')?.classList.remove('has-media'); this.remove();"></div>`;
         }
         return `<div class="media-placeholder"><div class="media-placeholder-label">Місце для майбутнього GIF/WebP демо · анімований placeholder</div></div>`;
     }
@@ -4022,7 +4021,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         node.classList.add("visible");
         node.classList.toggle("paused", state.timer.paused);
         updateFloatingTimer();
-        icons();
+        iconsIn(node);
     }
 
     function updateFloatingTimer() {
@@ -4309,7 +4308,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
 
     function avatar(user, size = "") {
         const url = imageUrl(user?.avatarUrl);
-        const image = url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">` : "";
+        const image = url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">` : "";
         return `<div class="avatar ${size}" style="background:${escapeHtml(user.avatarColor)};">${escapeHtml(user.avatarInitials)}${image}</div>`;
     }
 
@@ -4411,7 +4410,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         element("modalBackdrop").classList.remove("hidden");
         element("modalLayer").innerHTML = html;
         element("modalLayer").classList.remove("hidden");
-        icons();
+        iconsIn(element("modalLayer"));
     }
 
     // Reliable in-app confirmation (native confirm() is unreliable/blocked on mobile).
@@ -4424,7 +4423,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             backdrop.classList.remove("hidden");
             layer.innerHTML = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
             layer.classList.remove("hidden");
-            icons();
+            iconsIn(layer);
             let settled = false;
             const finish = (result) => {
                 if (settled) {
@@ -4447,7 +4446,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         element("modalBackdrop").classList.remove("hidden");
         element("drawerLayer").innerHTML = html;
         element("drawerLayer").classList.remove("hidden");
-        icons();
+        iconsIn(element("drawerLayer"));
     }
 
     function closeOverlay() {
@@ -4532,7 +4531,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         chip.className = `sync-chip visible ${status}`;
         chip.innerHTML = `${icon}<span class="sync-chip-text">${escapeHtml(message)}</span>`;
         if (status === "success") {
-            icons();
+            iconsIn(chip);
         }
         clearTimeout(syncIndicatorTimeoutId);
         if (status !== "loading") {
@@ -4583,7 +4582,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         const icon = type === "error" ? "alert-triangle" : "sparkles";
         toastElement.innerHTML = `<span class="toast-icon"><i data-lucide="${icon}"></i></span><div class="toast-body"><strong>${escapeHtml(title)}</strong>${message ? `<p class="toast-message">${escapeHtml(message)}</p>` : ""}</div><span class="toast-progress" aria-hidden="true"></span>`;
         element("toastStack").appendChild(toastElement);
-        icons();
+        iconsIn(toastElement);
 
         let timer = null;
         let leaving = false;
@@ -4739,6 +4738,15 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     function icons() {
         if (window.lucide) {
             window.lucide.createIcons();
+        }
+    }
+
+    // Scoped icon conversion: only scans `root` instead of the whole document.
+    // Use for frequent, self-contained updates (toasts, chip) to avoid a
+    // full-document [data-lucide] scan on every small UI change.
+    function iconsIn(root) {
+        if (window.lucide && root) {
+            window.lucide.createIcons({ root });
         }
     }
 

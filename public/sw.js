@@ -4,9 +4,11 @@
 // CDN libraries are cross-origin and are NEVER intercepted/cached — auth and
 // per-user data always go to the network.
 
-// JS/CSS are now hashed by the Vite build, so they are NOT precached by name —
-// the network-first handler runtime-caches them on first load (offline still works).
-const CACHE = "gymos-shell-v3";
+// JS/CSS are content-hashed by the Vite build (e.g. /assets/index-ABC123.js), so
+// their URLs are immutable: a new deploy = a new filename. Those are served
+// cache-first (instant on repeat visits); everything else stays network-first so
+// deploys (index.html) are picked up immediately. Offline still works either way.
+const CACHE = "gymos-shell-v4";
 const SHELL = [
     "/",
     "/index.html",
@@ -41,6 +43,21 @@ self.addEventListener("fetch", (event) => {
     const url = new URL(request.url);
     // Only handle our own static origin; let API + CDN requests pass through.
     if (url.origin !== self.location.origin) {
+        return;
+    }
+
+    // Hashed build assets are immutable — serve from cache first (instant), only
+    // hitting the network on a cache miss (first load after a new deploy).
+    if (url.pathname.startsWith("/assets/")) {
+        event.respondWith(
+            caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+                if (response && response.ok && response.type === "basic") {
+                    const copy = response.clone();
+                    caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+                }
+                return response;
+            }))
+        );
         return;
     }
 
