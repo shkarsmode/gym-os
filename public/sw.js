@@ -4,12 +4,12 @@
 // CDN libraries are cross-origin and are NEVER intercepted/cached — auth and
 // per-user data always go to the network.
 
-const CACHE = "gymos-shell-v2";
+// JS/CSS are now hashed by the Vite build, so they are NOT precached by name —
+// the network-first handler runtime-caches them on first load (offline still works).
+const CACHE = "gymos-shell-v3";
 const SHELL = [
     "/",
     "/index.html",
-    "/app.js",
-    "/styles.css",
     "/manifest.json",
     "/favicon.ico",
     "/icon-192.png",
