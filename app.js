@@ -1,87 +1,11 @@
 ﻿import "./components/select.js";
 import "./components/datepicker.js";
 import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv, unique, imageUrl } from "./lib/format.js";
+import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
+import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
 
 (() => {
     "use strict";
-
-    const sectionItems = [
-        ["dashboard", "Панель", "layout-dashboard"],
-        ["workout", "Поточне тренування", "dumbbell"],
-        ["calendar", "Календар", "calendar-days"],
-        ["exercises", "Вправи", "list-filter"],
-        ["stats", "Статистика", "bar-chart-3"],
-        ["rankings", "Рейтинги", "trophy"],
-        ["users", "Команда", "users"],
-        ["admin", "Адмін", "shield"],
-        ["subscription", "Підписка", "gem"],
-        ["profile", "Профіль", "user-round"],
-        ["changelog", "Що нового", "sparkles"],
-        ["settings", "Налаштування", "settings"]
-    ].map(([id, title, icon]) => ({ id, title, icon }));
-
-    const mobileSectionIds = ["dashboard", "workout", "calendar", "stats", "profile"];
-    const rankedExerciseNames = ["Жим лежачи", "Тяга верхнього блока"];
-    const rankOrder = ["beginner", "novice", "third_class", "second_class", "first_class", "candidate_master", "master"];
-    const statusLabels = { planned: "Заплановано", active: "Активне", completed: "Завершено" };
-    const setTypeLabels = { warmup: "Розминка", working: "Робочий", drop: "Дроп", failure: "Відмова", backoff: "Відкат" };
-    const workoutTypeLabels = { push: "Push", pull: "Pull", legs: "Legs", upper: "Upper", lower: "Lower", full_body: "Full Body", cardio: "Cardio", custom: "Custom" };
-    const genderLabels = { male: "чоловіча", female: "жіноча" };
-    const dataModeLabels = { local: "локальний", api: "backend" };
-
-    const APP_VERSION = "0.8.1";
-    const CHANGELOG = [
-        { version: "0.8.1", date: "2026-06-28", title: "Фікс пікера дати на телефоні", items: [
-            { type: "fix", text: "На телефоні тап по полю дати тепер одразу відкриває нативний вибір дати" }
-        ] },
-        { version: "0.8.0", date: "2026-06-28", title: "Власні пікери дат і списків", items: [
-            { type: "feature", text: "Власний пікер дати: зручний календар на десктопі та нативний вибір на телефоні" },
-            { type: "feature", text: "Кастомні випадаючі списки з анімацією та іконками — у всіх формах і фільтрах" }
-        ] },
-        { version: "0.7.3", date: "2026-06-28", title: "Підказки на дашборді", items: [
-            { type: "feature", text: "Підказки (?) на кожній метриці дашборда — що це, що означає число та навіщо воно тобі" },
-            { type: "improvement", text: "Бейдж «Фікс» у списку змін тепер приємного помаранчевого кольору" },
-            { type: "improvement", text: "Прискорено завантаження: застосунок збирається через Vite з хешованими ресурсами" }
-        ] },
-        { version: "0.7.2", date: "2026-06-28", title: "Стрічка історії: фільтр і фікс", items: [
-            { type: "feature", text: "Фільтр історії тренувань: Мої / Усі (за замовчуванням — Мої)" },
-            { type: "fix", text: "Виправлено верстку стрічки тренувань на мобільному" }
-        ] },
-        { version: "0.7.1", date: "2026-06-28", title: "Редизайн карток вправ", items: [
-            { type: "improvement", text: "Свіжий вигляд картки вправи: бейджі на зображенні, акуратний автор і дата, чисті кнопки дій" }
-        ] },
-        { version: "0.7.0", date: "2026-06-28", title: "Підписка та статуси", items: [
-            { type: "feature", text: "Окрема вкладка «Підписка»: порівняння Free та PRO, переваги й ціна" },
-            { type: "feature", text: "Бейджі PRO / Адмін у профілі та календарі + клік по бейджу → підписка" },
-            { type: "improvement", text: "Кнопка апгрейду до PRO у бічній панелі для Free-тарифу" },
-            { type: "improvement", text: "Особистий бейдж «Моя» на власних вправах + свої вправи першими у виборі" }
-        ] },
-        { version: "0.6.0", date: "2026-06-28", title: "Що нового, статуси та офлайн", items: [
-            { type: "feature", text: "Розділ «Що нового» з таймлайном усіх змін" },
-            { type: "feature", text: "Бейджі PRO / Адмін у команді та рейтингу" },
-            { type: "feature", text: "PWA: встановлення на телефон + офлайн-оболонка" }
-        ] },
-        { version: "0.5.0", date: "2026-06-28", title: "Ролі та адмін-панель", items: [
-            { type: "feature", text: "Адмін-панель: ролі Free / PRO / Адмін, апрув і модерація" },
-            { type: "feature", text: "Тарифи: Free — 1 трен/день, 2/тиждень, 1 вправа/міс; PRO — безліміт" },
-            { type: "fix", text: "Видалення вправи більше не падає з помилкою 500" }
-        ] },
-        { version: "0.4.0", date: "2026-06-28", title: "Власники вправ і модерація", items: [
-            { type: "feature", text: "Видно хто і коли додав вправу + редагування/видалення" },
-            { type: "feature", text: "Черга модерації нових і змінених вправ для адміна" },
-            { type: "feature", text: "Статистика авторів вправ" }
-        ] },
-        { version: "0.3.0", date: "2026-06-28", title: "Каталог вправ", items: [
-            { type: "feature", text: "+10 базових вправ із гіфками" },
-            { type: "fix", text: "Виправлені анімації для всіх вправ каталогу" },
-            { type: "improvement", text: "Реальні зовнішні посилання на силові нормативи" }
-        ] },
-        { version: "0.2.0", date: "2026-06-28", title: "UX та продуктивність", items: [
-            { type: "improvement", text: "Брендований банер у консолі + іконки авторизації (Google)" },
-            { type: "improvement", text: "Лінива загрузка графіків і календаря" }
-        ] }
-    ];
-    const changelogTagLabels = { feature: "Фіча", fix: "Фікс", improvement: "Покращення" };
 
     const templates = [
         ["push", "Push", "Базовий жим для грудей.", ["Жим лежачи"]],
@@ -4344,18 +4268,6 @@ import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv
     function todayCaption(userId) {
         const item = workoutsFor(userId).find((workoutItem) => workoutItem.date === dateInput(new Date()));
         return item ? statusLabel(item.status) : "Тренувань сьогодні ще немає";
-    }
-
-    function muscles() {
-        return ["Груди", "Спина", "Плечі", "Біцепс", "Трицепс", "Квадрицепс", "Задня поверхня стегна", "Сідниці", "Литки", "Прес", "Передпліччя", "Все тіло"];
-    }
-
-    function patterns() {
-        return ["Горизонтальний жим", "Вертикальний жим", "Горизонтальна тяга", "Вертикальна тяга", "Присідання", "Hinge", "Випад", "Згинання", "Розгинання", "Підйом", "Перенесення", "Ротація", "Кор", "Кардіо"];
-    }
-
-    function equipment() {
-        return ["Штанга", "Гантелі", "Тренажер", "Блок", "Вага тіла", "Smith Machine", "Гиря", "Еспандер", "Інше"];
     }
 
     function avatar(user, size = "") {
