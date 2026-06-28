@@ -4537,10 +4537,45 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     function toast(title, message = "") {
         const toastElement = document.createElement("div");
         toastElement.className = "toast";
-        toastElement.innerHTML = `<i data-lucide="sparkles"></i><div><strong>${escapeHtml(title)}</strong>${message ? `<p class="card-caption" style="margin:4px 0 0;">${escapeHtml(message)}</p>` : ""}</div>`;
+        toastElement.setAttribute("role", "status");
+        toastElement.innerHTML = `<span class="toast-icon"><i data-lucide="sparkles"></i></span><div class="toast-body"><strong>${escapeHtml(title)}</strong>${message ? `<p class="toast-message">${escapeHtml(message)}</p>` : ""}</div><span class="toast-progress" aria-hidden="true"></span>`;
         element("toastStack").appendChild(toastElement);
         icons();
-        setTimeout(() => toastElement.remove(), 4200);
+
+        let timer = null;
+        let leaving = false;
+        const remove = () => toastElement.remove();
+        const dismiss = () => {
+            if (leaving) {
+                return;
+            }
+            leaving = true;
+            clearTimeout(timer);
+            toastElement.classList.add("is-leaving");
+            toastElement.addEventListener("animationend", (event) => {
+                if (event.target === toastElement && event.animationName === "toastOut") {
+                    remove();
+                }
+            });
+            setTimeout(remove, 450); // fallback if animationend doesn't fire
+        };
+        const startTimer = () => {
+            timer = setTimeout(dismiss, 4200);
+        };
+        startTimer();
+
+        // Click anywhere on the toast to dismiss; hover pauses the auto-dismiss.
+        toastElement.addEventListener("click", dismiss);
+        toastElement.addEventListener("mouseenter", () => {
+            clearTimeout(timer);
+            toastElement.classList.add("is-paused");
+        });
+        toastElement.addEventListener("mouseleave", () => {
+            if (!leaving) {
+                toastElement.classList.remove("is-paused");
+                startTimer();
+            }
+        });
     }
 
     function icons() {
