@@ -1,12 +1,7 @@
-// Shared helpers for the custom form components (mirrors app.js escapeHtml).
-export function escapeHtml(value) {
-    return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
+// Shared helpers for the custom form components.
+// escapeHtml lives in the shared format module; re-export so component imports
+// (from "./util.js") stay unchanged.
+export { escapeHtml } from "../lib/format.js";
 
 // Re-run Lucide so freshly-inserted <i data-lucide> become SVGs.
 export function refreshIcons() {

@@ -1,5 +1,6 @@
 ﻿import "./components/select.js";
 import "./components/datepicker.js";
+import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv, unique, imageUrl } from "./lib/format.js";
 
 (() => {
     "use strict";
@@ -28,8 +29,11 @@ import "./components/datepicker.js";
     const genderLabels = { male: "чоловіча", female: "жіноча" };
     const dataModeLabels = { local: "локальний", api: "backend" };
 
-    const APP_VERSION = "0.8.0";
+    const APP_VERSION = "0.8.1";
     const CHANGELOG = [
+        { version: "0.8.1", date: "2026-06-28", title: "Фікс пікера дати на телефоні", items: [
+            { type: "fix", text: "На телефоні тап по полю дати тепер одразу відкриває нативний вибір дати" }
+        ] },
         { version: "0.8.0", date: "2026-06-28", title: "Власні пікери дат і списків", items: [
             { type: "feature", text: "Власний пікер дати: зручний календар на десктопі та нативний вибір на телефоні" },
             { type: "feature", text: "Кастомні випадаючі списки з анімацією та іконками — у всіх формах і фільтрах" }
@@ -4360,11 +4364,6 @@ import "./components/datepicker.js";
         return `<div class="avatar ${size}" style="background:${escapeHtml(user.avatarColor)};">${escapeHtml(user.avatarInitials)}${image}</div>`;
     }
 
-    function imageUrl(value) {
-        const url = String(value || "").trim();
-        return /^https?:\/\//i.test(url) ? url : "";
-    }
-
     function ordered(items) {
         return `<ol>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>`;
     }
@@ -4375,14 +4374,6 @@ import "./components/datepicker.js";
 
     function select(id, options, selected) {
         return `<gym-select id="${id}">${options.map((option) => `<option value="${escapeHtml(option)}" ${option === selected ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</gym-select>`;
-    }
-
-    function splitCsv(value) {
-        return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
-    }
-
-    function unique(items) {
-        return [...new Set(items)].sort();
     }
 
     function uniqueStrings(items) {
@@ -4682,26 +4673,6 @@ import "./components/datepicker.js";
         return Math.floor((startDay(left) - startDay(right)) / 86400000);
     }
 
-    function dateInput(date) {
-        const result = new Date(date);
-        return `${result.getFullYear()}-${String(result.getMonth() + 1).padStart(2, "0")}-${String(result.getDate()).padStart(2, "0")}`;
-    }
-
-    function formatDate(value) {
-        return value ? new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value)) : "—";
-    }
-
-    function shortDate(value) {
-        return new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short" }).format(new Date(value));
-    }
-
-    function seconds(value) {
-        return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
-    }
-
-    function number(value) {
-        return new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 1 }).format(Number(value) || 0);
-    }
 
     function numberValue(id, fallback) {
         return Number(inputValue(id)) || fallback;
@@ -4730,10 +4701,6 @@ import "./components/datepicker.js";
 
     function createId(prefix) {
         return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-    }
-
-    function escapeHtml(value) {
-        return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
     }
 
     async function persist(options = {}) {

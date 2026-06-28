@@ -3806,17 +3806,30 @@ ul {
 }
 
 /* Date trigger */
+/* The native <input type=date> overlays the whole field, transparent. On desktop
+   it is click-through (pointer-events:none) so the trigger opens the custom
+   calendar. On touch devices it becomes the tap target so a tap opens the
+   reliable native OS date picker directly (no showPicker() quirks). */
 .gdate-native {
     position: absolute;
-    width: 1px;
-    height: 1px;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
     padding: 0;
-    margin: -1px;
     border: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
+    background: transparent;
     opacity: 0;
+    -webkit-appearance: none;
+    appearance: none;
     pointer-events: none;
+}
+
+@media (pointer: coarse) {
+    .gdate-native {
+        pointer-events: auto;
+        z-index: 2;
+    }
 }
 
 .gdate-icon {
