@@ -4084,4 +4084,53 @@
     }
 })();
 
+// Branded DevTools console banner + self-XSS warning. Pure client-side UX, no
+// effect on the app. Exposed as window.gymosBanner() for manual re-print.
+(function gymosConsoleBanner() {
+    if (typeof window === "undefined" || typeof console === "undefined") {
+        return;
+    }
+
+    const version = (window.FORGE_CONFIG && window.FORGE_CONFIG.version) || "0.1.0";
+    const repoUrl = "https://github.com/shkarsmode/gym-os";
+
+    const ascii = [
+        " ██████╗ ██╗   ██╗███╗   ███╗ ██████╗ ███████╗",
+        "██╔════╝ ╚██╗ ██╔╝████╗ ████║██╔═══██╗██╔════╝",
+        "██║  ███╗ ╚████╔╝ ██╔████╔██║██║   ██║███████╗",
+        "██║   ██║  ╚██╔╝  ██║╚██╔╝██║██║   ██║╚════██║",
+        "╚██████╔╝   ██║   ██║ ╚═╝ ██║╚██████╔╝███████║",
+        " ╚═════╝    ╚═╝   ╚═╝     ╚═╝ ╚═════╝ ╚══════╝"
+    ].join("\n");
+
+    const style = {
+        green: "color:#34e89e;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.15;text-shadow:0 0 10px rgba(52,232,158,.45);",
+        pill: "background:linear-gradient(135deg,#34e89e,#0a8f5f);color:#04150f;font-weight:800;font-size:13px;letter-spacing:3px;padding:6px 16px;border-radius:9px;",
+        tag: "color:#cfe9df;font-size:13px;font-weight:600;",
+        muted: "color:#7c8a83;font-size:12px;",
+        divider: "color:#1f2d27;font-size:12px;",
+        stop: "color:#ff5c5c;font-size:22px;font-weight:800;text-shadow:0 0 10px rgba(255,92,92,.4);",
+        warn: "color:#ffb3b3;font-size:13px;",
+        link: "color:#34e89e;font-size:12px;font-weight:700;"
+    };
+
+    function print() {
+        console.log("%c" + ascii, style.green);
+        console.log("%c GYM PROGRESS OS ", style.pill);
+        console.log("%c🏋️  Твій силовий прогрес під контролем — тренування, PR, рейтинги команди.", style.tag);
+        console.log("%cv" + version + "   ·   NestJS + Prisma + PostgreSQL   ·   Vanilla JS SPA", style.muted);
+        console.log("%c──────────────────────────────────────────────", style.divider);
+        console.log("%c⛔ Стоп!", style.stop);
+        console.log("%cЦе консоль для розробників. Не вставляй сюди код, який тобі хтось надіслав — це може дати доступ до твого акаунта GymOS (self-XSS).", style.warn);
+        console.log("%c💚 Любиш залізо і код? → " + repoUrl + "   ·   повтор: gymosBanner()", style.link);
+    }
+
+    window.gymosBanner = print;
+
+    if (!window.__gymosBannerShown) {
+        window.__gymosBannerShown = true;
+        print();
+    }
+})();
+
 
