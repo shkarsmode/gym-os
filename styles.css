@@ -3479,3 +3479,79 @@ ul {
     overflow: visible;
     text-overflow: clip;
 }
+
+/* ===== Activity feed (history) — robust grid layout + filter ===== */
+.activity-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.activity-item .activity-dot {
+    margin-top: 0;
+}
+
+.activity-main {
+    min-width: 0;
+}
+
+.activity-main strong,
+.activity-main .card-caption {
+    overflow-wrap: anywhere;
+}
+
+.activity-open {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.activity-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.segmented {
+    display: inline-flex;
+    padding: 3px;
+    gap: 3px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-2);
+}
+
+.segmented .segment-button {
+    min-height: 30px;
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    border-radius: var(--radius-pill);
+    color: var(--color-muted);
+    font-size: 13px;
+    font-weight: 600;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.segmented .segment-button:hover {
+    color: var(--color-text);
+    background: transparent;
+}
+
+.segmented .segment-button.active {
+    background: var(--color-accent-dim);
+    color: var(--color-accent);
+}
+
+@media (max-width: 640px) {
+    .activity-item {
+        grid-template-columns: auto 1fr;
+    }
+
+    .activity-open {
+        grid-column: 1 / -1;
+        width: 100%;
+        justify-content: center;
+    }
+}

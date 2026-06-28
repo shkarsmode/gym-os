@@ -25,8 +25,12 @@
     const genderLabels = { male: "чоловіча", female: "жіноча" };
     const dataModeLabels = { local: "локальний", api: "backend" };
 
-    const APP_VERSION = "0.7.1";
+    const APP_VERSION = "0.7.2";
     const CHANGELOG = [
+        { version: "0.7.2", date: "2026-06-28", title: "Стрічка історії: фільтр і фікс", items: [
+            { type: "feature", text: "Фільтр історії тренувань: Мої / Усі (за замовчуванням — Мої)" },
+            { type: "fix", text: "Виправлено верстку стрічки тренувань на мобільному" }
+        ] },
         { version: "0.7.1", date: "2026-06-28", title: "Редизайн карток вправ", items: [
             { type: "improvement", text: "Свіжий вигляд картки вправи: бейджі на зображенні, акуратний автор і дата, чисті кнопки дій" }
         ] },
@@ -85,6 +89,7 @@
         calendar: null,
         filters: {
             exerciseSearch: "",
+            activityScope: "mine",
             statsScope: "current",
             statsRange: "90",
             statsMuscle: "all",
@@ -1376,7 +1381,7 @@
                 <section class="card span-4"><h2>Статистика команди</h2>${kpi([{ label: "Тренування", value: team.completedWorkouts }, { label: "Командні кг", value: number(team.totalVolume) }, { label: "Кардіо хв", value: team.cardioMinutes }, { label: "Найактивніший", value: team.mostActiveUser.displayName }])}</section>
                 ${chartCard("Історія ваги тіла", "Щотижневі заміри.", "bodyweightChart", "span-6")}
                 ${chartCard("Кардіо хвилини", "Останні блоки кондиції.", "cardioChart", "span-6")}
-                <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">Спільна стрічка команди. Чужі тренування відкриваються лише для перегляду.</p></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="rankings">Відкрити рейтинги</button></div><div class="activity-feed">${activityFeed()}</div></section>
+                <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">${state.filters.activityScope === "all" ? "Спільна стрічка команди — чужі лише для перегляду." : "Твої завершені тренування."}</p></div><div class="activity-toolbar"><div class="segmented">${[["mine", "Мої"], ["all", "Усі"]].map(([value, label]) => `<button class="segment-button ${(state.filters.activityScope === "all" ? "all" : "mine") === value ? "active" : ""}" type="button" data-action="activity-scope" data-scope="${value}">${label}</button>`).join("")}</div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i>Рейтинги</button></div></div><div class="activity-feed">${activityFeed()}</div></section>
             </div>
         `);
         requestAnimationFrame(() => {
@@ -1698,6 +1703,7 @@
             "reject-exercise": () => rejectExerciseEntry(actionElement.dataset.exerciseId),
             "upgrade-plan": showUpgradeComingSoon,
             "open-changelog": () => { closeOverlay(); navigate("changelog"); },
+            "activity-scope": () => { state.filters.activityScope = actionElement.dataset.scope; renderSection(); },
             "open-exercise": () => openExercise(actionElement.dataset.exerciseId),
             "open-user": () => goToUser(actionElement.dataset.userId),
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
@@ -1824,6 +1830,7 @@
             "edit-exercise",
             "upgrade-plan",
             "open-changelog",
+            "activity-scope",
             "open-exercise",
             "open-user",
             "open-profile-editor",
@@ -3180,9 +3187,22 @@
     }
 
     function activityFeed() {
-        return state.database.workouts.filter((item) => item.status === "completed").sort(byDateDesc).slice(0, 8).map((workoutItem) => {
+        const scope = state.filters.activityScope === "all" ? "all" : "mine";
+        const me = currentUser();
+        let items = state.database.workouts.filter((item) => item.status === "completed");
+        if (scope === "mine" && me) {
+            items = items.filter((item) => item.userId === me.id);
+        }
+        items = items.sort(byDateDesc).slice(0, 8);
+        if (!items.length) {
+            return emptyInline(
+                scope === "mine" ? "У тебе ще немає завершених тренувань" : "Немає завершених тренувань",
+                scope === "mine" ? "Заверши тренування — і воно з'явиться тут." : "Стрічка оновиться, коли команда завершить тренування."
+            );
+        }
+        return items.map((workoutItem) => {
             const owner = userById(workoutItem.userId);
-            return `<article class="activity-item"><div class="activity-dot"></div><div style="flex:1;min-width:0;"><strong><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${escapeHtml(workoutLabel(workoutItem))}</strong><p class="card-caption">${formatDate(workoutItem.date)} · ${number(workoutVolume(workoutItem))} кг · ${workoutItem.exercises.length} вправ</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Відкрити</button></article>`;
+            return `<article class="activity-item"><span class="activity-dot"></span><div class="activity-main"><strong><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${escapeHtml(workoutLabel(workoutItem))}</strong><p class="card-caption">${formatDate(workoutItem.date)} · ${number(workoutVolume(workoutItem))} кг · ${workoutItem.exercises.length} вправ</p></div><button class="button button-secondary compact activity-open" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Відкрити</button></article>`;
         }).join("");
     }
 
