@@ -10,9 +10,17 @@
     <link rel="stylesheet" href="styles.css">
 
     <meta name="description" content="Преміальна платформа для планування тренувань, трекінгу підходів, особистих рекордів, кардіо та командної статистики.">
-    <meta name="theme-color" content="#0d0e10">
+    <meta name="theme-color" content="#08090a">
 
     <link rel="icon" href="favicon.ico" sizes="any">
+
+    <!-- PWA: installable + offline shell -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GymOS">
 </head>
 <body>
     <div class="app-shell">
@@ -71,5 +79,13 @@
         };
     </script>
     <script src="app.js"></script>
+    <script>
+        // PWA service worker — installable app + offline shell (network-first).
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("/sw.js").catch(() => {});
+            });
+        }
+    </script>
 </body>
 </html>

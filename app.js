@@ -11,6 +11,7 @@
         ["users", "Команда", "users"],
         ["admin", "Адмін", "shield"],
         ["profile", "Профіль", "user-round"],
+        ["changelog", "Що нового", "sparkles"],
         ["settings", "Налаштування", "settings"]
     ].map(([id, title, icon]) => ({ id, title, icon }));
 
@@ -22,6 +23,35 @@
     const workoutTypeLabels = { push: "Push", pull: "Pull", legs: "Legs", upper: "Upper", lower: "Lower", full_body: "Full Body", cardio: "Cardio", custom: "Custom" };
     const genderLabels = { male: "чоловіча", female: "жіноча" };
     const dataModeLabels = { local: "локальний", api: "backend" };
+
+    const APP_VERSION = "0.6.0";
+    const CHANGELOG = [
+        { version: "0.6.0", date: "2026-06-28", title: "Що нового, статуси та офлайн", items: [
+            { type: "feature", text: "Розділ «Що нового» з таймлайном усіх змін" },
+            { type: "feature", text: "Бейджі PRO / Адмін у команді та рейтингу" },
+            { type: "feature", text: "PWA: встановлення на телефон + офлайн-оболонка" }
+        ] },
+        { version: "0.5.0", date: "2026-06-28", title: "Ролі та адмін-панель", items: [
+            { type: "feature", text: "Адмін-панель: ролі Free / PRO / Адмін, апрув і модерація" },
+            { type: "feature", text: "Тарифи: Free — 1 трен/день, 2/тиждень, 1 вправа/міс; PRO — безліміт" },
+            { type: "fix", text: "Видалення вправи більше не падає з помилкою 500" }
+        ] },
+        { version: "0.4.0", date: "2026-06-28", title: "Власники вправ і модерація", items: [
+            { type: "feature", text: "Видно хто і коли додав вправу + редагування/видалення" },
+            { type: "feature", text: "Черга модерації нових і змінених вправ для адміна" },
+            { type: "feature", text: "Статистика авторів вправ" }
+        ] },
+        { version: "0.3.0", date: "2026-06-28", title: "Каталог вправ", items: [
+            { type: "feature", text: "+10 базових вправ із гіфками" },
+            { type: "fix", text: "Виправлені анімації для всіх вправ каталогу" },
+            { type: "improvement", text: "Реальні зовнішні посилання на силові нормативи" }
+        ] },
+        { version: "0.2.0", date: "2026-06-28", title: "UX та продуктивність", items: [
+            { type: "improvement", text: "Брендований банер у консолі + іконки авторизації (Google)" },
+            { type: "improvement", text: "Лінива загрузка графіків і календаря" }
+        ] }
+    ];
+    const changelogTagLabels = { feature: "Фіча", fix: "Фікс", improvement: "Покращення" };
 
     const templates = [
         ["push", "Push", "Базовий жим для грудей.", ["Жим лежачи"]],
@@ -833,6 +863,7 @@
         }
         renderShell();
         handleRoute();
+        requestAnimationFrame(maybeShowWhatsNew);
     }
 
     function createEmptyDatabase() {
@@ -1283,7 +1314,7 @@
         } else {
             element("sectionTitle").textContent = item.title;
         }
-        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, admin: adminPanel, profile, settings, user: () => userDetail(state.viewUserId) };
+        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, admin: adminPanel, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         icons();
         updateTopbarOffset();
@@ -1444,7 +1475,7 @@
     }
 
     function rankings() {
-        content(`<section class="card"><div class="card-header"><div><h2>Командний рейтинг</h2><p class="card-caption">За регулярністю, обсягом і найкращим підйомом. Натисни на учасника, щоб відкрити його тренування.</p></div></div><div class="table-wrap"><table><thead><tr><th>Користувач</th><th>Завершено</th><th>Обсяг</th><th>Найкращий підйом</th><th>Бал</th></tr></thead><tbody>${leaderboard().map((row, index) => `<tr class="row-link" data-action="open-user" data-user-id="${row.user.id}"><td><div class="list-row">${avatar(row.user, "tiny")}<strong>${index + 1}. ${escapeHtml(row.user.displayName)}</strong></div></td><td>${row.completedWorkouts}</td><td>${number(row.totalVolume)} кг</td><td>${row.bestLift ? `${escapeHtml(row.bestLift.exercise.name)} · ${number(row.bestLift.estimatedOneRepMax)} кг` : "—"}</td><td>${number(row.score)}</td></tr>`).join("")}</tbody></table></div></section>`);
+        content(`<section class="card"><div class="card-header"><div><h2>Командний рейтинг</h2><p class="card-caption">За регулярністю, обсягом і найкращим підйомом. Натисни на учасника, щоб відкрити його тренування.</p></div></div><div class="table-wrap"><table><thead><tr><th>Користувач</th><th>Завершено</th><th>Обсяг</th><th>Найкращий підйом</th><th>Бал</th></tr></thead><tbody>${leaderboard().map((row, index) => `<tr class="row-link" data-action="open-user" data-user-id="${row.user.id}"><td><div class="list-row">${avatar(row.user, "tiny")}<strong>${index + 1}. ${escapeHtml(row.user.displayName)}</strong>${roleStatusBadge(row.user)}</div></td><td>${row.completedWorkouts}</td><td>${number(row.totalVolume)} кг</td><td>${row.bestLift ? `${escapeHtml(row.bestLift.exercise.name)} · ${number(row.bestLift.estimatedOneRepMax)} кг` : "—"}</td><td>${number(row.score)}</td></tr>`).join("")}</tbody></table></div></section>`);
     }
 
     function users() {
@@ -1471,6 +1502,45 @@
         const modeOptions = storage.config.requireAuth ? `<option value="api" selected>Бекенд API</option>` : `<option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Бекенд API</option>`;
         const modeCaption = storage.config.requireAuth ? "Застосунок працює тільки через backend API. Зміни даних доступні після Google OAuth." : "Застосунок працює локально через IndexedDB/localStorage або через бекенд API.";
         content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Профіль</h2><p class="card-caption">Активний акаунт визначається авторизацією Google.</p><div class="list-row" style="margin-top:14px;">${avatar(currentUser())}<div><div class="profile-name">${escapeHtml(currentUser().displayName)}</div><div class="profile-meta">${escapeHtml(currentUser().name)}</div></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary compact" type="button" data-action="navigate" data-section="profile"><i data-lucide="user-round"></i>Відкрити профіль</button></div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Режим даних</h2><p class="card-caption">${modeCaption}</p><div class="field-grid"><div class="field"><label>Режим даних</label><select data-action="data-mode">${modeOptions}</select></div><div class="field"><label>Базовий URL API</label><input type="url" value="${escapeHtml(storage.apiBaseUrl)}" placeholder="https://gym-os-back.vercel.app" data-action="api-base-url"></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="check-backend"><i data-lucide="plug-zap"></i>Перевірити підключення</button><span class="status-badge ${storage.backendStatus === "online" ? "completed" : storage.backendStatus === "offline" ? "planned" : "readonly"}">Бекенд: ${backendStatusLabel(storage.backendStatus)}</span></div></section><section class="card span-6"><h2>Стан сховища</h2>${kpi([{ label: "Режим", value: dataModeLabel(storage.mode) }, { label: "Провайдер", value: storage.provider?.name || "backend API" }, { label: "Вправи", value: state.database.exercises.length }, { label: "Тренування", value: state.database.workouts.length }])}<div class="action-row" style="margin-top:14px;"><button class="button button-secondary" type="button" data-action="notifications"><i data-lucide="bell"></i>Тест таймера</button><button class="button button-danger" type="button" data-action="reset"><i data-lucide="rotate-ccw"></i>Скинути локальний кеш</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп GymOS і окремий імпорт каталогу вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"><label class="button button-secondary" for="exerciseCatalogInput"><i data-lucide="file-up"></i>Імпортувати каталог вправ з JSON</label><input class="hidden" id="exerciseCatalogInput" type="file" accept="application/json" data-action="import-exercise-catalog"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button><button class="button button-danger" type="button" data-action="reset-curated-exercises"><i data-lucide="list-x"></i>Залишити 2 базові вправи</button></div></section></div>`);
+    }
+
+    function changelog() {
+        content(`<section class="card"><div class="card-header"><div><h2>Що нового</h2><p class="card-caption">Останні зміни, фічі та виправлення GymOS</p></div><span class="role-badge admin"><i data-lucide="sparkles"></i>v${escapeHtml(APP_VERSION)}</span></div><div class="timeline">${CHANGELOG.map(changelogEntry).join("")}</div></section>`);
+    }
+
+    function changelogEntry(entry) {
+        return `<article class="timeline-entry"><div class="timeline-rail"><span class="timeline-dot"></span></div><div class="timeline-card"><div class="timeline-head"><span class="timeline-version">v${escapeHtml(entry.version)}</span><span class="timeline-date">${formatDate(entry.date)}</span></div><h3 class="timeline-title">${escapeHtml(entry.title)}</h3><ul class="timeline-items">${entry.items.map((item) => `<li><span class="cl-tag ${item.type}">${escapeHtml(changelogTagLabels[item.type] || item.type)}</span><span>${escapeHtml(item.text)}</span></li>`).join("")}</ul></div></article>`;
+    }
+
+    function maybeShowWhatsNew() {
+        try {
+            const key = "gymos-last-seen-version";
+            const seen = localStorage.getItem(key);
+            if (seen === APP_VERSION) {
+                return;
+            }
+            localStorage.setItem(key, APP_VERSION);
+            if (!seen) {
+                return; // first-ever load — don't interrupt onboarding
+            }
+            const latest = CHANGELOG[0];
+            openModal(`<div class="modal-header"><div><h2>Що нового · v${escapeHtml(APP_VERSION)}</h2><p class="card-caption">${escapeHtml(latest.title)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><ul class="whatsnew-list">${latest.items.map((item) => `<li><span class="cl-tag ${item.type}">${escapeHtml(changelogTagLabels[item.type] || item.type)}</span><span>${escapeHtml(item.text)}</span></li>`).join("")}</ul><div class="form-actions" style="justify-content:space-between;margin-top:18px;"><button class="button button-secondary" type="button" data-action="open-changelog">Усі зміни</button><button class="button button-primary" type="button" data-action="close-overlay"><i data-lucide="check"></i>Круто!</button></div>`);
+            icons();
+        } catch (error) {
+            // localStorage may be unavailable; ignore.
+        }
+    }
+
+    function roleStatusBadge(user) {
+        const isSuper = Boolean(user?.isSuperAdmin) || adminEmails.has(String(user?.email || "").toLowerCase());
+        const role = isSuper ? "admin" : String(user?.role || "free").toLowerCase();
+        if (role === "admin") {
+            return `<span class="role-badge admin"><i data-lucide="shield"></i>Адмін</span>`;
+        }
+        if (role === "premium") {
+            return `<span class="role-badge premium"><i data-lucide="crown"></i>PRO</span>`;
+        }
+        return "";
     }
 
     function bindEvents() {
@@ -1518,6 +1588,7 @@
             "approve-exercise": () => approveExerciseEntry(actionElement.dataset.exerciseId),
             "reject-exercise": () => rejectExerciseEntry(actionElement.dataset.exerciseId),
             "upgrade-plan": showUpgradeComingSoon,
+            "open-changelog": () => { closeOverlay(); navigate("changelog"); },
             "open-exercise": () => openExercise(actionElement.dataset.exerciseId),
             "open-user": () => goToUser(actionElement.dataset.userId),
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
@@ -1643,6 +1714,7 @@
             "open-custom-exercise",
             "edit-exercise",
             "upgrade-plan",
+            "open-changelog",
             "open-exercise",
             "open-user",
             "open-profile-editor",
@@ -2932,7 +3004,7 @@
     function userCard(user) {
         const summary = userStats(user.id);
         const isCurrent = user.id === currentUser().id;
-        return `<article class="user-card" data-action="open-user" data-user-id="${user.id}"><div class="list-row">${avatar(user, "xl")}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal || "")}</p></div></div><div style="margin-top:14px;">${kpi([{ label: "Тренування", value: summary.completedWorkouts }, { label: "Обсяг", value: number(summary.totalVolume) }, { label: "Кардіо", value: summary.cardioMinutes }])}</div><div class="tag-row" style="margin-top:12px;"><span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Це ви" : "Учасник"}</span></div></article>`;
+        return `<article class="user-card" data-action="open-user" data-user-id="${user.id}"><div class="list-row">${avatar(user, "xl")}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal || "")}</p></div></div><div style="margin-top:14px;">${kpi([{ label: "Тренування", value: summary.completedWorkouts }, { label: "Обсяг", value: number(summary.totalVolume) }, { label: "Кардіо", value: summary.cardioMinutes }])}</div><div class="tag-row" style="margin-top:12px;"><span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Це ви" : "Учасник"}</span>${roleStatusBadge(user)}</div></article>`;
     }
 
     function userDetail(userId) {

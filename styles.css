@@ -2858,3 +2858,132 @@ ul {
         flex: 1;
     }
 }
+
+/* ===== Changelog timeline + What's new ===== */
+.timeline {
+    position: relative;
+    margin-top: 18px;
+    padding-left: 8px;
+}
+
+.timeline-entry {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 14px;
+}
+
+.timeline-rail {
+    position: relative;
+    display: flex;
+    justify-content: center;
+}
+
+.timeline-rail::before {
+    content: "";
+    position: absolute;
+    top: 4px;
+    bottom: -14px;
+    width: 2px;
+    background: var(--color-border);
+}
+
+.timeline-entry:last-child .timeline-rail::before {
+    display: none;
+}
+
+.timeline-dot {
+    position: relative;
+    z-index: 1;
+    width: 14px;
+    height: 14px;
+    margin-top: 3px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 4px var(--color-accent-dim);
+}
+
+.timeline-card {
+    padding: 0 0 22px;
+    min-width: 0;
+}
+
+.timeline-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.timeline-version {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--color-accent);
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-dim);
+    border: 1px solid var(--color-accent-border);
+}
+
+.timeline-date {
+    font-size: 12px;
+    color: var(--color-faint);
+}
+
+.timeline-title {
+    margin: 0 0 10px;
+    font-size: 16px;
+}
+
+.timeline-items,
+.whatsnew-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.timeline-items li,
+.whatsnew-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--color-text);
+}
+
+.whatsnew-list {
+    margin-top: 14px;
+}
+
+.cl-tag {
+    flex-shrink: 0;
+    margin-top: 1px;
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    border: 1px solid var(--color-border);
+    white-space: nowrap;
+}
+
+.cl-tag.feature {
+    background: var(--color-accent-dim);
+    color: var(--color-accent);
+    border-color: var(--color-accent-border);
+}
+
+.cl-tag.fix {
+    background: var(--color-danger-dim);
+    color: var(--color-danger);
+    border-color: rgba(248, 113, 113, 0.32);
+}
+
+.cl-tag.improvement {
+    background: var(--color-info-dim);
+    color: var(--color-info);
+    border-color: rgba(96, 165, 250, 0.32);
+}
