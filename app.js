@@ -10,6 +10,7 @@
         ["rankings", "Рейтинги", "trophy"],
         ["users", "Команда", "users"],
         ["admin", "Адмін", "shield"],
+        ["subscription", "Підписка", "gem"],
         ["profile", "Профіль", "user-round"],
         ["changelog", "Що нового", "sparkles"],
         ["settings", "Налаштування", "settings"]
@@ -24,8 +25,14 @@
     const genderLabels = { male: "чоловіча", female: "жіноча" };
     const dataModeLabels = { local: "локальний", api: "backend" };
 
-    const APP_VERSION = "0.6.0";
+    const APP_VERSION = "0.7.0";
     const CHANGELOG = [
+        { version: "0.7.0", date: "2026-06-28", title: "Підписка та статуси", items: [
+            { type: "feature", text: "Окрема вкладка «Підписка»: порівняння Free та PRO, переваги й ціна" },
+            { type: "feature", text: "Бейджі PRO / Адмін у профілі та календарі + клік по бейджу → підписка" },
+            { type: "improvement", text: "Кнопка апгрейду до PRO у бічній панелі для Free-тарифу" },
+            { type: "improvement", text: "Особистий бейдж «Моя» на власних вправах + свої вправи першими у виборі" }
+        ] },
         { version: "0.6.0", date: "2026-06-28", title: "Що нового, статуси та офлайн", items: [
             { type: "feature", text: "Розділ «Що нового» з таймлайном усіх змін" },
             { type: "feature", text: "Бейджі PRO / Адмін у команді та рейтингу" },
@@ -1295,6 +1302,9 @@
             </div>
             <div class="progress-track" style="margin-top: 14px;"><div class="progress-fill" style="width: ${Math.min(100, stats.completedWorkouts * 5)}%;"></div></div>
             <div class="profile-meta" style="margin-top: 8px;">Поточний рівень: ${escapeHtml(mainRank(user.id))}</div>
+            ${hasUnlimited()
+                ? `<div class="sidebar-role" style="margin-top: 10px;">${roleStatusBadge(user)}</div>`
+                : `<button class="button button-primary compact sidebar-upgrade" type="button" data-action="navigate" data-section="subscription"><i data-lucide="rocket"></i>Апгрейд до PRO</button>`}
         `;
     }
 
@@ -1314,7 +1324,7 @@
         } else {
             element("sectionTitle").textContent = item.title;
         }
-        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, admin: adminPanel, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
+        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, admin: adminPanel, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         icons();
         updateTopbarOffset();
@@ -1452,7 +1462,7 @@
     function calendar() {
         const overview = calendarOverview();
         const history = workoutsFor(currentUser().id).sort(byDateDesc).slice(0, 8);
-        content(`<div class="grid dashboard-grid">${metric("Цього тижня", overview.weekWorkouts, "calendar-check", "Тренувань", "span-3")}${metric("Завершено", overview.weekCompleted, "check-circle-2", "За поточний тиждень", "span-3")}${metric("Цього місяця", overview.monthWorkouts, "calendar-range", "Усі тренування", "span-3")}${metric("Серія", `${overview.streak} дн.`, "flame", "Завершені тренування поспіль", "span-3")}<section class="calendar-shell span-8"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div><button class="button button-primary compact" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button></div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-4"><h2>Огляд</h2>${kpi([{ label: "Тиждень", value: overview.weekWorkouts }, { label: "Місяць", value: overview.monthWorkouts }, { label: "Кардіо дні", value: overview.cardioDays }, { label: "Усього", value: workoutsFor(currentUser().id).length }])}</section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
+        content(`<div class="grid dashboard-grid">${metric("Цього тижня", overview.weekWorkouts, "calendar-check", "Тренувань", "span-3")}${metric("Завершено", overview.weekCompleted, "check-circle-2", "За поточний тиждень", "span-3")}${metric("Цього місяця", overview.monthWorkouts, "calendar-range", "Усі тренування", "span-3")}${metric("Серія", `${overview.streak} дн.`, "flame", "Завершені тренування поспіль", "span-3")}<section class="calendar-shell span-8"><div class="card-header" style="margin-bottom:16px;"><div><div class="title-with-badge"><h2>Календар</h2>${roleStatusBadge(currentUser())}</div><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div><button class="button button-primary compact" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button></div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-4"><h2>Огляд</h2>${kpi([{ label: "Тиждень", value: overview.weekWorkouts }, { label: "Місяць", value: overview.monthWorkouts }, { label: "Кардіо дні", value: overview.cardioDays }, { label: "Усього", value: workoutsFor(currentUser().id).length }])}</section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
         requestAnimationFrame(renderCalendar);
     }
 
@@ -1491,7 +1501,7 @@
         const user = currentUser();
         const summary = userStats(user.id);
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span><span class="status-badge completed">Можна редагувати</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></div></section>${isAdmin() ? approvalQueueCard() : ""}${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span>${roleStatusBadge(user)}<span class="status-badge completed">Можна редагувати</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></div></section>${isAdmin() ? approvalQueueCard() : ""}${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
@@ -1534,13 +1544,68 @@
     function roleStatusBadge(user) {
         const isSuper = Boolean(user?.isSuperAdmin) || adminEmails.has(String(user?.email || "").toLowerCase());
         const role = isSuper ? "admin" : String(user?.role || "free").toLowerCase();
-        if (role === "admin") {
-            return `<span class="role-badge admin"><i data-lucide="shield"></i>Адмін</span>`;
+        if (role !== "admin" && role !== "premium") {
+            return "";
         }
-        if (role === "premium") {
-            return `<span class="role-badge premium"><i data-lucide="crown"></i>PRO</span>`;
-        }
-        return "";
+        // Only the current user's own badge is a link to Підписка — on other members'
+        // cards/rows it must stay inert so it doesn't hijack their open-profile click.
+        const me = currentUser();
+        const link = Boolean(me && user && user.id === me.id);
+        const cls = `role-badge ${role}${link ? " role-badge-link" : ""}`;
+        const dataAttrs = link ? ` data-action="navigate" data-section="subscription" title="Підписка"` : "";
+        const icon = role === "admin" ? "shield" : "crown";
+        const label = role === "admin" ? "Адмін" : "PRO";
+        return `<span class="${cls}"${dataAttrs}><i data-lucide="${icon}"></i>${label}</span>`;
+    }
+
+    function subscription() {
+        const admin = isAdmin();
+        const isPro = hasUnlimited();
+        const planKey = admin ? "admin" : (isPro ? "pro" : "free");
+        const planLabel = admin ? "Адмін" : (isPro ? "PRO" : "Free");
+        const heroNote = admin
+            ? "У тебе повний доступ адміністратора."
+            : (isPro ? "Дякуємо! Активний PRO — безліміт у всьому." : "Ти на безкоштовному тарифі. Прокачайся до PRO за $2/міс.");
+        const freeFeatures = [
+            ["dumbbell", "1 тренування/день, 2/тиждень"],
+            ["list-plus", "1 власна вправа на місяць"],
+            ["bar-chart-3", "Базова статистика"],
+            ["users", "Команда, рейтинги, календар"]
+        ];
+        const proFeatures = [
+            ["infinity", "Безлімітні тренування та вправи"],
+            ["bar-chart-3", "Розширена аналітика й прогрес"],
+            ["history", "Повна історія тренувань"],
+            ["download", "Експорт даних (CSV / PDF)"],
+            ["crown", "Бейдж PRO у команді й рейтингу"],
+            ["cloud", "Пріоритетна синхронізація"],
+            ["heart", "Підтримка розробки 💚"]
+        ];
+        const cmp = [
+            ["Тренувань на день", "1", "∞"],
+            ["Тренувань на тиждень", "2", "∞"],
+            ["Власні вправи", "1 / міс", "∞"],
+            ["Розширена аналітика", false, true],
+            ["Повна історія тренувань", false, true],
+            ["Експорт даних", false, true],
+            ["Бейдж PRO статусу", false, true],
+            ["Пріоритетна синхронізація", false, true]
+        ];
+        const cmpCell = (value) => value === true
+            ? `<i data-lucide="check" class="cmp-yes"></i>`
+            : (value === false ? `<i data-lucide="x" class="cmp-no"></i>` : `<span>${escapeHtml(String(value))}</span>`);
+        const proCta = isPro
+            ? `<button class="button button-secondary" type="button" disabled><i data-lucide="check-circle-2"></i>Активно</button>`
+            : `<button class="button button-primary paywall-cta" type="button" data-action="upgrade-plan"><i data-lucide="rocket"></i>Оформити PRO — $2/міс</button>`;
+        content(`<div class="grid dashboard-grid">
+            <section class="card span-12 sub-hero"><div class="sub-hero-glow"></div><div class="sub-hero-row"><div class="sub-hero-info"><p class="card-caption">Твій тариф</p><h2 class="sub-hero-plan">${escapeHtml(planLabel)}</h2><p class="card-caption">${escapeHtml(heroNote)}</p></div>${isPro
+                ? `<span class="role-badge ${admin ? "admin" : "premium"} sub-hero-badge"><i data-lucide="${admin ? "shield" : "crown"}"></i>${admin ? "Адмін" : "PRO"}</span>`
+                : `<button class="button button-primary paywall-cta" type="button" data-action="upgrade-plan"><i data-lucide="rocket"></i>Апгрейд до PRO</button>`}</div></section>
+            <section class="plan-card free span-6 ${planKey === "free" ? "current" : ""}"><div class="plan-head"><h3>Free</h3><div class="plan-price"><span class="plan-amount">$0</span></div></div><p class="card-caption">Базовий доступ для старту.</p><ul class="plan-features">${freeFeatures.map(([icon, text]) => `<li><i data-lucide="${icon}"></i><span>${escapeHtml(text)}</span></li>`).join("")}</ul>${planKey === "free" ? `<div class="plan-current-tag">Поточний план</div>` : ""}</section>
+            <section class="plan-card pro span-6 ${isPro ? "current" : ""}"><div class="plan-glow"></div><div class="plan-head"><h3><i data-lucide="crown"></i>PRO</h3><div class="plan-price"><span class="plan-amount">$2</span><span class="plan-period">/міс</span></div></div><p class="card-caption">Безліміт і всі можливості GymOS.</p><ul class="plan-features">${proFeatures.map(([icon, text]) => `<li><i data-lucide="${icon}"></i><span>${escapeHtml(text)}</span></li>`).join("")}</ul>${proCta}</section>
+            <section class="card span-12"><div class="card-header"><div><h2>Порівняння тарифів</h2><p class="card-caption">Що входить у кожен тариф.</p></div></div><div class="table-wrap"><table class="cmp-table"><thead><tr><th>Можливість</th><th>Free</th><th class="cmp-pro-col">PRO</th></tr></thead><tbody>${cmp.map((row) => `<tr><td>${escapeHtml(row[0])}</td><td class="cmp-free">${cmpCell(row[1])}</td><td class="cmp-pro-col">${cmpCell(row[2])}</td></tr>`).join("")}</tbody></table></div></section>
+            <p class="card-caption sub-foot">Онлайн-оплата скоро запрацює — зараз це прев'ю тарифу PRO.</p>
+        </div>`);
     }
 
     function bindEvents() {
@@ -1994,11 +2059,13 @@
             return emptyInline("Нічого не знайдено", "Спробуй іншу назву, групу м'язів або обладнання.");
         }
         const limit = 60;
-        const shown = items.slice(0, limit);
+        // Surface the current user's own exercises first (sort by the "Моя" badge).
+        const sorted = items.slice().sort((left, right) => (isMyExercise(right) ? 1 : 0) - (isMyExercise(left) ? 1 : 0));
+        const shown = sorted.slice(0, limit);
         const note = items.length > limit
             ? `<p class="card-caption picker-count">Показано ${limit} з ${items.length} — уточни пошук або фільтри.</p>`
             : `<p class="card-caption picker-count">Знайдено: ${items.length}</p>`;
-        return note + shown.map((exercise) => `<article class="exercise-card${exerciseMedia(exercise) ? " has-thumb" : ""}">${exerciseThumb(exercise)}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
+        return note + shown.map((exercise) => `<article class="exercise-card${exerciseMedia(exercise) ? " has-thumb" : ""}">${exerciseThumb(exercise)}<h3>${escapeHtml(exercise.name)}${isMyExercise(exercise) ? `<span class="picker-mine-flag"><i data-lucide="bookmark-check"></i>Моя</span>` : ""}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
     }
 
     function openCustomExercise(exercise = null) {
@@ -2902,7 +2969,7 @@
         const pending = exercise.status === "pending";
         const canEdit = canEditExercise(exercise);
         const added = exercise.createdAt ? formatDate(exercise.createdAt) : "";
-        const badges = `${exercise.isCustom ? `<span class="badge accent">Власна</span>` : ""}${pending ? `<span class="badge pending">На модерації</span>` : ""}`;
+        const badges = `${isMyExercise(exercise) ? `<span class="badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : ""}${pending ? `<span class="badge pending">На модерації</span>` : ""}`;
         const ownerBadge = `<span class="owner-badge" title="Хто додав"><i data-lucide="user-round"></i>${escapeHtml(exerciseOwnerName(exercise))}${added ? ` · ${added}` : ""}</span>`;
         const editActions = canEdit
             ? `<div class="exercise-card-actions">${pending && isAdmin() ? `<button class="icon-button success" type="button" title="Схвалити" data-action="approve-exercise" data-exercise-id="${exercise.id}"><i data-lucide="check"></i></button>` : ""}<button class="icon-button" type="button" title="Редагувати" data-action="edit-exercise" data-exercise-id="${exercise.id}"><i data-lucide="pen-line"></i></button><button class="icon-button danger" type="button" title="Видалити" data-action="delete-exercise" data-exercise-id="${exercise.id}"><i data-lucide="trash-2"></i></button></div>`
@@ -3016,7 +3083,7 @@
         const summary = userStats(user.id);
         const isCurrent = user.id === currentUser().id;
         const history = workoutsFor(user.id).sort(byDateDesc);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:8px;"><span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="status-badge completed">Це ви</span>` : ""}</div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}<section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:8px;"><span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${roleStatusBadge(user)}${isCurrent ? `<span class="status-badge completed">Це ви</span>` : ""}</div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}<section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section></div>`);
     }
 
     function exerciseMedia(exercise) {
@@ -3789,6 +3856,12 @@
         }
         const me = currentUser();
         return isAdmin() || (Boolean(me) && exercise.createdByUserId === me.id);
+    }
+
+    // True only for the exercise's own creator — drives the personal "Моя" badge.
+    function isMyExercise(exercise) {
+        const me = currentUser();
+        return Boolean(me && exercise && exercise.createdByUserId === me.id);
     }
 
     function exerciseOwnerName(exercise) {
