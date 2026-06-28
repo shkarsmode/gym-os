@@ -25,8 +25,13 @@
     const genderLabels = { male: "чоловіча", female: "жіноча" };
     const dataModeLabels = { local: "локальний", api: "backend" };
 
-    const APP_VERSION = "0.7.2";
+    const APP_VERSION = "0.7.3";
     const CHANGELOG = [
+        { version: "0.7.3", date: "2026-06-28", title: "Підказки на дашборді", items: [
+            { type: "feature", text: "Підказки (?) на кожній метриці дашборда — що це, що означає число та навіщо воно тобі" },
+            { type: "improvement", text: "Бейдж «Фікс» у списку змін тепер приємного помаранчевого кольору" },
+            { type: "improvement", text: "Прискорено завантаження: застосунок збирається через Vite з хешованими ресурсами" }
+        ] },
         { version: "0.7.2", date: "2026-06-28", title: "Стрічка історії: фільтр і фікс", items: [
             { type: "feature", text: "Фільтр історії тренувань: Мої / Усі (за замовчуванням — Мої)" },
             { type: "fix", text: "Виправлено верстку стрічки тренувань на мобільному" }
@@ -1306,7 +1311,7 @@
                 ${avatar(user, "small")}
                 <div>
                     <div class="profile-name">${escapeHtml(user.displayName)}</div>
-                    <div class="profile-meta">${stats.completedWorkouts} тренувань · ${number(stats.totalVolume)} кг</div>
+                    <div class="profile-meta">${stats.completedWorkouts} тренувань · ${number(stats.totalVolume)} кг${infoTip("Загальний підсумок", "Загальний підсумок твоєї активності. Показує кількість проведених тренувань та сумарну вагу, яку ти підняв за весь час. Допомагає бачити глобальний масштаб твоєї роботи та мотивує не зупинятися.")}</div>
                 </div>
             </div>
             <div class="progress-track" style="margin-top: 14px;"><div class="progress-fill" style="width: ${Math.min(100, stats.completedWorkouts * 5)}%;"></div></div>
@@ -1351,6 +1356,18 @@
         }
     }
 
+    // Plain-language explanations for every dashboard metric — "що це / що означає
+    // число / навіщо це мені". Surfaced via the info tooltips (see infoTip).
+    const dashboardTips = {
+        volume: "Сумарний робочий обсяг (тоннаж). Це загальна вага, яку ти підняв за поточний тиждень (вага × повторення × підходи). Головний маркер прогресивного навантаження: якщо обсяг стабільно зростає без шкоди для техніки, твої м'язи стають сильнішими та адаптуються до навантажень.",
+        cardio: "Час кардіонавантажень. Сумарний час у хвилинах, присвячений витривалості та здоров'ю серцево-судинної системи за поточний тиждень. Корисно для відстеження балансу між силовими тренуваннями та кардіо для відновлення або спалювання калорій.",
+        volumeChart: "Розподіл навантаження за днями тижня. Показує, в які дні ти виклався на максимум, а коли відпочивав. Допомагає аналізувати періодизацію тренувань та уникати перетренованості.",
+        muscleChart: "Аналітика м'язових груп. Показує відсоткове співвідношення підходів на різні частини тіла (груди, плечі, трицепс тощо). Допомагає контролювати баланс розвитку тіла, щоб уникати м'язових дисбалансів та рівномірно навантажувати всі цільові групи.",
+        ops: "Швидка статистика поточної активності. «Завершено» — кількість тренувань, «Серія» — кількість днів регулярних тренувань поспіль (твій страйк), «Підходи» — сумарна кількість виконаних робочих серій. Тримай страйк, щоб будувати звичку!",
+        pr: "Твій особистий рекорд (Personal Record). Розрахунковий максимум на 1 повторення (1ПМ) на основі твоїх останніх важких підходів. Головний показник твого пікового силового потенціалу в конкретній вправі.",
+        team: "Спільний прогрес твого спортивного ком'юніті. Сума тренувань та кілограмів, піднятих усіма учасниками твоєї групи. Мотивує змагальним духом та показує силу командної роботи."
+    };
+
     function dashboard() {
         const user = currentUser();
         const stats = userStats(user.id);
@@ -1360,8 +1377,8 @@
             <div class="grid dashboard-grid">
                 ${metric("Сьогодні", todayLabel(user.id), "calendar-check", todayCaption(user.id), "span-3")}
                 ${metric("Поточне тренування", activeWorkoutFor(user.id)?.title || "Немає активного", "activity", activeWorkoutFor(user.id) ? "Триває зараз" : "Можна почати нове", "span-3")}
-                ${metric("Обсяг за тиждень", `${number(stats.weekVolume)} кг`, "boxes", `${stats.weekSets} підходів цього тижня`, "span-3")}
-                ${metric("Кардіо за тиждень", `${stats.weekCardioMinutes} хв`, "heart-pulse", "Кондиція врахована", "span-3")}
+                ${metric("Обсяг за тиждень", `${number(stats.weekVolume)} кг`, "boxes", `${stats.weekSets} підходів цього тижня`, "span-3", dashboardTips.volume)}
+                ${metric("Кардіо за тиждень", `${stats.weekCardioMinutes} хв`, "heart-pulse", "Кондиція врахована", "span-3", dashboardTips.cardio)}
                 <section class="card span-12">
                     <div class="card-header">
                         <div>
@@ -1374,11 +1391,11 @@
                         <button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Перейти до календаря</button>
                     </div>
                 </section>
-                ${chartCard("Обсяг за тиждень", "Завершений робочий обсяг за днями.", "weeklyVolumeChart", "span-8")}
-                ${chartCard("Розподіл м'язів", "Підходи у завершених тренуваннях.", "muscleChart", "span-4")}
-                <section class="card span-4"><h2>Операційна панель</h2>${kpi([{ label: "Завершено", value: stats.completedWorkouts }, { label: "Усього кг", value: number(stats.totalVolume) }, { label: "Серія", value: stats.trainingStreak }, { label: "Підходи", value: stats.totalSets }])}<div class="insight-grid" style="margin-top: 14px;">${insights(user.id).slice(0, 3).map(insightCard).join("")}</div></section>
-                <section class="card span-4"><h2>Останній PR</h2>${record ? recordCard(record) : emptyInline("Поки немає особистих рекордів", "Заверши тренування з робочими підходами, щоб GymOS визначив PR.")}</section>
-                <section class="card span-4"><h2>Статистика команди</h2>${kpi([{ label: "Тренування", value: team.completedWorkouts }, { label: "Командні кг", value: number(team.totalVolume) }, { label: "Кардіо хв", value: team.cardioMinutes }, { label: "Найактивніший", value: team.mostActiveUser.displayName }])}</section>
+                ${chartCard("Обсяг за тиждень", "Завершений робочий обсяг за днями.", "weeklyVolumeChart", "span-8", dashboardTips.volumeChart)}
+                ${chartCard("Розподіл м'язів", "Підходи у завершених тренуваннях.", "muscleChart", "span-4", dashboardTips.muscleChart)}
+                <section class="card span-4">${sectionHeading("Операційна панель", dashboardTips.ops)}${kpi([{ label: "Завершено", value: stats.completedWorkouts }, { label: "Усього кг", value: number(stats.totalVolume) }, { label: "Серія", value: stats.trainingStreak }, { label: "Підходи", value: stats.totalSets }])}<div class="insight-grid" style="margin-top: 14px;">${insights(user.id).slice(0, 3).map(insightCard).join("")}</div></section>
+                <section class="card span-4">${sectionHeading("Останній PR", dashboardTips.pr)}${record ? recordCard(record) : emptyInline("Поки немає особистих рекордів", "Заверши тренування з робочими підходами, щоб GymOS визначив PR.")}</section>
+                <section class="card span-4">${sectionHeading("Статистика команди", dashboardTips.team)}${kpi([{ label: "Тренування", value: team.completedWorkouts }, { label: "Командні кг", value: number(team.totalVolume) }, { label: "Кардіо хв", value: team.cardioMinutes }, { label: "Найактивніший", value: team.mostActiveUser.displayName }])}</section>
                 ${chartCard("Історія ваги тіла", "Щотижневі заміри.", "bodyweightChart", "span-6")}
                 ${chartCard("Кардіо хвилини", "Останні блоки кондиції.", "cardioChart", "span-6")}
                 <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">${state.filters.activityScope === "all" ? "Спільна стрічка команди — чужі лише для перегляду." : "Твої завершені тренування."}</p></div><div class="activity-toolbar"><div class="segmented">${[["mine", "Мої"], ["all", "Усі"]].map(([value, label]) => `<button class="segment-button ${(state.filters.activityScope === "all" ? "all" : "mine") === value ? "active" : ""}" type="button" data-action="activity-scope" data-scope="${value}">${label}</button>`).join("")}</div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i>Рейтинги</button></div></div><div class="activity-feed">${activityFeed()}</div></section>
@@ -1674,6 +1691,151 @@
         if (collapseButton) {
             collapseButton.addEventListener("click", toggleSidebar);
         }
+        setupTooltips();
+    }
+
+    // Shared, delegated tooltip engine for [data-tip-body] triggers (see infoTip).
+    // One floating bubble, positioned in JS so it never clips inside cards.
+    // Hover opens after a 200ms delay (no flicker on quick mouse passes); tap
+    // toggles on touch; focus opens for keyboard users.
+    function setupTooltips() {
+        let tipEl = null;
+        let arrowEl = null;
+        let contentEl = null;
+        let showTimer = null;
+        let activeTrigger = null;
+
+        function ensureEl() {
+            if (tipEl) {
+                return;
+            }
+            tipEl = document.createElement("div");
+            tipEl.className = "app-tooltip";
+            tipEl.setAttribute("role", "tooltip");
+            arrowEl = document.createElement("div");
+            arrowEl.className = "app-tooltip-arrow up";
+            contentEl = document.createElement("div");
+            contentEl.className = "app-tooltip-content";
+            tipEl.append(arrowEl, contentEl);
+            document.body.appendChild(tipEl);
+        }
+
+        function position(trigger) {
+            const rect = trigger.getBoundingClientRect();
+            const tip = tipEl.getBoundingClientRect();
+            const margin = 8;
+            const gap = 10;
+            const centerX = rect.left + rect.width / 2;
+            let left = Math.max(margin, Math.min(centerX - tip.width / 2, window.innerWidth - tip.width - margin));
+            let top = rect.top - tip.height - gap;
+            let below = false;
+            if (top < margin) {
+                top = rect.bottom + gap;
+                below = true;
+            }
+            tipEl.style.left = `${Math.round(left)}px`;
+            tipEl.style.top = `${Math.round(top)}px`;
+            const arrowLeft = Math.max(12, Math.min(centerX - left - 5, tip.width - 22));
+            arrowEl.style.left = `${Math.round(arrowLeft)}px`;
+            if (below) {
+                arrowEl.className = "app-tooltip-arrow up";
+                arrowEl.style.top = "-5px";
+            } else {
+                arrowEl.className = "app-tooltip-arrow down";
+                arrowEl.style.top = `${Math.round(tip.height - 5)}px`;
+            }
+        }
+
+        function show(trigger) {
+            ensureEl();
+            const title = trigger.getAttribute("data-tip-title") || "";
+            const body = trigger.getAttribute("data-tip-body") || "";
+            if (!body) {
+                return;
+            }
+            contentEl.innerHTML = `${title ? `<div class="app-tooltip-title">${escapeHtml(title)}</div>` : ""}<div class="app-tooltip-body">${escapeHtml(body)}</div>`;
+            activeTrigger = trigger;
+            tipEl.style.left = "-9999px";
+            tipEl.style.top = "-9999px";
+            tipEl.classList.add("visible");
+            position(trigger);
+        }
+
+        function hide() {
+            if (showTimer) {
+                clearTimeout(showTimer);
+                showTimer = null;
+            }
+            activeTrigger = null;
+            if (tipEl) {
+                tipEl.classList.remove("visible");
+            }
+        }
+
+        document.addEventListener("mouseover", (event) => {
+            const trigger = event.target.closest("[data-tip-body]");
+            if (!trigger || trigger === activeTrigger) {
+                return;
+            }
+            if (showTimer) {
+                clearTimeout(showTimer);
+            }
+            showTimer = setTimeout(() => show(trigger), 200);
+        });
+
+        document.addEventListener("mouseout", (event) => {
+            const trigger = event.target.closest("[data-tip-body]");
+            if (!trigger) {
+                return;
+            }
+            if (event.relatedTarget && trigger.contains(event.relatedTarget)) {
+                return;
+            }
+            hide();
+        });
+
+        // Capture phase so a tap on the trigger toggles the tooltip without the
+        // click bubbling to a parent card action.
+        document.addEventListener("click", (event) => {
+            const trigger = event.target.closest("[data-tip-body]");
+            if (trigger) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (activeTrigger === trigger && tipEl && tipEl.classList.contains("visible")) {
+                    hide();
+                } else {
+                    if (showTimer) {
+                        clearTimeout(showTimer);
+                    }
+                    show(trigger);
+                }
+                return;
+            }
+            if (tipEl && tipEl.classList.contains("visible")) {
+                hide();
+            }
+        }, true);
+
+        document.addEventListener("focusin", (event) => {
+            const trigger = event.target.closest && event.target.closest("[data-tip-body]");
+            if (trigger) {
+                show(trigger);
+            }
+        });
+        document.addEventListener("focusout", (event) => {
+            const trigger = event.target.closest && event.target.closest("[data-tip-body]");
+            if (trigger) {
+                hide();
+            }
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                hide();
+            }
+        });
+        window.addEventListener("scroll", hide, true);
+        window.addEventListener("resize", hide);
+        window.addEventListener("hashchange", hide);
     }
 
     async function handleClick(event) {
@@ -2996,12 +3158,23 @@
         toast("Демодані скинуто", "Створено свіжу локальну базу.");
     }
 
-    function metric(title, value, icon, caption, span = "span-3") {
-        return `<section class="metric-card ${span}"><div class="card-header"><div><div class="metric-title">${escapeHtml(title)}</div><div class="metric-value">${escapeHtml(String(value))}</div><div class="stat-label">${escapeHtml(caption)}</div></div><div class="metric-icon"><i data-lucide="${icon}"></i></div></div></section>`;
+    // Subtle "?" trigger that opens a delayed, JS-positioned tooltip (see
+    // setupTooltips). Text lives in escaped data-attributes; no markup needed.
+    function infoTip(title, body) {
+        return `<button class="info-tip" type="button" tabindex="0" aria-label="${escapeHtml(title)}: пояснення" data-tip-title="${escapeHtml(title)}" data-tip-body="${escapeHtml(body)}"><i data-lucide="info"></i></button>`;
     }
 
-    function chartCard(title, caption, canvasId, span) {
-        return `<section class="card ${span} chart-card"><div class="card-header"><div><h2>${escapeHtml(title)}</h2><p class="card-caption">${escapeHtml(caption)}</p></div></div><div class="chart-box"><canvas id="${canvasId}"></canvas></div></section>`;
+    // Card <h2> heading with an optional inline info trigger next to it.
+    function sectionHeading(title, tip) {
+        return `<div class="section-heading"><h2>${escapeHtml(title)}</h2>${tip ? infoTip(title, tip) : ""}</div>`;
+    }
+
+    function metric(title, value, icon, caption, span = "span-3", tip = "") {
+        return `<section class="metric-card ${span}"><div class="card-header"><div><div class="metric-title">${escapeHtml(title)}${tip ? infoTip(title, tip) : ""}</div><div class="metric-value">${escapeHtml(String(value))}</div><div class="stat-label">${escapeHtml(caption)}</div></div><div class="metric-icon"><i data-lucide="${icon}"></i></div></div></section>`;
+    }
+
+    function chartCard(title, caption, canvasId, span, tip = "") {
+        return `<section class="card ${span} chart-card"><div class="card-header"><div>${sectionHeading(title, tip)}<p class="card-caption">${escapeHtml(caption)}</p></div></div><div class="chart-box"><canvas id="${canvasId}"></canvas></div></section>`;
     }
 
     function kpi(items) {

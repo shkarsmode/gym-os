@@ -3010,9 +3010,9 @@ ul {
 }
 
 .cl-tag.fix {
-    background: var(--color-danger-dim);
-    color: var(--color-danger);
-    border-color: rgba(248, 113, 113, 0.32);
+    background: rgba(251, 146, 60, 0.16);
+    color: #fdba74;
+    border-color: rgba(251, 146, 60, 0.36);
 }
 
 .cl-tag.improvement {
@@ -3554,4 +3554,106 @@ ul {
         width: 100%;
         justify-content: center;
     }
+}
+
+/* ===== Info tooltips for dashboard metrics ===== */
+.info-tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 6px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--color-faint);
+    cursor: help;
+    vertical-align: middle;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.info-tip:hover,
+.info-tip:focus-visible {
+    opacity: 1;
+    color: var(--color-accent);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.info-tip i,
+.info-tip svg {
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+}
+
+/* Heading + inline info trigger (used on card <h2> titles). */
+.section-heading {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.section-heading h2 {
+    margin: 0;
+}
+
+/* Floating tooltip bubble (positioned by JS, single shared element). */
+.app-tooltip {
+    position: fixed;
+    z-index: 2200;
+    max-width: 300px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(20, 21, 24, 0.98);
+    border: 1px solid var(--color-border-strong);
+    box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.7);
+    color: var(--color-text);
+    font-size: 12.5px;
+    line-height: 1.5;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+
+.app-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.app-tooltip-title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 5px;
+    color: #ffffff;
+    letter-spacing: 0.2px;
+}
+
+.app-tooltip-body {
+    color: var(--color-muted);
+}
+
+.app-tooltip-arrow {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: rgba(20, 21, 24, 0.98);
+    border-left: 1px solid var(--color-border-strong);
+    border-top: 1px solid var(--color-border-strong);
+}
+
+.app-tooltip-arrow.up {
+    transform: rotate(45deg);
+}
+
+.app-tooltip-arrow.down {
+    transform: rotate(-135deg);
 }
