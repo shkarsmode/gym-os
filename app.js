@@ -1311,6 +1311,11 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             pageEl.classList.remove("page-enter");
             void pageEl.offsetWidth;
             pageEl.classList.add("page-enter");
+            // Start each new tab at the top so the enter animation reads cleanly
+            // (skip when we're about to scroll to a freshly added exercise).
+            if (!pendingExerciseScrollId) {
+                window.scrollTo(0, 0);
+            }
         }
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
@@ -1350,7 +1355,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
                 ${metric("Поточне тренування", activeWorkoutFor(user.id)?.title || "Немає активного", "activity", activeWorkoutFor(user.id) ? "Триває зараз" : "Можна почати нове", "span-3")}
                 ${metric("Обсяг за тиждень", `${number(stats.weekVolume)} кг`, "boxes", `${stats.weekSets} підходів цього тижня`, "span-3", dashboardTips.volume)}
                 ${metric("Кардіо за тиждень", `${stats.weekCardioMinutes} хв`, "heart-pulse", "Кондиція врахована", "span-3", dashboardTips.cardio)}
-                <section class="card span-12">
+                <section class="card span-12 dash-quickstart">
                     <div class="card-header">
                         <div>
                             <h2>Швидкий старт</h2>
@@ -3167,7 +3172,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     }
 
     function metric(title, value, icon, caption, span = "span-3", tip = "") {
-        return `<section class="metric-card ${span}"><div class="card-header"><div><div class="metric-title">${escapeHtml(title)}${tip ? infoTip(title, tip) : ""}</div><div class="metric-value">${escapeHtml(String(value))}</div><div class="stat-label">${escapeHtml(caption)}</div></div><div class="metric-icon"><i data-lucide="${icon}"></i></div></div></section>`;
+        // Compact stat tile: icon + value + label. caption kept in the signature
+        // for callers but rendered as a title attr only (minimalist, less height).
+        return `<section class="metric-card ${span}"${caption ? ` title="${escapeHtml(caption)}"` : ""}><span class="metric-icon"><i data-lucide="${icon}"></i></span><div class="metric-body"><div class="metric-value">${escapeHtml(String(value))}</div><div class="metric-label"><span class="metric-label-text">${escapeHtml(title)}</span>${tip ? infoTip(title, tip) : ""}</div></div></section>`;
     }
 
     function chartCard(title, caption, canvasId, span, tip = "") {
