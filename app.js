@@ -1138,9 +1138,37 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
 
     function renderShell() {
         renderNavigation("sidebarNavigation", sectionItems.filter((item) => item.id !== "admin" || isAdmin()));
-        renderNavigation("mobileNavigation", sectionItems.filter((item) => mobileSectionIds.includes(item.id)));
+        renderMobileNavigation();
         renderCurrentUserButton();
         renderSidebarProfile();
+    }
+
+    // Mobile bottom bar: "Тренування" sits in the centre as an elevated accent
+    // button (pulses while a workout is active); the rest are icon+label tabs.
+    function renderMobileNavigation() {
+        const container = element("mobileNavigation");
+        const activeWorkout = activeWorkoutFor(currentUser().id);
+        const order = ["dashboard", "calendar", "workout", "stats", "profile"];
+        const mobileLabels = { workout: "Тренування" };
+        container.innerHTML = order.map((id) => {
+            const item = sectionItems.find((section) => section.id === id);
+            if (!item) {
+                return "";
+            }
+            const active = state.section === id ? "active" : "";
+            const label = escapeHtml(mobileLabels[id] || item.title);
+            if (id === "workout") {
+                return `<button class="mnav-center ${active}" type="button" data-action="navigate" data-section="workout" aria-label="${escapeHtml(item.title)}">
+                    <span class="mnav-center-btn"><i data-lucide="${item.icon}"></i>${activeWorkout ? `<span class="mnav-pulse" aria-hidden="true"></span>` : ""}</span>
+                    <span class="mnav-label">${label}</span>
+                </button>`;
+            }
+            return `<button class="mnav-item ${active}" type="button" data-action="navigate" data-section="${id}" aria-label="${escapeHtml(item.title)}">
+                <span class="mnav-ico"><i data-lucide="${item.icon}"></i></span>
+                <span class="mnav-label">${label}</span>
+            </button>`;
+        }).join("");
+        icons();
     }
 
     function renderAuthGate(message = "") {
@@ -1276,6 +1304,15 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, admin: adminPanel, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         icons();
+        // Subtle enter animation only when the section actually changes (not on
+        // in-place data re-renders), so navigation feels smooth, edits don't flash.
+        if (renderSection.lastSection !== state.section) {
+            renderSection.lastSection = state.section;
+            const pageEl = element("pageContent");
+            pageEl.classList.remove("page-enter");
+            void pageEl.offsetWidth;
+            pageEl.classList.add("page-enter");
+        }
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
 
@@ -4478,22 +4515,28 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
 
     let syncIndicatorTimeoutId = null;
 
+    // Save status lives inline in the topbar as a subtle chip (loading/success);
+    // errors escalate to a readable, dismissible toast instead of lingering there.
     function showSyncIndicator(status, message) {
-        let indicator = document.getElementById("syncIndicator");
-        if (!indicator) {
-            indicator = document.createElement("div");
-            indicator.id = "syncIndicator";
-            indicator.className = "sync-indicator";
-            document.body.appendChild(indicator);
+        if (status === "error") {
+            toast(message || "Щось пішло не так", "", "error");
+            return;
         }
-
-        indicator.className = `sync-indicator ${status}`;
-        indicator.innerHTML = `${status === "loading" ? `<span class="square-loader small" aria-hidden="true"></span>` : `<span class="sync-dot" aria-hidden="true"></span>`}<span>${escapeHtml(message)}</span>`;
-        indicator.classList.add("visible");
-
+        const chip = document.getElementById("syncChip");
+        if (!chip) {
+            return;
+        }
+        const icon = status === "loading"
+            ? `<span class="square-loader small" aria-hidden="true"></span>`
+            : `<span class="sync-chip-ico" aria-hidden="true"><i data-lucide="check"></i></span>`;
+        chip.className = `sync-chip visible ${status}`;
+        chip.innerHTML = `${icon}<span class="sync-chip-text">${escapeHtml(message)}</span>`;
+        if (status === "success") {
+            icons();
+        }
         clearTimeout(syncIndicatorTimeoutId);
         if (status !== "loading") {
-            syncIndicatorTimeoutId = setTimeout(() => indicator.classList.remove("visible"), status === "error" ? 6200 : 2200);
+            syncIndicatorTimeoutId = setTimeout(() => chip.classList.remove("visible"), 1900);
         }
     }
 
@@ -4534,11 +4577,12 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         return rawMessage || "Запит не виконано. Спробуй ще раз.";
     }
 
-    function toast(title, message = "") {
+    function toast(title, message = "", type = "default") {
         const toastElement = document.createElement("div");
-        toastElement.className = "toast";
-        toastElement.setAttribute("role", "status");
-        toastElement.innerHTML = `<span class="toast-icon"><i data-lucide="sparkles"></i></span><div class="toast-body"><strong>${escapeHtml(title)}</strong>${message ? `<p class="toast-message">${escapeHtml(message)}</p>` : ""}</div><span class="toast-progress" aria-hidden="true"></span>`;
+        toastElement.className = `toast toast-${type}`;
+        toastElement.setAttribute("role", type === "error" ? "alert" : "status");
+        const icon = type === "error" ? "alert-triangle" : "sparkles";
+        toastElement.innerHTML = `<span class="toast-icon"><i data-lucide="${icon}"></i></span><div class="toast-body"><strong>${escapeHtml(title)}</strong>${message ? `<p class="toast-message">${escapeHtml(message)}</p>` : ""}</div><span class="toast-progress" aria-hidden="true"></span>`;
         element("toastStack").appendChild(toastElement);
         icons();
 
