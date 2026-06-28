@@ -4543,8 +4543,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     function handleUserFacingError(error, action = "") {
         console.error(error);
         const message = friendlyError(error);
-        showSyncIndicator("error", message);
-        toast("Дія не виконана", message);
+        showSyncIndicator("error", message); // routes to an error toast
 
         if (Number(error?.status) === 401 && storage.config.requireAuth) {
             renderAuthGate(message);
@@ -4589,12 +4588,15 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         let timer = null;
         let leaving = false;
         const remove = () => toastElement.remove();
+
+        // Standard exit (tap / auto-dismiss): slide-up + fade via CSS animation.
         const dismiss = () => {
             if (leaving) {
                 return;
             }
             leaving = true;
             clearTimeout(timer);
+            toastElement.style.animation = ""; // let the .is-leaving animation own it
             toastElement.classList.add("is-leaving");
             toastElement.addEventListener("animationend", (event) => {
                 if (event.target === toastElement && event.animationName === "toastOut") {
@@ -4603,22 +4605,134 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             });
             setTimeout(remove, 450); // fallback if animationend doesn't fire
         };
+
+        // Swipe exit: fly off in the gesture direction, then remove.
+        const flyOut = (direction) => {
+            if (leaving) {
+                return;
+            }
+            leaving = true;
+            clearTimeout(timer);
+            const offX = direction === "left" ? -window.innerWidth : direction === "right" ? window.innerWidth : 0;
+            const offY = direction === "up" ? -180 : 0;
+            toastElement.style.transition = "transform 0.3s cubic-bezier(0.4, 0, 1, 1), opacity 0.3s ease";
+            toastElement.style.transform = `translate(${offX}px, ${offY}px)`;
+            toastElement.style.opacity = "0";
+            toastElement.addEventListener("transitionend", remove, { once: true });
+            setTimeout(remove, 400);
+        };
+
         const startTimer = () => {
             timer = setTimeout(dismiss, 4200);
         };
         startTimer();
 
-        // Click anywhere on the toast to dismiss; hover pauses the auto-dismiss.
-        toastElement.addEventListener("click", dismiss);
+        // Hover pauses the auto-dismiss (desktop).
         toastElement.addEventListener("mouseenter", () => {
-            clearTimeout(timer);
-            toastElement.classList.add("is-paused");
+            if (!leaving) {
+                clearTimeout(timer);
+                toastElement.classList.add("is-paused");
+            }
         });
         toastElement.addEventListener("mouseleave", () => {
             if (!leaving) {
                 toastElement.classList.remove("is-paused");
                 startTimer();
             }
+        });
+
+        // Tap to dismiss + swipe up / left / right to flick away.
+        const THRESHOLD = 64;
+        let startX = 0;
+        let startY = 0;
+        let dx = 0;
+        let dy = 0;
+        let dragging = false;
+        let moved = false;
+        let activePointer = null;
+
+        toastElement.addEventListener("pointerdown", (event) => {
+            if (leaving || activePointer !== null) {
+                return;
+            }
+            activePointer = event.pointerId;
+            startX = event.clientX;
+            startY = event.clientY;
+            dx = 0;
+            dy = 0;
+            dragging = true;
+            moved = false;
+            clearTimeout(timer);
+            toastElement.style.animation = "none"; // free the transform for dragging
+            toastElement.classList.add("is-paused", "is-dragging");
+            try {
+                toastElement.setPointerCapture(event.pointerId);
+            } catch (_) {}
+        });
+
+        toastElement.addEventListener("pointermove", (event) => {
+            if (!dragging || event.pointerId !== activePointer) {
+                return;
+            }
+            dx = event.clientX - startX;
+            dy = event.clientY - startY;
+            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                moved = true;
+            }
+            const horizontal = Math.abs(dx) >= Math.abs(dy);
+            let tx = 0;
+            let ty = 0;
+            if (horizontal) {
+                tx = dx;
+            } else {
+                ty = dy < 0 ? dy : dy * 0.25; // up moves freely, down resists
+            }
+            const distance = horizontal ? Math.abs(dx) : Math.abs(ty);
+            const opacity = Math.max(0.35, 1 - distance / (THRESHOLD * 3));
+            toastElement.style.transform = `translate(${tx}px, ${ty}px)`;
+            toastElement.style.opacity = String(opacity);
+        });
+
+        const endDrag = (event) => {
+            if (!dragging || (event && event.pointerId !== activePointer)) {
+                return;
+            }
+            dragging = false;
+            activePointer = null;
+            toastElement.classList.remove("is-dragging");
+            const horizontal = Math.abs(dx) >= Math.abs(dy);
+            const flick = horizontal
+                ? (Math.abs(dx) >= THRESHOLD ? (dx < 0 ? "left" : "right") : null)
+                : (dy < 0 && Math.abs(dy) >= THRESHOLD ? "up" : null);
+            if (flick) {
+                flyOut(flick);
+                return;
+            }
+            // snap back into place
+            toastElement.style.transition = "transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease";
+            toastElement.style.transform = "translate(0, 0)";
+            toastElement.style.opacity = "1";
+            toastElement.addEventListener("transitionend", function clear() {
+                toastElement.style.transition = "";
+                toastElement.style.transform = "";
+                toastElement.style.opacity = "";
+                toastElement.removeEventListener("transitionend", clear);
+            }, { once: true });
+            if (!leaving) {
+                toastElement.classList.remove("is-paused");
+                startTimer();
+            }
+        };
+
+        toastElement.addEventListener("pointerup", endDrag);
+        toastElement.addEventListener("pointercancel", endDrag);
+
+        toastElement.addEventListener("click", () => {
+            if (moved) {
+                moved = false;
+                return; // a swipe/drag, not a tap
+            }
+            dismiss();
         });
     }
 

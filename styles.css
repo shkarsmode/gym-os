@@ -1771,6 +1771,9 @@ tr:last-child td {
     box-shadow: 0 18px 48px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     pointer-events: auto;
     cursor: pointer;
+    /* gestures (swipe to dismiss) are handled in JS — stop the page scrolling
+       when a touch starts on the toast itself */
+    touch-action: none;
     transform-origin: top center;
     animation: toastIn 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
     transition: transform 0.16s ease, box-shadow 0.16s ease;
@@ -1782,6 +1785,12 @@ tr:last-child td {
 
 .toast:active {
     transform: scale(0.985);
+}
+
+/* While dragging, follow the finger 1:1 (no easing) */
+.toast.is-dragging {
+    transition: none;
+    cursor: grabbing;
 }
 
 .toast.is-leaving {
