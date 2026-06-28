@@ -4,31 +4,7 @@
 //   • exposes a .value property (so element(id).value still works),
 //   • dispatches a bubbling "change" event whose target is the host element.
 // The dropdown panel is portaled to <body> so it never clips inside cards.
-import { escapeHtml, refreshIcons, revealOnNextFrame } from "./util.js";
-
-let openInstance = null;
-
-function closeOpen() {
-    if (openInstance) {
-        openInstance.close();
-    }
-}
-
-// Close on outside scroll / resize / route change / Escape. Scrolling *inside*
-// the open panel (long option lists) must not close it.
-document.addEventListener("scroll", (event) => {
-    if (openInstance && openInstance.panel && openInstance.panel.contains(event.target)) {
-        return;
-    }
-    closeOpen();
-}, true);
-window.addEventListener("resize", closeOpen);
-window.addEventListener("hashchange", closeOpen);
-document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-        closeOpen();
-    }
-});
+import { escapeHtml, refreshIcons, revealOnNextFrame, registerOpenPanel, unregisterOpenPanel } from "./util.js";
 
 class GymSelect extends HTMLElement {
     connectedCallback() {
@@ -116,8 +92,6 @@ class GymSelect extends HTMLElement {
     }
 
     open() {
-        closeOpen();
-        openInstance = this;
         this.classList.add("is-open");
         this.setAttribute("aria-expanded", "true");
 
@@ -130,6 +104,7 @@ class GymSelect extends HTMLElement {
         ).join("");
         document.body.appendChild(panel);
         this.panel = panel;
+        registerOpenPanel(this, panel, () => this.close());
         this.position();
         refreshIcons();
         revealOnNextFrame(panel);
@@ -184,9 +159,7 @@ class GymSelect extends HTMLElement {
         }
         this.classList.remove("is-open");
         this.setAttribute("aria-expanded", "false");
-        if (openInstance === this) {
-            openInstance = null;
-        }
+        unregisterOpenPanel(this);
     }
 
     choose(index) {

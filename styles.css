@@ -3949,6 +3949,21 @@ ul {
     font-weight: 700;
 }
 
+.gcal-day.is-focus {
+    box-shadow: inset 0 0 0 2px var(--color-accent-strong);
+}
+
+.gcal-day.is-disabled,
+.gcal-day[disabled] {
+    opacity: 0.28;
+    cursor: not-allowed;
+}
+
+.gcal-day.is-disabled:hover,
+.gcal-day[disabled]:hover {
+    background: transparent;
+}
+
 .gcal-foot {
     margin-top: 12px;
     display: flex;

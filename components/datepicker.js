@@ -2,30 +2,13 @@
 // calendar (portaled to <body> so it never clips); on touch devices it defers to
 // the native OS date picker (best mobile UX). Like <gym-select> it carries data-*
 // attributes, exposes .value (ISO yyyy-mm-dd) and fires a bubbling "change".
-import { escapeHtml, refreshIcons, isCoarsePointer, revealOnNextFrame } from "./util.js";
+import { escapeHtml, refreshIcons, isCoarsePointer, revealOnNextFrame, registerOpenPanel, unregisterOpenPanel } from "./util.js";
 
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 const MONTHS = [
     "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
     "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"
 ];
-
-let openInstance = null;
-
-function closeOpen() {
-    if (openInstance) {
-        openInstance.close();
-    }
-}
-
-document.addEventListener("scroll", () => closeOpen(), true);
-window.addEventListener("resize", closeOpen);
-window.addEventListener("hashchange", closeOpen);
-document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-        closeOpen();
-    }
-});
 
 function toISO(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -61,6 +44,9 @@ class GymDate extends HTMLElement {
         this.innerHTML = "";
         this.classList.add("gdate");
         this.tabIndex = 0;
+        this.setAttribute("role", "combobox");
+        this.setAttribute("aria-haspopup", "dialog");
+        this.setAttribute("aria-expanded", "false");
 
         // Hidden native input — source of truth for the value and the mobile picker.
         this.input = document.createElement("input");
@@ -89,20 +75,14 @@ class GymDate extends HTMLElement {
         this.trigger.tabIndex = -1;
         this.appendChild(this.trigger);
         this.renderTrigger();
+        this.updateAria();
 
         this.trigger.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
             this.toggle();
         });
-        this.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
-                event.preventDefault();
-                this.toggle();
-            } else if (event.key === "Escape") {
-                this.close();
-            }
-        });
+        this.addEventListener("keydown", (event) => this.onKeydown(event));
     }
 
     disconnectedCallback() {
@@ -118,12 +98,15 @@ class GymDate extends HTMLElement {
     }
 
     commit(next, fromUser) {
-        this._value = next || "";
+        const value = next || "";
+        const changed = value !== this._value;
+        this._value = value;
         if (this.input) {
-            this.input.value = this._value;
+            this.input.value = value;
         }
         this.renderTrigger();
-        if (fromUser) {
+        this.updateAria();
+        if (fromUser && changed) {
             this.dispatchEvent(new Event("change", { bubbles: true }));
         }
     }
@@ -132,6 +115,16 @@ class GymDate extends HTMLElement {
         const placeholder = this._value ? "" : " is-placeholder";
         this.trigger.innerHTML = `<i data-lucide="calendar-days" class="gdate-icon"></i><span class="gdate-label${placeholder}">${escapeHtml(formatLabel(this._value))}</span>`;
         refreshIcons();
+    }
+
+    updateAria() {
+        this.setAttribute("aria-label", this._value ? `Дата: ${formatLabel(this._value)}` : "Оберіть дату");
+    }
+
+    isDisabledISO(iso) {
+        const min = this.input.min;
+        const max = this.input.max;
+        return Boolean((min && iso < min) || (max && iso > max));
     }
 
     toggle() {
@@ -152,17 +145,20 @@ class GymDate extends HTMLElement {
     }
 
     open() {
-        closeOpen();
-        openInstance = this;
         this.classList.add("is-open");
+        this.setAttribute("aria-expanded", "true");
         const base = parseISO(this._value) || new Date();
         this.viewYear = base.getFullYear();
         this.viewMonth = base.getMonth();
+        this.activeIso = this._value || toISO(new Date());
 
         const panel = document.createElement("div");
         panel.className = "gdate-panel";
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-label", "Вибір дати");
         document.body.appendChild(panel);
         this.panel = panel;
+        registerOpenPanel(this, panel, () => this.close());
         this.renderCalendar();
         this.position();
         revealOnNextFrame(panel);
@@ -176,13 +172,16 @@ class GymDate extends HTMLElement {
             }
             if (event.target.closest("[data-today]")) {
                 event.preventDefault();
-                this.commit(toISO(new Date()), true);
-                this.close();
-                this.focus();
+                const today = toISO(new Date());
+                if (!this.isDisabledISO(today)) {
+                    this.commit(today, true);
+                    this.close();
+                    this.focus();
+                }
                 return;
             }
             const day = event.target.closest(".gcal-day[data-iso]");
-            if (day) {
+            if (day && !day.disabled) {
                 event.preventDefault();
                 this.commit(day.dataset.iso, true);
                 this.close();
@@ -196,6 +195,68 @@ class GymDate extends HTMLElement {
             }
         };
         setTimeout(() => document.addEventListener("pointerdown", this.onDocPointer, true), 0);
+    }
+
+    onKeydown(event) {
+        if (!this.panel) {
+            if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
+                event.preventDefault();
+                this.toggle();
+            }
+            return;
+        }
+        switch (event.key) {
+            case "ArrowLeft": event.preventDefault(); this.moveActive(-1); break;
+            case "ArrowRight": event.preventDefault(); this.moveActive(1); break;
+            case "ArrowUp": event.preventDefault(); this.moveActive(-7); break;
+            case "ArrowDown": event.preventDefault(); this.moveActive(7); break;
+            case "PageUp": event.preventDefault(); this.shiftMonth(-1); break;
+            case "PageDown": event.preventDefault(); this.shiftMonth(1); break;
+            case "Enter":
+            case " ":
+                event.preventDefault();
+                if (this.activeIso && !this.isDisabledISO(this.activeIso)) {
+                    this.commit(this.activeIso, true);
+                    this.close();
+                    this.focus();
+                }
+                break;
+            case "Escape":
+                event.preventDefault();
+                this.close();
+                this.focus();
+                break;
+            case "Tab":
+                this.close();
+                break;
+            default:
+                break;
+        }
+    }
+
+    moveActive(deltaDays) {
+        const cursor = parseISO(this.activeIso) || new Date();
+        cursor.setDate(cursor.getDate() + deltaDays);
+        this.activeIso = toISO(cursor);
+        if (cursor.getFullYear() !== this.viewYear || cursor.getMonth() !== this.viewMonth) {
+            this.viewYear = cursor.getFullYear();
+            this.viewMonth = cursor.getMonth();
+            this.renderCalendar();
+            this.position();
+        } else {
+            this.markActive();
+        }
+    }
+
+    markActive() {
+        if (!this.panel) {
+            return;
+        }
+        this.panel.querySelectorAll(".gcal-day.is-focus").forEach((element) => element.classList.remove("is-focus"));
+        const active = this.panel.querySelector(`.gcal-day[data-iso="${this.activeIso}"]`);
+        if (active) {
+            active.classList.add("is-focus");
+        }
     }
 
     shiftMonth(delta) {
@@ -223,11 +284,14 @@ class GymDate extends HTMLElement {
         }
         for (let day = 1; day <= daysInMonth; day += 1) {
             const iso = toISO(new Date(year, month, day));
+            const disabled = this.isDisabledISO(iso);
             const classes = [
                 iso === this._value ? "is-selected" : "",
-                iso === today ? "is-today" : ""
+                iso === today ? "is-today" : "",
+                iso === this.activeIso ? "is-focus" : "",
+                disabled ? "is-disabled" : ""
             ].filter(Boolean).join(" ");
-            cells += `<button type="button" class="gcal-day ${classes}" data-iso="${iso}">${day}</button>`;
+            cells += `<button type="button" class="gcal-day ${classes}" data-iso="${iso}"${disabled ? " disabled" : ""}>${day}</button>`;
         }
         this.panel.innerHTML =
             `<div class="gcal-head">` +
@@ -267,9 +331,8 @@ class GymDate extends HTMLElement {
             this.onDocPointer = null;
         }
         this.classList.remove("is-open");
-        if (openInstance === this) {
-            openInstance = null;
-        }
+        this.setAttribute("aria-expanded", "false");
+        unregisterOpenPanel(this);
     }
 }
 
