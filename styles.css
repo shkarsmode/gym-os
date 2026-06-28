@@ -2750,3 +2750,111 @@ ul {
         justify-content: center;
     }
 }
+
+/* ===== Roles & admin panel ===== */
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    border: 1px solid var(--color-border);
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.role-badge i {
+    width: 12px;
+    height: 12px;
+}
+
+.role-badge.premium {
+    background: var(--color-warning-dim);
+    color: var(--color-warning);
+    border-color: rgba(251, 191, 36, 0.35);
+}
+
+.role-badge.admin {
+    background: var(--color-accent-dim);
+    color: var(--color-accent);
+    border-color: var(--color-accent-border);
+}
+
+.role-badge.free {
+    background: var(--color-surface-2);
+}
+
+.admin-user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.admin-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+}
+
+.admin-user-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.admin-user-info {
+    min-width: 0;
+}
+
+.admin-user-info strong {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.admin-user-info .card-caption {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-user-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.admin-role-select {
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--color-elevated);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-strong);
+    font-size: 13px;
+}
+
+@media (max-width: 640px) {
+    .admin-user-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .admin-user-controls {
+        justify-content: space-between;
+    }
+
+    .admin-role-select {
+        flex: 1;
+    }
+}

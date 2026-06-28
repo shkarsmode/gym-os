@@ -9,6 +9,7 @@
         ["stats", "Статистика", "bar-chart-3"],
         ["rankings", "Рейтинги", "trophy"],
         ["users", "Команда", "users"],
+        ["admin", "Адмін", "shield"],
         ["profile", "Профіль", "user-round"],
         ["settings", "Налаштування", "settings"]
     ].map(([id, title, icon]) => ({ id, title, icon }));
@@ -282,6 +283,10 @@
 
         setUserApproval(userId, approved) {
             return this.request(`/users/${userId}/approval`, { method: "POST", body: JSON.stringify({ approved }) });
+        }
+
+        setUserRole(userId, role) {
+            return this.request(`/users/${userId}/role`, { method: "POST", body: JSON.stringify({ role }) });
         }
 
         startWorkout(id) {
@@ -1145,7 +1150,7 @@
     }
 
     function renderShell() {
-        renderNavigation("sidebarNavigation", sectionItems);
+        renderNavigation("sidebarNavigation", sectionItems.filter((item) => item.id !== "admin" || isAdmin()));
         renderNavigation("mobileNavigation", sectionItems.filter((item) => mobileSectionIds.includes(item.id)));
         renderCurrentUserButton();
         renderSidebarProfile();
@@ -1266,6 +1271,9 @@
 
     function renderSection() {
         destroyCharts();
+        if (state.section === "admin" && !isAdmin()) {
+            state.section = "dashboard";
+        }
         renderShell();
         const item = sectionItems.find((section) => section.id === state.section) || sectionItems[0];
         element("sectionEyebrow").textContent = "Gym Progress OS";
@@ -1275,7 +1283,7 @@
         } else {
             element("sectionTitle").textContent = item.title;
         }
-        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, profile, settings, user: () => userDetail(state.viewUserId) };
+        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, admin: adminPanel, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         icons();
         updateTopbarOffset();
@@ -1562,6 +1570,10 @@
             if (actionElement.dataset.action === "stats-filter") {
                 state.filters[actionElement.dataset.filter] = actionElement.value;
                 renderSection();
+            }
+
+            if (actionElement.dataset.action === "set-role") {
+                await setUserRole(actionElement.dataset.userId, actionElement.value);
             }
 
             if (actionElement.dataset.action === "import-data") {
@@ -1920,6 +1932,11 @@
     function openCustomExercise(exercise = null) {
         const data = exercise && exercise.id ? exercise : null;
         const isEdit = Boolean(data);
+        // Free tier: 1 custom exercise per month. Editing your own is always allowed.
+        if (!isEdit && !hasUnlimited() && exerciseQuotaState(currentUser().id).over) {
+            openPaywallModal({ type: "exercise" });
+            return;
+        }
         const val = (value) => escapeHtml(value == null ? "" : String(value));
         const aliasesValue = data && Array.isArray(data.aliases) ? data.aliases.join(", ") : "";
         const previewBlock = data && imageUrl(data.mediaUrl)
@@ -2094,13 +2111,18 @@
         toast(status === "pending" ? "Відправлено на модерацію" : "Власну вправу створено", name);
     }
 
-    function openPaywallModal(quota) {
-        const reason = quota && quota.overDay
-            ? "Ти вже провів тренування сьогодні."
-            : "Ти використав 2 безкоштовні тренування цього тижня.";
+    function openPaywallModal(context = {}) {
+        const isExercise = context.type === "exercise";
+        const reason = isExercise
+            ? "Ти вже додав власну вправу цього місяця."
+            : (context.overDay ? "Ти вже провів тренування сьогодні." : "Ти використав 2 безкоштовні тренування цього тижня.");
+        const limitsLine = isExercise
+            ? "На безкоштовному тарифі — <strong>1 власна вправа на місяць</strong>."
+            : "На безкоштовному тарифі — до <strong>1 тренування на день</strong> і <strong>2 на тиждень</strong>.";
+        const title = isExercise ? "Розблокуй безлімітні вправи" : "Розблокуй безлімітні тренування";
         const perks = [
             ["infinity", "Безлімітні тренування", "Без денних і тижневих обмежень"],
-            ["sparkles", "Власні вправи без модерації", "Твої вправи з'являються одразу"],
+            ["dumbbell", "Безлімітні власні вправи", "Free — лише 1 вправа на місяць"],
             ["bar-chart-3", "Розширена аналітика", "Глибша статистика прогресу та PR"],
             ["cloud", "Пріоритетна синхронізація", "Швидші бекапи й відновлення"]
         ];
@@ -2108,8 +2130,8 @@
             <div class="paywall-glow"></div>
             <button class="icon-button paywall-close" type="button" data-action="close-overlay"><i data-lucide="x"></i></button>
             <div class="paywall-badge"><i data-lucide="zap"></i>GymOS PRO</div>
-            <h2 class="paywall-title">Розблокуй безлімітні тренування</h2>
-            <p class="paywall-reason">${escapeHtml(reason)} На безкоштовному тарифі — до <strong>1 тренування на день</strong> і <strong>2 на тиждень</strong>.</p>
+            <h2 class="paywall-title">${escapeHtml(title)}</h2>
+            <p class="paywall-reason">${escapeHtml(reason)} ${limitsLine}</p>
             <div class="paywall-price"><span class="paywall-amount">$2</span><span class="paywall-period">/місяць</span></div>
             <ul class="paywall-perks">${perks.map(([icon, title, sub]) => `<li><span class="paywall-perk-icon"><i data-lucide="${icon}"></i></span><span><strong>${escapeHtml(title)}</strong><em>${escapeHtml(sub)}</em></span></li>`).join("")}</ul>
             <div class="paywall-actions"><button class="button button-primary paywall-cta" type="button" data-action="upgrade-plan"><i data-lucide="rocket"></i>Оформити PRO за $2/міс</button><button class="button button-secondary" type="button" data-action="close-overlay">Можливо пізніше</button></div>
@@ -2198,7 +2220,7 @@
             const quota = workoutQuotaState(currentUser().id);
             if (quota.over) {
                 closeOverlay();
-                openPaywallModal(quota);
+                openPaywallModal(Object.assign({ type: "workout" }, quota));
                 return;
             }
         }
@@ -2849,6 +2871,62 @@
             ? rows.slice(0, 8).map((row, index) => `<div class="contrib-row"><span class="contrib-rank">${index + 1}</span>${avatar(row.user)}<div class="contrib-main"><strong>${escapeHtml(row.user.displayName)}</strong><div class="contrib-bar"><span style="width:${Math.max(6, Math.round((row.count / max) * 100))}%"></span></div></div><span class="contrib-count">${row.count}</span></div>`).join("")
             : emptyInline("Поки немає даних", "Додай вправи, щоб побачити рейтинг авторів.");
         return `<section class="card span-12"><div class="card-header"><div><h2>Автори вправ</h2><p class="card-caption">Хто скільки вправ додав у каталог (${state.database.exercises.length} усього).</p></div></div><div class="contrib-list">${body}</div></section>`;
+    }
+
+    function roleRank(role) {
+        return ({ admin: 3, premium: 2, free: 1 })[String(role || "free").toLowerCase()] || 0;
+    }
+
+    function adminUserRow(user) {
+        const summary = userStats(user.id);
+        const exCount = state.database.exercises.filter((exercise) => exercise.createdByUserId === user.id).length;
+        const isSuper = adminEmails.has(String(user.email || "").toLowerCase());
+        const role = isSuper ? "admin" : String(user.role || "free").toLowerCase();
+        const roleControl = isSuper
+            ? `<span class="role-badge admin"><i data-lucide="shield"></i>Власник</span>`
+            : `<select class="admin-role-select" data-action="set-role" data-user-id="${user.id}">${[["free", "Free"], ["premium", "PRO"], ["admin", "Адмін"]].map(([value, label]) => `<option value="${value}" ${role === value ? "selected" : ""}>${label}</option>`).join("")}</select>`;
+        const approveControl = user.approved === false
+            ? `<button class="button button-primary compact" type="button" data-action="approve-user" data-user-id="${user.id}"><i data-lucide="check"></i>Дозволити</button>`
+            : (isSuper ? "" : `<button class="button button-secondary compact" type="button" data-action="revoke-user" data-user-id="${user.id}"><i data-lucide="user-x"></i>Відкликати</button>`);
+        return `<div class="admin-user-row"><div class="admin-user-main">${avatar(user)}<div class="admin-user-info"><strong>${escapeHtml(user.displayName || "—")}${user.approved === false ? ` <span class="badge pending">очікує</span>` : ""}</strong><p class="card-caption">${escapeHtml(user.email || "—")}</p><p class="card-caption">${summary.completedWorkouts} трен · ${exCount} вправ</p></div></div><div class="admin-user-controls">${roleControl}${approveControl}</div></div>`;
+    }
+
+    function adminPanel() {
+        const users = state.database.users.slice().sort((left, right) => roleRank(right.role) - roleRank(left.role) || String(left.displayName || "").localeCompare(String(right.displayName || "")));
+        const isSuper = (user) => adminEmails.has(String(user.email || "").toLowerCase());
+        const pendingUsers = users.filter((user) => user.approved === false);
+        const counts = {
+            total: users.length,
+            premium: users.filter((user) => String(user.role).toLowerCase() === "premium").length,
+            admin: users.filter((user) => String(user.role).toLowerCase() === "admin" || isSuper(user)).length,
+            pending: pendingUsers.length
+        };
+        const pendingEx = pendingExercises();
+        content(`<div class="grid dashboard-grid">
+            <section class="card span-12"><div class="card-header"><div><h2>Адмін-панель</h2><p class="card-caption">Доступи, ролі та модерація GymOS в одному місці.</p></div><span class="role-badge admin"><i data-lucide="shield"></i>Адмін</span></div>${kpi([{ label: "Користувачі", value: counts.total }, { label: "PRO", value: counts.premium }, { label: "Адміни", value: counts.admin }, { label: "На апруві", value: counts.pending }, { label: "Вправи", value: state.database.exercises.length }, { label: "На модерації", value: pendingEx.length }])}</section>
+            ${pendingUsers.length ? `<section class="card span-12 approval-card"><div class="card-header"><div><h2>Нові користувачі <span class="badge pending">${pendingUsers.length}</span></h2><p class="card-caption">Підтверди доступ до застосунку.</p></div></div><div class="admin-user-list">${pendingUsers.map(adminUserRow).join("")}</div></section>` : ""}
+            <section class="card span-12"><div class="card-header"><div><h2>Користувачі та ролі</h2><p class="card-caption">Free · PRO (безліміт) · Адмін. Зміни застосовуються одразу.</p></div></div><div class="admin-user-list">${users.map(adminUserRow).join("")}</div></section>
+            ${pendingEx.length ? approvalQueueCard() : ""}
+        </div>`);
+    }
+
+    async function setUserRole(userId, role) {
+        if (!isAdmin()) {
+            toast("Немає прав", "Лише адміністратор може змінювати ролі.");
+            return;
+        }
+        const user = userById(userId);
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+            await storage.apiClient.setUserRole(userId, role);
+        }
+        if (user) {
+            user.role = role;
+            if (role === "premium" || role === "admin") {
+                user.approved = true;
+            }
+        }
+        renderSection();
+        toast("Роль оновлено", `${user?.displayName || "Користувач"} → ${roleLabel(role)}`);
     }
 
     function userCard(user) {
@@ -3595,9 +3673,42 @@
 
     const adminEmails = new Set(["zshkarrr@gmail.com"]);
 
+    function effectiveRole() {
+        return String(storage.currentUser?.role || currentUser()?.role || "free").toLowerCase();
+    }
+
     function isAdmin() {
         const email = String(storage.currentUser?.email || currentUser()?.email || "").trim().toLowerCase();
-        return email !== "" && adminEmails.has(email);
+        if (email !== "" && adminEmails.has(email)) {
+            return true;
+        }
+        return effectiveRole() === "admin";
+    }
+
+    function hasUnlimited() {
+        return isAdmin() || effectiveRole() === "premium";
+    }
+
+    function roleLabel(role) {
+        return ({ free: "Free", premium: "PRO", admin: "Адмін" })[String(role || "free").toLowerCase()] || "Free";
+    }
+
+    function roleBadge(role) {
+        const key = String(role || "free").toLowerCase();
+        if (key === "admin") {
+            return `<span class="role-badge admin"><i data-lucide="shield"></i>Адмін</span>`;
+        }
+        if (key === "premium") {
+            return `<span class="role-badge premium"><i data-lucide="crown"></i>PRO</span>`;
+        }
+        return `<span class="role-badge free">Free</span>`;
+    }
+
+    function exerciseQuotaState(userId) {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const count = state.database.exercises.filter((exercise) => exercise.createdByUserId === userId && exercise.createdAt && new Date(exercise.createdAt) >= startOfMonth).length;
+        return { count, limit: 1, over: count >= 1 };
     }
 
     function canEditExercise(exercise) {
