@@ -25,8 +25,11 @@
     const genderLabels = { male: "чоловіча", female: "жіноча" };
     const dataModeLabels = { local: "локальний", api: "backend" };
 
-    const APP_VERSION = "0.7.0";
+    const APP_VERSION = "0.7.1";
     const CHANGELOG = [
+        { version: "0.7.1", date: "2026-06-28", title: "Редизайн карток вправ", items: [
+            { type: "improvement", text: "Свіжий вигляд картки вправи: бейджі на зображенні, акуратний автор і дата, чисті кнопки дій" }
+        ] },
         { version: "0.7.0", date: "2026-06-28", title: "Підписка та статуси", items: [
             { type: "feature", text: "Окрема вкладка «Підписка»: порівняння Free та PRO, переваги й ціна" },
             { type: "feature", text: "Бейджі PRO / Адмін у профілі та календарі + клік по бейджу → підписка" },
@@ -2969,12 +2972,17 @@
         const pending = exercise.status === "pending";
         const canEdit = canEditExercise(exercise);
         const added = exercise.createdAt ? formatDate(exercise.createdAt) : "";
-        const badges = `${isMyExercise(exercise) ? `<span class="badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : ""}${pending ? `<span class="badge pending">На модерації</span>` : ""}`;
-        const ownerBadge = `<span class="owner-badge" title="Хто додав"><i data-lucide="user-round"></i>${escapeHtml(exerciseOwnerName(exercise))}${added ? ` · ${added}` : ""}</span>`;
-        const editActions = canEdit
+        const media = exerciseMedia(exercise);
+        const owner = exercise.createdByUserId ? userById(exercise.createdByUserId) : null;
+        const ownerName = exerciseOwnerName(exercise);
+        const badges = `${isMyExercise(exercise) ? `<span class="pill-badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : ""}${pending ? `<span class="pill-badge pending"><i data-lucide="clock"></i>На модерації</span>` : ""}`;
+        const overlay = media && badges ? `<div class="exercise-card-tags">${badges}</div>` : "";
+        const inlineBadges = !media && badges ? `<div class="exercise-card-tags inline">${badges}</div>` : "";
+        const actions = canEdit
             ? `<div class="exercise-card-actions">${pending && isAdmin() ? `<button class="icon-button success" type="button" title="Схвалити" data-action="approve-exercise" data-exercise-id="${exercise.id}"><i data-lucide="check"></i></button>` : ""}<button class="icon-button" type="button" title="Редагувати" data-action="edit-exercise" data-exercise-id="${exercise.id}"><i data-lucide="pen-line"></i></button><button class="icon-button danger" type="button" title="Видалити" data-action="delete-exercise" data-exercise-id="${exercise.id}"><i data-lucide="trash-2"></i></button></div>`
             : "";
-        return `<article class="exercise-card${exerciseMedia(exercise) ? " has-thumb" : ""}${pending ? " is-pending" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}<div class="card-header"><div><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.description)}</p></div><div class="exercise-card-badges">${badges}</div></div><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div><div class="exercise-card-footer">${ownerBadge}${editActions}</div></article>`;
+        const meta = `<div class="exercise-meta" title="${escapeHtml(ownerName)}${added ? ` · ${added}` : ""}">${owner ? avatar(owner, "tiny") : `<span class="exercise-meta-fallback"><i data-lucide="user-round"></i></span>`}<div class="exercise-meta-text"><span class="exercise-meta-name">${escapeHtml(ownerName)}</span>${added ? `<span class="exercise-meta-date">${added}</span>` : ""}</div></div>`;
+        return `<article class="exercise-card${media ? " has-thumb" : ""}${pending ? " is-pending" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}${overlay}<div class="exercise-card-body">${inlineBadges}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption exercise-card-desc">${escapeHtml(exercise.description)}</p><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></div><div class="exercise-card-footer">${meta}${actions}</div></article>`;
     }
 
     function pendingExercises() {
