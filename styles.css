@@ -2653,3 +2653,70 @@ ul {
         font-size: 40px;
     }
 }
+
+/* External reference links (strength standards etc.) */
+.ext-links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.ext-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.ext-link:hover {
+    border-color: var(--color-accent-border);
+    background: var(--color-accent-dim);
+    transform: translateY(-1px);
+}
+
+.ext-link-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    background: var(--color-accent-dim);
+    color: var(--color-accent);
+    flex-shrink: 0;
+}
+
+.ext-link-icon i {
+    width: 18px;
+    height: 18px;
+}
+
+.ext-link-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.ext-link-text strong {
+    display: block;
+    font-size: 14px;
+}
+
+.ext-link-text em {
+    font-style: normal;
+    color: var(--color-faint);
+    font-size: 12px;
+}
+
+.ext-link-arrow {
+    width: 16px;
+    height: 16px;
+    color: var(--color-faint);
+    flex-shrink: 0;
+}

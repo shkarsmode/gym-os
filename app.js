@@ -1106,13 +1106,17 @@
         const standards = [];
 
         rankedExerciseNames.forEach((name) => {
+            const rankedExercise = byName.get(name);
+            if (!rankedExercise) {
+                return;
+            }
             ranges.forEach(([min, max]) => {
                 rankOrder.forEach((level) => {
                     ["male", "female"].forEach((gender) => {
                         const middle = (min + max) / 2;
                         standards.push({
                             id: createId("standard"),
-                            exerciseId: byName.get(name).id,
+                            exerciseId: rankedExercise.id,
                             gender,
                             bodyweightMin: min,
                             bodyweightMax: max,
@@ -2468,11 +2472,29 @@
     }
 
 
+    function strengthStandardsLinks(exercise) {
+        const haystack = `${exercise?.name || ""} ${(exercise?.aliases || []).join(" ")}`.toLowerCase();
+        const isBench = /жим лежачи|bench/.test(haystack);
+        const links = isBench
+            ? [
+                ["Strength Level — жим лежачи", "https://strengthlevel.com/strength-standards/bench-press/kg", "Нормативи за вагою тіла й статтю (beginner→elite)"],
+                ["Symmetric Strength", "https://symmetricstrength.com/", "Калькулятор рівня сили за вагою тіла"]
+            ]
+            : [
+                ["Strength Level — стандарти сили", "https://strengthlevel.com/strength-standards", "Нормативи для більшості вправ"],
+                ["Symmetric Strength", "https://symmetricstrength.com/", "Оцінка сили за вагою тіла"]
+            ];
+        const caption = isBench
+            ? "Звір свій 1ПМ із реальними нормативами для аматорів."
+            : "Зовнішні таблиці нормативів — звір свій 1ПМ із реальними рівнями.";
+        return `<section class="panel" style="margin-top:14px;"><h3>Актуальні нормативи</h3><p class="card-caption">${caption}</p><div class="ext-links">${links.map(([title, href, sub]) => `<a class="ext-link" href="${escapeHtml(href)}" target="_blank" rel="noreferrer noopener"><span class="ext-link-icon"><i data-lucide="bar-chart-3"></i></span><span class="ext-link-text"><strong>${escapeHtml(title)}</strong><em>${escapeHtml(sub)}</em></span><i data-lucide="external-link" class="ext-link-arrow"></i></a>`).join("")}</div></section>`;
+    }
+
     function openExercise(exerciseId) {
         const exercise = exerciseById(exerciseId);
         const currentBest = bestResult(currentUser().id, exerciseId);
         const teamBest = teamBestResult(exerciseId);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}${exerciseSourceBlock(exercise)}<section class="panel" style="margin-top:14px;"><h3>Техніка</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Результати</h3>${kpi([{ label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section><section class="panel" style="margin-top:14px;"><h3>Схожі вправи</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("") || emptyInline("Схожих вправ немає", "Розшир каталог у налаштуваннях.")}</div></section>`);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}${exerciseSourceBlock(exercise)}<section class="panel" style="margin-top:14px;"><h3>Техніка</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Результати</h3>${kpi([{ label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section>${strengthStandardsLinks(exercise)}<section class="panel" style="margin-top:14px;"><h3>Схожі вправи</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("") || emptyInline("Схожих вправ немає", "Розшир каталог у налаштуваннях.")}</div></section>`);
     }
 
     function openWorkout(workoutId) {
@@ -3159,13 +3181,23 @@
         return [...map.values()].sort((left, right) => right.estimatedOneRepMax - left.estimatedOneRepMax);
     }
 
+    // Strength standards are no longer shipped in the backend payload. Regenerate
+    // the lightweight demo levels client-side on demand so the "Поточний рівень"
+    // indicator keeps working without bloating the API response.
+    function ensureStrengthStandards() {
+        if (!Array.isArray(state.database.strengthStandards) || !state.database.strengthStandards.length) {
+            state.database.strengthStandards = createStandards(state.database.exercises || []);
+        }
+        return state.database.strengthStandards;
+    }
+
     function rankingFor(userId, exerciseId) {
         const user = userById(userId);
         if (!user || !exerciseId) {
             return { best: null, currentLevel: null, nextLevel: null, progress: 0 };
         }
 
-        const standards = state.database.strengthStandards.filter((standard) => standard.exerciseId === exerciseId && standard.gender === user.gender && user.bodyweight >= standard.bodyweightMin && user.bodyweight < standard.bodyweightMax).sort((left, right) => left.requiredWeight - right.requiredWeight);
+        const standards = ensureStrengthStandards().filter((standard) => standard.exerciseId === exerciseId && standard.gender === user.gender && user.bodyweight >= standard.bodyweightMin && user.bodyweight < standard.bodyweightMax).sort((left, right) => left.requiredWeight - right.requiredWeight);
         const best = bestResult(userId, exerciseId);
         if (!best || !standards.length) {
             return { best, currentLevel: null, nextLevel: standards[0] || null, progress: 0 };
