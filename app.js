@@ -1704,6 +1704,9 @@
         let contentEl = null;
         let showTimer = null;
         let activeTrigger = null;
+        // True when the most recent focus came from a pointer (mouse/touch), so
+        // focusin won't open the tooltip that the click handler then toggles.
+        let pointerFocus = false;
 
         function ensureEl() {
             if (tipEl) {
@@ -1711,6 +1714,7 @@
             }
             tipEl = document.createElement("div");
             tipEl.className = "app-tooltip";
+            tipEl.id = "appTooltip";
             tipEl.setAttribute("role", "tooltip");
             arrowEl = document.createElement("div");
             arrowEl.className = "app-tooltip-arrow up";
@@ -1722,27 +1726,32 @@
 
         function position(trigger) {
             const rect = trigger.getBoundingClientRect();
-            const tip = tipEl.getBoundingClientRect();
+            // offsetWidth/Height ignore the CSS transform (scale .98 during the
+            // open transition), so the measurement is stable and exact.
+            const tw = tipEl.offsetWidth;
+            const th = tipEl.offsetHeight;
             const margin = 8;
             const gap = 10;
             const centerX = rect.left + rect.width / 2;
-            let left = Math.max(margin, Math.min(centerX - tip.width / 2, window.innerWidth - tip.width - margin));
-            let top = rect.top - tip.height - gap;
+            const left = Math.max(margin, Math.min(centerX - tw / 2, window.innerWidth - tw - margin));
+            let top = rect.top - th - gap;
             let below = false;
             if (top < margin) {
                 top = rect.bottom + gap;
                 below = true;
             }
+            // Keep fully on-screen vertically on short viewports too.
+            top = Math.max(margin, Math.min(top, window.innerHeight - th - margin));
             tipEl.style.left = `${Math.round(left)}px`;
             tipEl.style.top = `${Math.round(top)}px`;
-            const arrowLeft = Math.max(12, Math.min(centerX - left - 5, tip.width - 22));
+            const arrowLeft = Math.max(12, Math.min(centerX - left - 5, tw - 22));
             arrowEl.style.left = `${Math.round(arrowLeft)}px`;
             if (below) {
                 arrowEl.className = "app-tooltip-arrow up";
                 arrowEl.style.top = "-5px";
             } else {
                 arrowEl.className = "app-tooltip-arrow down";
-                arrowEl.style.top = `${Math.round(tip.height - 5)}px`;
+                arrowEl.style.top = `${Math.round(th - 5)}px`;
             }
         }
 
@@ -1755,6 +1764,7 @@
             }
             contentEl.innerHTML = `${title ? `<div class="app-tooltip-title">${escapeHtml(title)}</div>` : ""}<div class="app-tooltip-body">${escapeHtml(body)}</div>`;
             activeTrigger = trigger;
+            trigger.setAttribute("aria-describedby", "appTooltip");
             tipEl.style.left = "-9999px";
             tipEl.style.top = "-9999px";
             tipEl.classList.add("visible");
@@ -1766,7 +1776,10 @@
                 clearTimeout(showTimer);
                 showTimer = null;
             }
-            activeTrigger = null;
+            if (activeTrigger) {
+                activeTrigger.removeAttribute("aria-describedby");
+                activeTrigger = null;
+            }
             if (tipEl) {
                 tipEl.classList.remove("visible");
             }
@@ -1797,6 +1810,7 @@
         // Capture phase so a tap on the trigger toggles the tooltip without the
         // click bubbling to a parent card action.
         document.addEventListener("click", (event) => {
+            pointerFocus = false;
             const trigger = event.target.closest("[data-tip-body]");
             if (trigger) {
                 event.preventDefault();
@@ -1816,11 +1830,23 @@
             }
         }, true);
 
+        // A pointer (mouse/touch) press focuses the button; flag it so focusin
+        // doesn't open a tooltip the click handler would immediately toggle shut.
+        // Keyboard focus has no preceding pointerdown, so it still opens cleanly.
+        document.addEventListener("pointerdown", (event) => {
+            pointerFocus = !!(event.target.closest && event.target.closest("[data-tip-body]"));
+        }, true);
+        // Clear after the pointer gesture ends so a later keyboard focus (which
+        // has no pointerdown) always opens cleanly — no stale-flag edge case.
+        document.addEventListener("pointerup", () => {
+            pointerFocus = false;
+        }, true);
         document.addEventListener("focusin", (event) => {
             const trigger = event.target.closest && event.target.closest("[data-tip-body]");
-            if (trigger) {
+            if (trigger && !pointerFocus) {
                 show(trigger);
             }
+            pointerFocus = false;
         });
         document.addEventListener("focusout", (event) => {
             const trigger = event.target.closest && event.target.closest("[data-tip-body]");
