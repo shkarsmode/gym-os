@@ -190,6 +190,39 @@ textarea:focus-visible {
     align-items: center;
     gap: 11px;
     min-width: 0;
+    flex: 1;
+}
+
+.nav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-collapse {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-faint);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-collapse:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-collapse svg {
+    width: 18px;
+    height: 18px;
 }
 
 .nav-button svg,
@@ -2114,7 +2147,7 @@ ul {
 @media (max-width: 920px) {
     .app-shell {
         display: block;
-        padding-bottom: var(--mobile-nav-height);
+        padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
     }
 
     .sidebar {
@@ -2122,12 +2155,12 @@ ul {
     }
 
     .main-shell {
-        padding: 16px 14px 40px;
+        padding: 16px calc(14px + env(safe-area-inset-right)) 40px calc(14px + env(safe-area-inset-left));
     }
 
     .topbar {
-        margin: -16px -14px 16px;
-        padding: 16px 14px 12px;
+        margin: -16px calc(-14px - env(safe-area-inset-right)) 16px calc(-14px - env(safe-area-inset-left));
+        padding: calc(16px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 12px calc(14px + env(safe-area-inset-left));
     }
 
     .topbar-actions .button {
@@ -2136,9 +2169,9 @@ ul {
 
     .mobile-navigation {
         position: fixed;
-        left: 8px;
-        right: 8px;
-        bottom: 8px;
+        left: calc(8px + env(safe-area-inset-left));
+        right: calc(8px + env(safe-area-inset-right));
+        bottom: calc(8px + env(safe-area-inset-bottom));
         z-index: 60;
         display: grid;
         grid-template-columns: repeat(5, 1fr);
@@ -3398,4 +3431,51 @@ ul {
 .exercise-card-actions .icon-button {
     width: 32px;
     height: 32px;
+}
+
+/* ===== Collapsed sidebar (desktop) ===== */
+.app-shell.sidebar-collapsed {
+    grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+    padding: 22px 12px;
+}
+
+.app-shell.sidebar-collapsed .brand-block {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+}
+
+.app-shell.sidebar-collapsed .brand-text,
+.app-shell.sidebar-collapsed .nav-label,
+.app-shell.sidebar-collapsed .nav-badge,
+.app-shell.sidebar-collapsed .sidebar-profile-card {
+    display: none;
+}
+
+.app-shell.sidebar-collapsed .sidebar-collapse {
+    margin-left: 0;
+}
+
+.app-shell.sidebar-collapsed .nav-button {
+    justify-content: center;
+    padding: 11px;
+}
+
+.app-shell.sidebar-collapsed .nav-button span {
+    flex: 0 0 auto;
+    justify-content: center;
+}
+
+.app-shell.sidebar-collapsed .nav-button.active::before {
+    display: none;
+}
+
+/* Keep mobile bottom-nav labels readable (don't ellipsize) */
+.mobile-navigation .nav-label {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
 }

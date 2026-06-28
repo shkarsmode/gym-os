@@ -839,6 +839,7 @@
         try {
             await storage.initialize();
             bindEvents();
+            applySidebarState();
             state.authUser = storage.currentUser;
             if (storage.requiresAuthentication()) {
                 state.database = createEmptyDatabase();
@@ -1276,8 +1277,8 @@
         const activeWorkout = activeWorkoutFor(currentUser().id);
         const container = element(containerId);
         container.innerHTML = items.map((item) => `
-            <button class="nav-button ${state.section === item.id ? "active" : ""}" type="button" data-action="navigate" data-section="${item.id}">
-                <span><i data-lucide="${item.icon}"></i>${escapeHtml(item.title)}</span>
+            <button class="nav-button ${state.section === item.id ? "active" : ""}" type="button" data-action="navigate" data-section="${item.id}" title="${escapeHtml(item.title)}">
+                <span><i data-lucide="${item.icon}"></i><span class="nav-label">${escapeHtml(item.title)}</span></span>
                 ${item.id === "workout" && activeWorkout ? `<strong class="nav-badge">Активне</strong>` : ""}
             </button>
         `).join("");
@@ -1611,6 +1612,42 @@
         </div>`);
     }
 
+    function applySidebarState() {
+        let collapsed = false;
+        try {
+            collapsed = localStorage.getItem("gymos-sidebar-collapsed") === "1";
+        } catch (error) {
+            collapsed = false;
+        }
+        const shell = document.querySelector(".app-shell");
+        if (shell) {
+            shell.classList.toggle("sidebar-collapsed", collapsed);
+        }
+        const button = element("sidebarCollapseButton");
+        if (button) {
+            button.innerHTML = `<i data-lucide="${collapsed ? "panel-left-open" : "panel-left-close"}"></i>`;
+            button.setAttribute("aria-label", collapsed ? "Розгорнути меню" : "Згорнути меню");
+            button.setAttribute("title", collapsed ? "Розгорнути меню" : "Згорнути меню");
+            icons();
+        }
+    }
+
+    function toggleSidebar() {
+        let collapsed = false;
+        try {
+            collapsed = localStorage.getItem("gymos-sidebar-collapsed") === "1";
+            localStorage.setItem("gymos-sidebar-collapsed", collapsed ? "0" : "1");
+        } catch (error) {
+            // localStorage unavailable — fall back to a one-off DOM toggle.
+            const shell = document.querySelector(".app-shell");
+            if (shell) {
+                shell.classList.toggle("sidebar-collapsed");
+            }
+            return;
+        }
+        applySidebarState();
+    }
+
     function bindEvents() {
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
@@ -1628,6 +1665,10 @@
         element("modalBackdrop").addEventListener("click", closeOverlay);
         element("openQuickActionButton").addEventListener("click", openQuickAction);
         element("openUserSwitcherButton").addEventListener("click", () => navigate("profile"));
+        const collapseButton = element("sidebarCollapseButton");
+        if (collapseButton) {
+            collapseButton.addEventListener("click", toggleSidebar);
+        }
     }
 
     async function handleClick(event) {
