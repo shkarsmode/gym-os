@@ -2866,11 +2866,83 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         return `<section class="panel" style="margin-top:14px;"><h3>Актуальні нормативи</h3><p class="card-caption">${caption}</p><div class="ext-links">${links.map(([title, href, sub]) => `<a class="ext-link" href="${escapeHtml(href)}" target="_blank" rel="noreferrer noopener"><span class="ext-link-icon"><i data-lucide="bar-chart-3"></i></span><span class="ext-link-text"><strong>${escapeHtml(title)}</strong><em>${escapeHtml(sub)}</em></span><i data-lucide="external-link" class="ext-link-arrow"></i></a>`).join("")}</div></section>`;
     }
 
+    function statChip(value, label, icon) {
+        return `<div class="stat-chip"><span class="stat-chip-ico"><i data-lucide="${icon}"></i></span><div class="stat-chip-body"><div class="stat-chip-value">${escapeHtml(String(value))}</div><div class="stat-chip-label">${escapeHtml(label)}</div></div></div>`;
+    }
+
+    // Rich per-exercise analytics for the drawer: records, 1RM progress chart,
+    // and the last sessions with a trend vs the previous one.
+    function exerciseAnalytics(exerciseId) {
+        const userId = currentUser().id;
+        const sessions = exerciseInstances(userId, exerciseId).map((instance) => {
+            const working = instance.sets.filter((set) => set.isCompleted && set.type !== "warmup");
+            let top = null;
+            working.forEach((set) => {
+                const estimate = oneRepMax(set.weight, set.repetitions);
+                if (!top || estimate > top.estimate) {
+                    top = { weight: set.weight, repetitions: set.repetitions, estimate };
+                }
+            });
+            const volume = round(working.reduce((sum, set) => sum + set.weight * set.repetitions, 0), 1);
+            return { date: instance.date, working, top, volume, oneRm: top ? top.estimate : 0 };
+        }).filter((session) => session.working.length);
+
+        if (!sessions.length) {
+            return `<section class="panel" style="margin-top:14px;"><h3>Аналітика прогресу</h3>${emptyInline("Ще немає даних", "Заверши тренування з цією вправою, щоб побачити рекорди, графік прогресу й динаміку останніх сесій.")}</section>`;
+        }
+
+        const allSets = sessions.flatMap((session) => session.working);
+        const bestWeight = Math.max(...allSets.map((set) => set.weight));
+        const bestSet = sessions.map((session) => session.top).sort((left, right) => right.estimate - left.estimate)[0];
+        const best1RM = round(Math.max(...sessions.map((session) => session.oneRm)), 1);
+        const teamBest = teamBestResult(exerciseId);
+        const lastDate = sessions[0].date;
+        const days = Math.round((startDay(new Date()) - startDay(new Date(lastDate))) / 86400000);
+        const daysLabel = days <= 0 ? "сьогодні" : days === 1 ? "вчора" : `${days} дн. тому`;
+
+        const chips = [
+            statChip(`${number(bestWeight)} кг`, "Найкраща вага", "dumbbell"),
+            statChip(`${bestSet.weight}×${bestSet.repetitions}`, "Найкращий сет", "layers"),
+            statChip(`${number(best1RM)} кг`, "Найкращий 1ПМ", "trophy"),
+            statChip(sessions.length, "Разів виконано", "repeat")
+        ].join("");
+
+        const recent = sessions.slice(0, 6);
+        const rows = recent.map((session, index) => {
+            const older = sessions[index + 1];
+            let trend = `<span class="session-trend flat"></span>`;
+            if (older && older.oneRm) {
+                const delta = round(session.oneRm - older.oneRm, 1);
+                if (delta > 0) {
+                    trend = `<span class="session-trend up"><i data-lucide="trending-up"></i>+${number(delta)}</span>`;
+                } else if (delta < 0) {
+                    trend = `<span class="session-trend down"><i data-lucide="trending-down"></i>${number(delta)}</span>`;
+                } else {
+                    trend = `<span class="session-trend flat"><i data-lucide="minus"></i></span>`;
+                }
+            }
+            return `<div class="session-row"><div class="session-date">${shortDate(session.date)}</div><div class="session-cell"><span class="session-cell-value">${session.top.weight}×${session.top.repetitions}</span><span class="session-cell-label">сет</span></div><div class="session-cell"><span class="session-cell-value">${number(session.volume)}</span><span class="session-cell-label">обсяг</span></div><div class="session-cell"><span class="session-cell-value">${number(session.oneRm)}</span><span class="session-cell-label">1ПМ</span></div>${trend}</div>`;
+        }).join("");
+
+        return `<section class="panel exercise-analytics" style="margin-top:14px;">
+            <div><h3>Аналітика прогресу</h3><p class="card-caption">Останнє виконання: ${daysLabel} · ${formatDate(lastDate)}${teamBest ? ` · командний максимум ${number(teamBest.estimatedOneRepMax)} кг` : ""}</p></div>
+            <div class="stat-chips">${chips}</div>
+            <div class="chart-box exercise-progress"><canvas id="exerciseProgressChart"></canvas></div>
+            <h4 class="analytics-subhead">Останні сесії</h4>
+            <div class="session-list">${rows}</div>
+        </section>`;
+    }
+
     function openExercise(exerciseId) {
         const exercise = exerciseById(exerciseId);
-        const currentBest = bestResult(currentUser().id, exerciseId);
-        const teamBest = teamBestResult(exerciseId);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}${exerciseSourceBlock(exercise)}<section class="panel" style="margin-top:14px;"><h3>Техніка</h3>${ordered(exercise.techniqueSteps)}</section><section class="panel" style="margin-top:14px;"><h3>Результати</h3>${kpi([{ label: "Твій максимум", value: currentBest ? `${number(currentBest.estimatedOneRepMax)} кг` : "—" }, { label: "Командний максимум", value: teamBest ? `${number(teamBest.estimatedOneRepMax)} кг` : "—" }])}</section>${strengthStandardsLinks(exercise)}<section class="panel" style="margin-top:14px;"><h3>Схожі вправи</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("") || emptyInline("Схожих вправ немає", "Розшир каталог у налаштуваннях.")}</div></section>`);
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(exercise.name)}</h2><p class="card-caption">${exercise.primaryMuscleGroup} · ${exercise.movementPattern} · ${exercise.equipment}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${media(exercise)}${exerciseSourceBlock(exercise)}${exerciseAnalytics(exerciseId)}<section class="panel" style="margin-top:14px;"><h3>Техніка</h3>${ordered(exercise.techniqueSteps)}</section>${strengthStandardsLinks(exercise)}<section class="panel" style="margin-top:14px;"><h3>Схожі вправи</h3><div class="workout-stack">${relatedExercises(exerciseId).slice(0, 3).map((item) => `<button class="nav-button" type="button" data-action="open-exercise" data-exercise-id="${item.id}"><span>${escapeHtml(item.name)}</span><strong class="nav-badge">${escapeHtml(item.primaryMuscleGroup)}</strong></button>`).join("") || emptyInline("Схожих вправ немає", "Розшир каталог у налаштуваннях.")}</div></section>`);
+        const points = progressData(currentUser().id, exerciseId);
+        const existing = state.charts.get("exerciseProgressChart");
+        if (existing) {
+            existing.destroy();
+            state.charts.delete("exerciseProgressChart");
+        }
+        requestAnimationFrame(() => lineChart("exerciseProgressChart", points.map((point) => shortDate(point.date)), points.map((point) => point.value), "1ПМ, кг"));
     }
 
     function openWorkout(workoutId) {
