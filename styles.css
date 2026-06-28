@@ -2720,3 +2720,33 @@ ul {
     color: var(--color-faint);
     flex-shrink: 0;
 }
+
+/* Auth gate buttons — correct icon sizing (overrides .empty-state svg) + Google logo */
+.auth-gate-actions .button svg {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+.auth-gate-actions .button .google-g {
+    width: 18px;
+    height: 18px;
+}
+
+.auth-gate-actions {
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+    .auth-gate-actions {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .auth-gate-actions .button {
+        width: 100%;
+        justify-content: center;
+    }
+}
