@@ -62,6 +62,8 @@ body {
     line-height: 1.5;
     overflow-x: hidden;
     overscroll-behavior-x: none;
+    /* our own pull-to-refresh owns the top overscroll — stop the browser's */
+    overscroll-behavior-y: contain;
     touch-action: pan-x pan-y;
     -webkit-text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
@@ -127,6 +129,10 @@ textarea:focus-visible {
     flex-direction: column;
     gap: 22px;
     z-index: 30;
+    /* never let an item's highlight (active background, hover) bleed past the
+       sidebar into the content area; scroll vertically if the list is tall */
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .brand-block {
@@ -165,6 +171,10 @@ textarea:focus-visible {
 
 .sidebar-navigation {
     display: grid;
+    /* single column capped to the sidebar width (min 0) so a wide item — e.g.
+       "Поточне тренування" + the "Активне" badge — can't stretch the track and
+       push the active highlight past the sidebar; labels ellipsize instead */
+    grid-template-columns: minmax(0, 1fr);
     gap: 3px;
 }
 
@@ -1904,6 +1914,64 @@ tr:last-child td {
    document non-scrollable too so nothing behind the backdrop can move. */
 html.overlay-open {
     overflow: hidden;
+}
+
+/* ---------- Pull-to-refresh ---------- */
+.ptr-indicator {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top));
+    left: 50%;
+    z-index: 70;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(23, 24, 27, 0.92);
+    border: 1px solid var(--color-border-strong);
+    box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    transform: translateX(-50%) translateY(-64px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ptr-indicator.ready {
+    border-color: var(--color-accent-border);
+    box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6), 0 0 0 3px var(--color-accent-dim);
+}
+
+.ptr-ring {
+    transition: transform 0.06s linear;
+}
+
+.ptr-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.12);
+    stroke-width: 3;
+}
+
+.ptr-prog {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.ptr-indicator.ptr-loading .ptr-ring {
+    animation: ptrSpin 0.75s linear infinite;
+}
+
+.ptr-indicator.ptr-loading .ptr-prog {
+    stroke-dasharray: 60 94.25 !important;
+    stroke-dashoffset: 0 !important;
+}
+
+@keyframes ptrSpin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .modal-layer {

@@ -1486,8 +1486,12 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     }
 
     function exercises() {
+        content(`<section class="card"><div class="card-header"><div><h2>Каталог вправ</h2><p class="card-caption">Пошук працює за назвою, alias, м'язовою групою, патерном руху та обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div class="filter-row"><input type="search" placeholder="Пошук за назвою, alias, м'язом, патерном або обладнанням" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"></div></section><section class="exercise-card-grid" id="exerciseCatalogGrid" style="margin-top:16px;">${exerciseCatalogCards()}</section>`);
+    }
+
+    function exerciseCatalogCards() {
         const items = filteredExercises();
-        content(`<section class="card"><div class="card-header"><div><h2>Каталог вправ</h2><p class="card-caption">Пошук працює за назвою, alias, м'язовою групою, патерном руху та обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div class="filter-row"><input type="search" placeholder="Пошук за назвою, alias, м'язом, патерном або обладнанням" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"></div></section><section class="exercise-card-grid" style="margin-top:16px;">${items.length ? items.map(exerciseCard).join("") : emptyInline("Нічого не знайдено", "Спробуй іншу назву, м'язову групу або обладнання.")}</section>`);
+        return items.length ? items.map(exerciseCard).join("") : emptyInline("Нічого не знайдено", "Спробуй іншу назву, м'язову групу або обладнання.");
     }
 
     function stats() {
@@ -1697,6 +1701,148 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             collapseButton.addEventListener("click", toggleSidebar);
         }
         setupTooltips();
+        setupPullToRefresh();
+    }
+
+    // Re-fetch everything from the backend and re-render the current view. Used by
+    // pull-to-refresh; the per-user /export feed is uncached so this always gets
+    // fresh data. Local mode just re-renders (nothing to fetch).
+    async function refreshData() {
+        if (storage.mode !== "api") {
+            renderShell();
+            renderSection();
+            return;
+        }
+        showSyncIndicator("loading", "Оновлення…");
+        try {
+            state.database = await storage.load();
+            state.profileUserId = state.database.currentUserId;
+            renderShell();
+            renderSection();
+            showSyncIndicator("success", "Оновлено");
+        } catch (error) {
+            handleUserFacingError(error, "refresh");
+        }
+    }
+
+    // Pull-to-refresh: drag down from the very top to reload. Touch-only, armed
+    // only at scrollTop===0, with resistance + a threshold, and disabled while an
+    // overlay is open or the touch starts on a toast / nav / input — so it never
+    // hijacks normal scrolling or other gestures.
+    function setupPullToRefresh() {
+        if (!("ontouchstart" in window)) {
+            return;
+        }
+        if (document.getElementById("ptrIndicator")) {
+            return;
+        }
+        const THRESHOLD = 72;
+        const MAX = 130;
+        const indicator = document.createElement("div");
+        indicator.id = "ptrIndicator";
+        indicator.className = "ptr-indicator";
+        indicator.setAttribute("aria-hidden", "true");
+        indicator.innerHTML = `<svg class="ptr-ring" viewBox="0 0 36 36" width="22" height="22" aria-hidden="true"><circle class="ptr-track" cx="18" cy="18" r="15"></circle><circle class="ptr-prog" cx="18" cy="18" r="15" transform="rotate(-90 18 18)"></circle></svg>`;
+        document.body.appendChild(indicator);
+        const prog = indicator.querySelector(".ptr-prog");
+        const CIRC = 2 * Math.PI * 15; // ~94.25
+        prog.style.strokeDasharray = String(CIRC);
+        prog.style.strokeDashoffset = String(CIRC);
+
+        let startY = 0;
+        let armed = false;
+        let pulling = false;
+        let refreshing = false;
+        let pull = 0;
+
+        const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+
+        function setPull(px, animate) {
+            pull = px;
+            indicator.style.transition = animate ? "transform 0.26s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease" : "none";
+            const reveal = Math.min(px, MAX);
+            indicator.style.transform = `translateX(-50%) translateY(${Math.min(72, -64 + reveal * 1.15)}px)`;
+            indicator.style.opacity = String(Math.min(1, px / 26));
+            const ratio = Math.max(0, Math.min(1, px / THRESHOLD));
+            prog.style.strokeDashoffset = String(CIRC * (1 - ratio));
+            indicator.querySelector(".ptr-ring").style.transform = refreshing ? "" : `rotate(${ratio * 270}deg)`;
+            indicator.classList.toggle("ready", ratio >= 1 && !refreshing);
+        }
+
+        function reset(animate) {
+            pulling = false;
+            indicator.classList.remove("ptr-loading", "ready");
+            setPull(0, animate);
+        }
+
+        async function trigger() {
+            refreshing = true;
+            indicator.classList.add("ptr-loading");
+            indicator.classList.remove("ready");
+            indicator.style.transition = "transform 0.26s cubic-bezier(0.22,1,0.36,1)";
+            indicator.style.transform = "translateX(-50%) translateY(20px)";
+            indicator.style.opacity = "1";
+            try {
+                await refreshData();
+            } finally {
+                refreshing = false;
+                reset(true);
+            }
+        }
+
+        document.addEventListener("touchstart", (event) => {
+            if (refreshing || scrollLocked || event.touches.length !== 1) {
+                armed = false;
+                return;
+            }
+            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .mobile-navigation, .floating-timer, input, textarea, select, [contenteditable]")) {
+                armed = false;
+                return;
+            }
+            if (!atTop()) {
+                armed = false;
+                return;
+            }
+            startY = event.touches[0].clientY;
+            armed = true;
+            pulling = false;
+        }, { passive: true });
+
+        document.addEventListener("touchmove", (event) => {
+            if (!armed || refreshing) {
+                return;
+            }
+            const dy = event.touches[0].clientY - startY;
+            if (dy <= 0 || !atTop()) {
+                if (pulling) {
+                    reset(true);
+                }
+                if (!atTop()) {
+                    armed = false;
+                }
+                return;
+            }
+            const resisted = Math.min(MAX, dy * 0.5);
+            if (resisted > 3) {
+                pulling = true;
+                event.preventDefault(); // own the gesture; suppress native overscroll
+                setPull(resisted, false);
+            }
+        }, { passive: false });
+
+        const onEnd = () => {
+            if (!armed) {
+                return;
+            }
+            armed = false;
+            if (pulling && pull >= THRESHOLD && !refreshing) {
+                trigger();
+            } else if (pulling) {
+                reset(true);
+            }
+        };
+        document.addEventListener("touchend", onEnd, { passive: true });
+        document.addEventListener("touchcancel", onEnd, { passive: true });
     }
 
     // Shared, delegated tooltip engine for [data-tip-body] triggers (see infoTip).
@@ -2204,9 +2350,15 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         }
 
         if (actionElement.dataset.action === "exercise-search") {
+            // Re-render only the card grid (not the whole section) so the search
+            // input keeps focus + caret while typing — re-rendering #pageContent
+            // destroyed the input and dropped focus after every character.
             state.filters.exerciseSearch = actionElement.value;
-            clearTimeout(handleInput.timeoutId);
-            handleInput.timeoutId = setTimeout(renderSection, 140);
+            const grid = element("exerciseCatalogGrid");
+            if (grid) {
+                grid.innerHTML = exerciseCatalogCards();
+                iconsIn(grid);
+            }
         }
 
         if (actionElement.dataset.action === "exercise-picker-search") {
@@ -2403,8 +2555,19 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             return emptyInline("Нічого не знайдено", "Спробуй іншу назву, групу м'язів або обладнання.");
         }
         const limit = 60;
-        // Surface the current user's own exercises first (sort by the "Моя" badge).
-        const sorted = items.slice().sort((left, right) => (isMyExercise(right) ? 1 : 0) - (isMyExercise(left) ? 1 : 0));
+        // Order: liked first, then neutral, then disliked (same as the catalog);
+        // within a reaction tier surface the current user's own exercises first.
+        const sorted = items.slice().sort((left, right) => {
+            const byReaction = reactionRank(left) - reactionRank(right);
+            if (byReaction) {
+                return byReaction;
+            }
+            const byMine = (isMyExercise(right) ? 1 : 0) - (isMyExercise(left) ? 1 : 0);
+            if (byMine) {
+                return byMine;
+            }
+            return String(left.name || "").localeCompare(String(right.name || ""), "uk");
+        });
         const shown = sorted.slice(0, limit);
         const note = items.length > limit
             ? `<p class="card-caption picker-count">Показано ${limit} з ${items.length} — уточни пошук або фільтри.</p>`
