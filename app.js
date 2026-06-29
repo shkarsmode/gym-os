@@ -2,7 +2,7 @@
 import "./components/datepicker.js";
 import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv, unique, imageUrl } from "./lib/format.js";
 import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
-import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
+import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
 
 (() => {
     "use strict";
@@ -1739,7 +1739,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     }
 
     function changelogEntry(entry) {
-        return `<article class="timeline-entry"><div class="timeline-rail"><span class="timeline-dot"></span></div><div class="timeline-card"><div class="timeline-head"><span class="timeline-version">v${escapeHtml(entry.version)}</span><span class="timeline-date">${formatDate(entry.date)}</span></div><h3 class="timeline-title">${escapeHtml(entry.title)}</h3><ul class="timeline-items">${entry.items.map((item) => `<li><span class="cl-tag ${item.type}">${escapeHtml(changelogTagLabels[item.type] || item.type)}</span><span>${escapeHtml(item.text)}</span></li>`).join("")}</ul></div></article>`;
+        return `<article class="timeline-entry"><div class="timeline-rail"><span class="timeline-dot"></span></div><div class="timeline-card"><div class="timeline-head"><span class="timeline-version">v${escapeHtml(entry.version)}</span><span class="timeline-date">${formatDate(entry.date)}</span></div><h3 class="timeline-title">${escapeHtml(entry.title)}</h3><ul class="timeline-items">${entry.items.map((item) => `<li><span class="cl-tag ${item.type}" title="${escapeHtml(changelogTagLabels[item.type] || item.type)}" aria-label="${escapeHtml(changelogTagLabels[item.type] || item.type)}"><i data-lucide="${changelogTagIcons[item.type] || "tag"}"></i></span><span>${escapeHtml(item.text)}</span></li>`).join("")}</ul></div></article>`;
     }
 
     function maybeShowWhatsNew() {
@@ -1754,7 +1754,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
                 return; // first-ever load — don't interrupt onboarding
             }
             const latest = CHANGELOG[0];
-            openModal(`<div class="modal-header"><div><h2>Що нового · v${escapeHtml(APP_VERSION)}</h2><p class="card-caption">${escapeHtml(latest.title)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><ul class="whatsnew-list">${latest.items.map((item) => `<li><span class="cl-tag ${item.type}">${escapeHtml(changelogTagLabels[item.type] || item.type)}</span><span>${escapeHtml(item.text)}</span></li>`).join("")}</ul><div class="form-actions" style="justify-content:space-between;margin-top:18px;"><button class="button button-secondary" type="button" data-action="open-changelog">Усі зміни</button><button class="button button-primary" type="button" data-action="close-overlay"><i data-lucide="check"></i>Круто!</button></div>`);
+            openModal(`<div class="modal-header"><div><h2>Що нового · v${escapeHtml(APP_VERSION)}</h2><p class="card-caption">${escapeHtml(latest.title)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><ul class="whatsnew-list">${latest.items.map((item) => `<li><span class="cl-tag ${item.type}" title="${escapeHtml(changelogTagLabels[item.type] || item.type)}" aria-label="${escapeHtml(changelogTagLabels[item.type] || item.type)}"><i data-lucide="${changelogTagIcons[item.type] || "tag"}"></i></span><span>${escapeHtml(item.text)}</span></li>`).join("")}</ul><div class="form-actions" style="justify-content:space-between;margin-top:18px;"><button class="button button-secondary" type="button" data-action="open-changelog">Усі зміни</button><button class="button button-primary" type="button" data-action="close-overlay"><i data-lucide="check"></i>Круто!</button></div>`);
             icons();
         } catch (error) {
             // localStorage may be unavailable; ignore.
@@ -5170,12 +5170,28 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             if (event.touches && event.touches.length > 1) {
                 return; // allow pinch-zoom
             }
-            const scroller = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer") : null;
-            // Block the move when it's outside any overlay, or inside one that has
-            // nothing to scroll — otherwise it would chain to the page behind.
-            if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
-                event.preventDefault();
+            const overlay = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer") : null;
+            if (!overlay) {
+                event.preventDefault(); // outside any overlay → never let the page behind scroll
+                return;
             }
+            // Walk from the touch target up to (and including) the overlay. If ANY node
+            // along the way can actually scroll, let it — the real scroller may be an
+            // INNER element (e.g. the picker's .exercise-picker-grid, since that modal is
+            // overflow:hidden), not the .modal-layer itself. overscroll-behavior:contain on
+            // the scrollers stops chaining at their edges. Only when nothing in the chain
+            // can scroll do we block (so a non-scrollable overlay can't chain to the page).
+            let node = event.target;
+            while (node) {
+                if (node.scrollHeight > node.clientHeight) {
+                    return;
+                }
+                if (node === overlay) {
+                    break;
+                }
+                node = node.parentElement;
+            }
+            event.preventDefault();
         };
         document.addEventListener("touchmove", lockTouchMove, { passive: false });
         document.documentElement.classList.add("overlay-open");
