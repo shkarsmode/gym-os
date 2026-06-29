@@ -960,6 +960,10 @@ select option {
 .chart-box {
     position: relative;
     height: 260px;
+    min-width: 0;
+    /* guarantee a chart canvas can never cause horizontal page overflow,
+       regardless of Chart.js resize timing */
+    overflow: hidden;
 }
 
 .chart-box.small {
