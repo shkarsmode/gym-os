@@ -30,8 +30,8 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         filters: {
             exerciseSearch: "",
             activityScope: "mine",
-            statsScope: "current",
-            statsRange: "90",
+            statsUserId: null, // null = current user; "all" = whole team; otherwise a user id
+            statsRange: "all",
             statsMuscle: "all",
             statsExerciseId: "all",
             statsWorkoutType: "all",
@@ -1352,45 +1352,54 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         team: "Спільний прогрес твого спортивного ком'юніті. Сума тренувань та кілограмів, піднятих усіма учасниками твоєї групи. Мотивує змагальним духом та показує силу командної роботи."
     };
 
+    // The Панель is a lean control hub: at-a-glance status, the primary start CTA,
+    // quick links to every section (the only way to reach Вправи / Рейтинги /
+    // Команда on mobile, where the bottom bar has no room), and recent activity.
+    // Deep stats + charts now live in the Статистика tab.
     function dashboard() {
         const user = currentUser();
         const stats = userStats(user.id);
-        const team = teamStats();
-        const record = recordsFor(user.id)[0];
+        const active = activeWorkoutFor(user.id);
         content(`
             <div class="grid dashboard-grid">
                 ${metric("Сьогодні", todayLabel(user.id), "calendar-check", todayCaption(user.id), "span-3")}
-                ${metric("Поточне тренування", activeWorkoutFor(user.id)?.title || "Немає активного", "activity", activeWorkoutFor(user.id) ? "Триває зараз" : "Можна почати нове", "span-3")}
+                ${metric("Поточне тренування", active?.title || "Немає активного", "activity", active ? "Триває зараз" : "Можна почати нове", "span-3")}
+                ${metric("Серія", `${stats.trainingStreak} дн.`, "flame", "Тренувань поспіль", "span-3")}
                 ${metric("Обсяг за тиждень", `${number(stats.weekVolume)} кг`, "boxes", `${stats.weekSets} підходів цього тижня`, "span-3", dashboardTips.volume)}
-                ${metric("Кардіо за тиждень", `${stats.weekCardioMinutes} хв`, "heart-pulse", "Кондиція врахована", "span-3", dashboardTips.cardio)}
                 <section class="card span-12 dash-quickstart">
                     <div class="card-header">
                         <div>
                             <h2>Швидкий старт</h2>
-                            <p class="card-caption">Почни нову сесію або переглянь історію в календарі.</p>
+                            <p class="card-caption">${active ? "У тебе є активне тренування — продовж або відкрий календар." : "Почни нову сесію або переглянь історію в календарі."}</p>
                         </div>
                     </div>
                     <div class="action-row wrap">
-                        <button class="button button-primary large-workout-button" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button>
+                        <button class="button button-primary large-workout-button" type="button" data-action="${active ? "edit-workout" : "start-workout"}"${active ? ` data-workout-id="${active.id}"` : ""}><i data-lucide="${active ? "activity" : "play"}"></i>${active ? "Продовжити тренування" : "Почати тренування"}</button>
                         <button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Перейти до календаря</button>
                     </div>
                 </section>
-                ${chartCard("Обсяг за тиждень", "Завершений робочий обсяг за днями.", "weeklyVolumeChart", "span-8", dashboardTips.volumeChart)}
-                ${chartCard("Розподіл м'язів", "Підходи у завершених тренуваннях.", "muscleChart", "span-4", dashboardTips.muscleChart)}
-                <section class="card span-4">${sectionHeading("Операційна панель", dashboardTips.ops)}${kpi([{ label: "Завершено", value: stats.completedWorkouts }, { label: "Усього кг", value: number(stats.totalVolume) }, { label: "Серія", value: stats.trainingStreak }, { label: "Підходи", value: stats.totalSets }])}<div class="insight-grid" style="margin-top: 14px;">${insights(user.id).slice(0, 3).map(insightCard).join("")}</div></section>
-                <section class="card span-4">${sectionHeading("Останній PR", dashboardTips.pr)}${record ? recordCard(record) : emptyInline("Поки немає особистих рекордів", "Заверши тренування з робочими підходами, щоб GymOS визначив PR.")}</section>
-                <section class="card span-4">${sectionHeading("Статистика команди", dashboardTips.team)}${kpi([{ label: "Тренування", value: team.completedWorkouts }, { label: "Командні кг", value: number(team.totalVolume) }, { label: "Кардіо хв", value: team.cardioMinutes }, { label: "Найактивніший", value: team.mostActiveUser.displayName }])}</section>
-                ${chartCard("Історія ваги тіла", "Щотижневі заміри.", "bodyweightChart", "span-6")}
-                ${chartCard("Кардіо хвилини", "Останні блоки кондиції.", "cardioChart", "span-6")}
+                ${navHub()}
                 <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">${state.filters.activityScope === "all" ? "Спільна стрічка команди — чужі лише для перегляду." : "Твої завершені тренування."}</p></div><div class="activity-toolbar"><div class="segmented">${[["mine", "Мої"], ["all", "Усі"]].map(([value, label]) => `<button class="segment-button ${(state.filters.activityScope === "all" ? "all" : "mine") === value ? "active" : ""}" type="button" data-action="activity-scope" data-scope="${value}">${label}</button>`).join("")}</div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i>Рейтинги</button></div></div><div class="activity-feed">${activityFeed()}</div></section>
             </div>
         `);
-        requestAnimationFrame(() => {
-            weeklyVolumeChart("weeklyVolumeChart", user.id);
-            muscleDistributionChart("muscleChart", user.id);
-            bodyweightChart("bodyweightChart", user.id);
-            cardioChart("cardioChart", user.id);
-        });
+    }
+
+    // Quick-access grid of every section — laconic icon cards. Essential on mobile,
+    // where the bottom bar only holds 5 tabs.
+    function navHub() {
+        const links = [
+            { id: "exercises", title: "Вправи", caption: "Каталог і власні вправи", icon: "list-filter" },
+            { id: "stats", title: "Статистика", caption: "Графіки та прогрес", icon: "bar-chart-3" },
+            { id: "rankings", title: "Рейтинги", caption: "Командний лідерборд", icon: "trophy" },
+            { id: "users", title: "Команда", caption: "Учасники та активність", icon: "users" },
+            { id: "calendar", title: "Календар", caption: "Історія тренувань", icon: "calendar-days" }
+        ];
+        if (isAdmin()) {
+            links.push({ id: "admin", title: "Адмін", caption: "Модерація і доступи", icon: "shield" });
+        } else if (!hasUnlimited()) {
+            links.push({ id: "subscription", title: "GymOS PRO", caption: "Безліміт за $2/міс", icon: "gem", accent: true });
+        }
+        return `<section class="card span-12 nav-hub-card"><div class="card-header"><div><h2>Розділи</h2><p class="card-caption">Швидкий доступ до всіх інструментів GymOS.</p></div></div><div class="nav-hub">${links.map((link) => `<button class="nav-hub-item${link.accent ? " accent" : ""}" type="button" data-action="navigate" data-section="${link.id}"><span class="nav-hub-icon"><i data-lucide="${link.icon}"></i></span><span class="nav-hub-text"><strong>${escapeHtml(link.title)}</strong><span>${escapeHtml(link.caption)}</span></span><i class="nav-hub-arrow" data-lucide="chevron-right"></i></button>`).join("")}</div></section>`;
     }
 
     function workout() {
@@ -1482,16 +1491,28 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     }
 
     function stats() {
-        const userId = state.filters.statsScope === "current" ? currentUser().id : null;
+        const scopeId = state.filters.statsUserId;
+        const userId = scopeId === "all" ? null : (scopeId || currentUser().id);
         const summary = userId ? userStats(userId, true) : teamStats(true);
         const history = filteredWorkouts(userId ? workoutsFor(userId) : state.database.workouts).sort(byDateDesc).slice(0, 8);
-        content(`<section class="card"><div class="card-header"><div><h2>Статистика</h2><p class="card-caption">Фільтри за користувачем, періодом, м'язовою групою, вправою і типом тренування.</p></div></div><div class="filter-row"><gym-select data-action="stats-filter" data-filter="statsScope"><option value="current" ${state.filters.statsScope === "current" ? "selected" : ""}>Поточний користувач</option><option value="team" ${state.filters.statsScope === "team" ? "selected" : ""}>Усі користувачі</option></gym-select><gym-select data-action="stats-filter" data-filter="statsRange"><option value="30" ${state.filters.statsRange === "30" ? "selected" : ""}>Останні 30 днів</option><option value="90" ${state.filters.statsRange === "90" ? "selected" : ""}>Останні 90 днів</option><option value="365" ${state.filters.statsRange === "365" ? "selected" : ""}>Останній рік</option><option value="all" ${state.filters.statsRange === "all" ? "selected" : ""}>Увесь час</option></gym-select><gym-select data-action="stats-filter" data-filter="statsMuscle"><option value="all">Усі м'язові групи</option>${unique(state.database.exercises.map((exercise) => exercise.primaryMuscleGroup)).map((muscle) => `<option value="${muscle}" ${state.filters.statsMuscle === muscle ? "selected" : ""}>${muscle}</option>`).join("")}</gym-select><gym-select data-action="stats-filter" data-filter="statsExerciseId"><option value="all">Усі вправи</option>${state.database.exercises.map((exercise) => `<option value="${exercise.id}" ${state.filters.statsExerciseId === exercise.id ? "selected" : ""}>${escapeHtml(exercise.name)}</option>`).join("")}</gym-select><gym-select data-action="stats-filter" data-filter="statsWorkoutType"><option value="all">Усі типи</option>${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${state.filters.statsWorkoutType === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></div></section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Усього тренувань", summary.totalWorkouts, "calendar", "Усі статуси", "span-3")}${metric("Завершено", summary.completedWorkouts, "check-circle-2", "Фінішовані сесії", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets || 0} робочих`, "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Завершені підходи", "span-3")}${metric("Середня тривалість", `${summary.averageDurationMinutes || 0} хв`, "timer", "Завершені тренування", "span-3")}${metric("Кардіо хвилини", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} км`, "span-3")}${metric("Найчастіша вправа", summary.mostUsedExercise?.name || "—", "repeat", "Частота вправ", "span-3")}${metric("Найсильніший фокус", summary.mostTrainedMuscleGroup || "—", "target", "За завершеними підходами", "span-3")}${chartCard("Обсяг у часі", "Завершений обсяг за сесіями.", "statsVolume", "span-6")}${chartCard("Підходи за м'язами", "Розподіл завершених підходів.", "statsMuscle", "span-6")}${chartCard("Прогрес вправи", "Тренд розрахункового 1ПМ.", "statsProgress", "span-6")}${chartCard("Регулярність", "Кількість вправ у сесії.", "statsConsistency", "span-6")}${contributorCard()}<section class="card span-12"><div class="card-header"><div><h2>Історія за фільтрами</h2><p class="card-caption">Список оновлюється разом із графіками.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
+        const scopeName = userId ? (userId === currentUser().id ? "Твій прогрес" : escapeHtml(userById(userId).displayName)) : "Уся команда";
+        content(`<section class="card stats-head"><div class="card-header"><div><h2>Статистика</h2><p class="card-caption">${scopeName} · за весь час. Обери учасника нижче або «Усі» для команди.</p></div></div>${statsUserBar(userId)}</section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Усього тренувань", summary.totalWorkouts, "calendar", "Усі статуси", "span-3")}${metric("Завершено", summary.completedWorkouts, "check-circle-2", "Фінішовані сесії", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets || 0} робочих`, "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Завершені підходи", "span-3")}${metric("Середня тривалість", `${summary.averageDurationMinutes || 0} хв`, "timer", "Завершені тренування", "span-3")}${metric("Кардіо хвилини", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} км`, "span-3")}${metric("Найчастіша вправа", summary.mostUsedExercise?.name || "—", "repeat", "Частота вправ", "span-3")}${metric("Найсильніший фокус", summary.mostTrainedMuscleGroup || "—", "target", "За завершеними підходами", "span-3")}${chartCard("Обсяг у часі", "Завершений обсяг за сесіями.", "statsVolume", "span-6")}${chartCard("Підходи за м'язами", "Розподіл завершених підходів.", "statsMuscle", "span-6")}${chartCard("Прогрес вправи", "Тренд розрахункового 1ПМ.", "statsProgress", "span-6")}${chartCard("Регулярність", "Кількість вправ у сесії.", "statsConsistency", "span-6")}${contributorCard()}<section class="card span-12"><div class="card-header"><div><h2>Історія</h2><p class="card-caption">${userId ? "Тренування обраного учасника." : "Спільна стрічка команди."}</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
         requestAnimationFrame(() => {
             volumeChart("statsVolume", userId);
             muscleDistributionChart("statsMuscle", userId);
             progressChart("statsProgress", userId || currentUser().id);
             consistencyChart("statsConsistency", userId);
         });
+    }
+
+    // The only stats filter: a scrollable row of avatar chips — «Усі» (team) plus
+    // every member (you first, labelled «Я»). Replaces the old 5-select filter bar.
+    function statsUserBar(activeUserId) {
+        const me = currentUser().id;
+        const members = [...state.database.users].sort((left, right) => (right.id === me ? 1 : 0) - (left.id === me ? 1 : 0));
+        const allChip = `<button class="stat-userchip all${activeUserId === null ? " active" : ""}" type="button" data-action="stats-user" data-user-id="all"><span class="stat-userchip-all"><i data-lucide="users"></i></span><span class="stat-userchip-name">Усі</span></button>`;
+        const memberChips = members.map((member) => `<button class="stat-userchip${member.id === activeUserId ? " active" : ""}" type="button" data-action="stats-user" data-user-id="${member.id}">${avatar(member, "tiny")}<span class="stat-userchip-name">${escapeHtml(member.id === me ? "Я" : member.displayName)}</span></button>`).join("");
+        return `<div class="stat-userbar">${allChip}${memberChips}</div>`;
     }
 
     function rankings() {
@@ -1972,6 +1993,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "upgrade-plan": showUpgradeComingSoon,
             "open-changelog": () => { closeOverlay(); navigate("changelog"); },
             "activity-scope": () => { state.filters.activityScope = actionElement.dataset.scope; renderSection(); },
+            "stats-user": () => { state.filters.statsUserId = actionElement.dataset.userId; renderSection(); },
             "open-exercise": () => openExercise(actionElement.dataset.exerciseId),
             "react-exercise": () => reactToExercise(actionElement.dataset.exerciseId, actionElement.dataset.reaction),
             "open-user": () => goToUser(actionElement.dataset.userId),
@@ -2100,6 +2122,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "upgrade-plan",
             "open-changelog",
             "activity-scope",
+            "stats-user",
             "react-exercise",
             "open-exercise",
             "open-user",
