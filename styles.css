@@ -2288,7 +2288,14 @@ tr:last-child td {
 
 .modal-layer {
     left: 50%;
-    top: 50%;
+    /* Center within the SAFE area, not the raw viewport. In an installed PWA with
+       black-translucent status bar the top inset is non-zero (notch/Dynamic Island)
+       while the bottom inset is the home indicator; a plain top:50% would split the
+       difference around the geometric center and push the modal's top under the
+       status bar. Shifting the center down by half the inset asymmetry
+       ((top - bottom) / 2) re-centers the box inside the inset-bounded region.
+       On desktop/Android both insets are 0, so this evaluates to exactly 50%. */
+    top: calc(50% + (env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
     width: min(680px, calc(100vw - 28px));
     max-height: min(88vh, 840px);
     transform: translate(-50%, -50%);
@@ -3052,6 +3059,36 @@ ul {
         max-height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
         border-radius: var(--radius-lg);
         padding: 16px;
+    }
+
+    /* Add-exercise picker: pin the search + filter blocks, scroll only the results.
+       Scoped via :has(#exercisePickerBody) because openModal() can't add a class.
+       On engines without :has() (none of the iOS PWA targets), the modal simply
+       falls back to the shared scroll-the-whole-thing behavior above — no breakage.
+       Fixed (not max-) height so the inner flex child has a definite box to fill;
+       the modal already lives inside the safe area via the centered top above. */
+    .modal-layer:has(#exercisePickerBody) {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    }
+
+    .modal-layer:has(#exercisePickerBody) #exercisePickerBody {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+    }
+
+    .modal-layer:has(#exercisePickerBody) .exercise-picker-grid {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        /* let results breathe under the home indicator while scrolling */
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
     }
 
     .toast-stack {
