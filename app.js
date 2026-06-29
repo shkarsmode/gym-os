@@ -5093,6 +5093,13 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     let scrollLocked = false;
 
     function lockBackgroundScroll() {
+        // Only lock on touch-primary devices (the iOS drawer rubber-band fix this
+        // was built for). On desktop a position:fixed <body> is unnecessary and has
+        // repeatedly risked freezing main-content scroll, so skip it entirely there.
+        const touchPrimary = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+        if (!touchPrimary) {
+            return;
+        }
         if (scrollLocked) {
             return;
         }

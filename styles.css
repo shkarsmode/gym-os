@@ -65,11 +65,20 @@ body {
     line-height: 1.5;
     overflow-x: hidden;
     overscroll-behavior-x: none;
-    /* our own pull-to-refresh owns the top overscroll — stop the browser's */
-    overscroll-behavior-y: contain;
     touch-action: pan-x pan-y;
     -webkit-text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
+}
+
+/* Native pull-to-refresh suppression is needed ONLY on touch devices (where our
+   own PTR lives). On desktop, `overflow-x: hidden` makes <body> a zero-range
+   scroll container, and `overscroll-behavior: contain` there can trap the mouse
+   wheel so it never chains to <html> (the real scroller) — freezing main-content
+   scroll in some browsers. So scope it to touch-primary devices only. */
+@media (pointer: coarse) {
+    body {
+        overscroll-behavior-y: contain;
+    }
 }
 
 button,
