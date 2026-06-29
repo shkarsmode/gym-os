@@ -3703,6 +3703,75 @@ ul {
     height: 32px;
 }
 
+/* ===== Exercise like / dislike ===== */
+.exercise-card-reactions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+}
+
+.react-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.react-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.react-btn:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+}
+
+.react-btn:active {
+    transform: scale(0.94);
+}
+
+.react-btn.like.active {
+    color: var(--color-accent);
+    background: var(--color-accent-dim);
+    border-color: var(--color-accent-border);
+}
+
+.react-btn.dislike.active {
+    color: var(--color-danger);
+    background: var(--color-danger-dim);
+    border-color: rgba(248, 113, 113, 0.35);
+}
+
+.react-count {
+    font-variant-numeric: tabular-nums;
+    min-width: 8px;
+    text-align: center;
+}
+
+/* Disliked-by-me cards sink visually (and sort last) */
+.exercise-card.is-disliked {
+    opacity: 0.55;
+}
+
+.exercise-card.is-disliked:hover {
+    opacity: 1;
+}
+
 /* ===== Collapsed sidebar (desktop) ===== */
 .app-shell.sidebar-collapsed {
     grid-template-columns: 76px minmax(0, 1fr);

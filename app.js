@@ -258,6 +258,14 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             return this.request("/exercises/pending", { method: "GET" });
         }
 
+        fetchMyExerciseReactions() {
+            return this.request("/exercises/my-reactions", { method: "GET" });
+        }
+
+        reactExercise(id, type) {
+            return this.request(`/exercises/${id}/react`, { method: "POST", body: JSON.stringify({ type }) });
+        }
+
         createBodyweight(payload) {
             return this.request("/users/me/bodyweight", { method: "POST", body: JSON.stringify(payload) });
         }
@@ -1965,6 +1973,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "open-changelog": () => { closeOverlay(); navigate("changelog"); },
             "activity-scope": () => { state.filters.activityScope = actionElement.dataset.scope; renderSection(); },
             "open-exercise": () => openExercise(actionElement.dataset.exerciseId),
+            "react-exercise": () => reactToExercise(actionElement.dataset.exerciseId, actionElement.dataset.reaction),
             "open-user": () => goToUser(actionElement.dataset.userId),
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
             "toggle-set": () => toggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
@@ -2091,6 +2100,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "upgrade-plan",
             "open-changelog",
             "activity-scope",
+            "react-exercise",
             "open-exercise",
             "open-user",
             "open-profile-editor",
@@ -3375,7 +3385,81 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             ? `<div class="exercise-card-actions">${pending && isAdmin() ? `<button class="icon-button success" type="button" title="Схвалити" data-action="approve-exercise" data-exercise-id="${exercise.id}"><i data-lucide="check"></i></button>` : ""}<button class="icon-button" type="button" title="Редагувати" data-action="edit-exercise" data-exercise-id="${exercise.id}"><i data-lucide="pen-line"></i></button><button class="icon-button danger" type="button" title="Видалити" data-action="delete-exercise" data-exercise-id="${exercise.id}"><i data-lucide="trash-2"></i></button></div>`
             : "";
         const meta = `<div class="exercise-meta" title="${escapeHtml(ownerName)}${added ? ` · ${added}` : ""}">${owner ? avatar(owner, "tiny") : `<span class="exercise-meta-fallback"><i data-lucide="user-round"></i></span>`}<div class="exercise-meta-text"><span class="exercise-meta-name">${escapeHtml(ownerName)}</span>${added ? `<span class="exercise-meta-date">${added}</span>` : ""}</div></div>`;
-        return `<article class="exercise-card${media ? " has-thumb" : ""}${pending ? " is-pending" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}${overlay}<div class="exercise-card-body">${inlineBadges}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption exercise-card-desc">${escapeHtml(exercise.description)}</p><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></div><div class="exercise-card-footer">${meta}${actions}</div></article>`;
+        return `<article class="exercise-card${media ? " has-thumb" : ""}${pending ? " is-pending" : ""}${exercise.myReaction === "dislike" ? " is-disliked" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}${overlay}<div class="exercise-card-body">${inlineBadges}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption exercise-card-desc">${escapeHtml(exercise.description)}</p><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></div><div class="exercise-card-footer">${meta}${actions}</div>${reactionBar(exercise)}</article>`;
+    }
+
+    // Like / dislike controls + shared counts. Lives in its own bottom row so it
+    // never collides with the admin edit/delete panel. Tapping a button is its own
+    // action (data-action wins over the card's open-exercise via closest()).
+    function reactionBar(exercise) {
+        const mine = exercise.myReaction || null;
+        return `<div class="exercise-card-reactions">
+            <button class="react-btn like${mine === "like" ? " active" : ""}" type="button" data-action="react-exercise" data-exercise-id="${exercise.id}" data-reaction="like" aria-pressed="${mine === "like"}" aria-label="Подобається"><i data-lucide="thumbs-up"></i><span class="react-count">${exercise.likeCount || 0}</span></button>
+            <button class="react-btn dislike${mine === "dislike" ? " active" : ""}" type="button" data-action="react-exercise" data-exercise-id="${exercise.id}" data-reaction="dislike" aria-pressed="${mine === "dislike"}" aria-label="Не подобається"><i data-lucide="thumbs-down"></i><span class="react-count">${exercise.dislikeCount || 0}</span></button>
+        </div>`;
+    }
+
+    function applyReactionLocally(exercise, next) {
+        const previous = exercise.myReaction || "none";
+        if (previous === "like") {
+            exercise.likeCount = Math.max(0, (exercise.likeCount || 0) - 1);
+        }
+        if (previous === "dislike") {
+            exercise.dislikeCount = Math.max(0, (exercise.dislikeCount || 0) - 1);
+        }
+        if (next === "like") {
+            exercise.likeCount = (exercise.likeCount || 0) + 1;
+        }
+        if (next === "dislike") {
+            exercise.dislikeCount = (exercise.dislikeCount || 0) + 1;
+        }
+        exercise.myReaction = next === "none" ? null : next;
+    }
+
+    // Update the card's buttons/counts in place — no re-sort, so the card doesn't
+    // jump under the finger. The liked-first order applies on the next list render.
+    function updateReactionUI(exercise) {
+        document.querySelectorAll(`.react-btn[data-exercise-id="${exercise.id}"]`).forEach((button) => {
+            const reaction = button.dataset.reaction;
+            const active = exercise.myReaction === reaction;
+            button.classList.toggle("active", active);
+            button.setAttribute("aria-pressed", String(active));
+            const count = button.querySelector(".react-count");
+            if (count) {
+                count.textContent = reaction === "like" ? (exercise.likeCount || 0) : (exercise.dislikeCount || 0);
+            }
+        });
+        document.querySelectorAll(`.exercise-card[data-exercise-id="${exercise.id}"]`).forEach((card) => {
+            card.classList.toggle("is-disliked", exercise.myReaction === "dislike");
+        });
+    }
+
+    async function reactToExercise(exerciseId, reaction) {
+        const exercise = exerciseById(exerciseId);
+        if (!exercise || (reaction !== "like" && reaction !== "dislike")) {
+            return;
+        }
+        const previous = { myReaction: exercise.myReaction || null, likeCount: exercise.likeCount || 0, dislikeCount: exercise.dislikeCount || 0 };
+        const next = exercise.myReaction === reaction ? "none" : reaction;
+        applyReactionLocally(exercise, next);
+        updateReactionUI(exercise);
+        try {
+            if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+                const result = await storage.apiClient.reactExercise(exerciseId, next);
+                exercise.likeCount = result.likeCount;
+                exercise.dislikeCount = result.dislikeCount;
+                exercise.myReaction = result.myReaction || null;
+                updateReactionUI(exercise);
+            } else {
+                await persist({ silent: true });
+            }
+        } catch (error) {
+            exercise.myReaction = previous.myReaction;
+            exercise.likeCount = previous.likeCount;
+            exercise.dislikeCount = previous.dislikeCount;
+            updateReactionUI(exercise);
+            handleUserFacingError(error, "react-exercise");
+        }
     }
 
     function pendingExercises() {
@@ -3884,10 +3968,33 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
 
     function filteredExercises() {
         const search = state.filters.exerciseSearch.trim().toLowerCase();
-        if (!search) {
-            return state.database.exercises;
+        let items = state.database.exercises;
+        if (search) {
+            items = items.filter((exercise) => [exercise.name, exercise.aliases.join(" "), exercise.primaryMuscleGroup, exercise.secondaryMuscleGroups.join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search));
         }
-        return state.database.exercises.filter((exercise) => [exercise.name, exercise.aliases.join(" "), exercise.primaryMuscleGroup, exercise.secondaryMuscleGroups.join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search));
+        return sortExercisesByReaction(items);
+    }
+
+    // Liked-by-me first, then neutral, then disliked-by-me last; alphabetical within
+    // each group. (Personal reaction, not global counts.)
+    function reactionRank(exercise) {
+        if (exercise.myReaction === "like") {
+            return 0;
+        }
+        if (exercise.myReaction === "dislike") {
+            return 2;
+        }
+        return 1;
+    }
+
+    function sortExercisesByReaction(list) {
+        return list.slice().sort((left, right) => {
+            const byReaction = reactionRank(left) - reactionRank(right);
+            if (byReaction) {
+                return byReaction;
+            }
+            return String(left.name || "").localeCompare(String(right.name || ""), "uk");
+        });
     }
 
     function filteredWorkouts(workouts) {
