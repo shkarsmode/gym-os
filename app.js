@@ -4704,6 +4704,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         element("modalLayer").innerHTML = html;
         element("modalLayer").classList.remove("hidden");
         iconsIn(element("modalLayer"));
+        lockBackgroundScroll();
     }
 
     // Reliable in-app confirmation (native confirm() is unreliable/blocked on mobile).
@@ -4717,6 +4718,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             layer.innerHTML = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
             layer.classList.remove("hidden");
             iconsIn(layer);
+            lockBackgroundScroll();
             let settled = false;
             const finish = (result) => {
                 if (settled) {
@@ -4740,6 +4742,51 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         element("drawerLayer").innerHTML = html;
         element("drawerLayer").classList.remove("hidden");
         iconsIn(element("drawerLayer"));
+        lockBackgroundScroll();
+    }
+
+    // --- Background scroll-lock for overlays (modal/drawer) ---
+    // Without this, iOS routes a touch-scroll to the page *behind* a position:fixed
+    // overlay (rubber-banding — "задник сердиться") and the overlay itself often
+    // won't scroll at all. Pinning <body> position:fixed makes the overlay the only
+    // scrollable surface; we save/restore scrollY so there is no jump on open/close.
+    let scrollLockY = 0;
+    let scrollLocked = false;
+
+    function lockBackgroundScroll() {
+        if (scrollLocked) {
+            return;
+        }
+        scrollLocked = true;
+        scrollLockY = window.scrollY || window.pageYOffset || 0;
+        // compensate for the desktop scrollbar disappearing (no-op on mobile overlay scrollbars)
+        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+        const bodyStyle = document.body.style;
+        bodyStyle.position = "fixed";
+        bodyStyle.top = `-${scrollLockY}px`;
+        bodyStyle.left = "0";
+        bodyStyle.right = "0";
+        bodyStyle.width = "100%";
+        if (scrollbarWidth > 0) {
+            bodyStyle.paddingRight = `${scrollbarWidth}px`;
+        }
+        document.documentElement.classList.add("overlay-open");
+    }
+
+    function unlockBackgroundScroll() {
+        if (!scrollLocked) {
+            return;
+        }
+        scrollLocked = false;
+        const bodyStyle = document.body.style;
+        bodyStyle.position = "";
+        bodyStyle.top = "";
+        bodyStyle.left = "";
+        bodyStyle.right = "";
+        bodyStyle.width = "";
+        bodyStyle.paddingRight = "";
+        document.documentElement.classList.remove("overlay-open");
+        window.scrollTo(0, scrollLockY);
     }
 
     function closeOverlay() {
@@ -4748,6 +4795,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         element("drawerLayer").classList.add("hidden");
         element("modalLayer").innerHTML = "";
         element("drawerLayer").innerHTML = "";
+        unlockBackgroundScroll();
     }
 
     function showBusyOverlay(options = {}) {

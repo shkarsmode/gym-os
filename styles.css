@@ -1735,6 +1735,16 @@ tr:last-child td {
     border: 1px solid var(--color-border-strong);
     background: var(--color-surface);
     box-shadow: var(--shadow-card);
+    /* keep the overlay's scroll to itself — don't let a swipe chain to the page
+       behind it (iOS rubber-band). Paired with the body scroll-lock in JS. */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* While an overlay is open the <body> is pinned (position:fixed in JS); make the
+   document non-scrollable too so nothing behind the backdrop can move. */
+html.overlay-open {
+    overflow: hidden;
 }
 
 .modal-layer {
@@ -2489,12 +2499,18 @@ ul {
     }
 
     .drawer-layer {
-        inset: 8px;
+        /* full-bleed but inside the safe area so the X / first row clear the
+           notch + Dynamic Island and the last row clears the home indicator */
+        top: calc(8px + env(safe-area-inset-top));
+        right: calc(8px + env(safe-area-inset-right));
+        bottom: calc(8px + env(safe-area-inset-bottom));
+        left: calc(8px + env(safe-area-inset-left));
         width: auto;
     }
 
     .modal-layer {
         width: calc(100vw - 20px);
+        max-height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
         border-radius: var(--radius-lg);
         padding: 16px;
     }
