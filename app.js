@@ -1745,23 +1745,24 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             ["users", "Команда, рейтинги, календар"]
         ];
         const proFeatures = [
-            ["infinity", "Безлімітні тренування та вправи"],
+            ["dumbbell", "До 2 тренувань на день, без тижневого ліміту"],
+            ["list-plus", "До 30 власних вправ"],
+            ["lightbulb", "До 3 запитів-ідей на день"],
             ["bar-chart-3", "Розширена аналітика й прогрес"],
             ["history", "Повна історія тренувань"],
             ["download", "Експорт даних (CSV / PDF)"],
             ["crown", "Бейдж PRO у команді й рейтингу"],
-            ["cloud", "Пріоритетна синхронізація"],
             ["heart", "Підтримка розробки 💚"]
         ];
         const cmp = [
-            ["Тренувань на день", "1", "∞"],
-            ["Тренувань на тиждень", "2", "∞"],
-            ["Власні вправи", "1 / міс", "∞"],
+            ["Тренувань на день", "1", "2"],
+            ["Тренувань на тиждень", "2", "без ліміту"],
+            ["Власні вправи", "1 / міс", "до 30"],
+            ["Запитів-ідей на день", "1", "3"],
             ["Розширена аналітика", false, true],
             ["Повна історія тренувань", false, true],
             ["Експорт даних", false, true],
-            ["Бейдж PRO статусу", false, true],
-            ["Пріоритетна синхронізація", false, true]
+            ["Бейдж PRO статусу", false, true]
         ];
         const cmpCell = (value) => value === true
             ? `<i data-lucide="check" class="cmp-yes"></i>`
@@ -1870,7 +1871,11 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     // overlay is open or the touch starts on a toast / nav / input — so it never
     // hijacks normal scrolling or other gestures.
     function setupPullToRefresh() {
-        if (!("ontouchstart" in window)) {
+        // Phones/tablets only — a touch-PRIMARY device (pointer: coarse). Desktops,
+        // including touch-capable laptops driven by a mouse, report (pointer: fine)
+        // and are excluded, so PTR never touches desktop mouse-wheel / reload.
+        const touchPrimary = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+        if (!touchPrimary) {
             return;
         }
         if (document.getElementById("ptrIndicator")) {
@@ -2913,10 +2918,10 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         const limitsLine = isExercise
             ? "На безкоштовному тарифі — <strong>1 власна вправа на місяць</strong>."
             : "На безкоштовному тарифі — до <strong>1 тренування на день</strong> і <strong>2 на тиждень</strong>.";
-        const title = isExercise ? "Розблокуй безлімітні вправи" : "Розблокуй безлімітні тренування";
+        const title = isExercise ? "Більше власних вправ із PRO" : "Більше тренувань із PRO";
         const perks = [
-            ["infinity", "Безлімітні тренування", "Без денних і тижневих обмежень"],
-            ["dumbbell", "Безлімітні власні вправи", "Free — лише 1 вправа на місяць"],
+            ["dumbbell", "До 2 тренувань на день", "Free — 1 на день і 2 на тиждень"],
+            ["list-plus", "До 30 власних вправ", "Free — лише 1 вправа на місяць"],
             ["bar-chart-3", "Розширена аналітика", "Глибша статистика прогресу та PR"],
             ["cloud", "Пріоритетна синхронізація", "Швидші бекапи й відновлення"]
         ];
@@ -5246,7 +5251,16 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         if (status === 401) {
             return "Сесія неактивна. Увійди через Google ще раз.";
         }
+        if (status === 429) {
+            return rawMessage || "Забагато запитів за коротку мить. Зачекай кілька секунд.";
+        }
         if (status === 403) {
+            // Quota/limit hits carry a specific, friendly message from the backend
+            // (e.g. PRO daily caps) — surface it instead of the generic permission line.
+            const code = error?.payload?.code;
+            if (code === "WORKOUT_LIMIT" || code === "EXERCISE_LIMIT" || code === "FEEDBACK_LIMIT") {
+                return rawMessage || "Ліміт тарифу досягнуто.";
+            }
             return "Немає прав для цієї дії.";
         }
         if (status === 413) {
