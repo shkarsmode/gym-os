@@ -3166,7 +3166,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         let overlay = null;
         try {
             const data = JSON.parse(await file.text());
-            ["users", "exercises", "workouts", "bodyweightEntries", "strengthStandards"].forEach((key) => {
+            // strengthStandards is no longer part of the export payload (regenerated
+            // client-side on demand), so it isn't required for a valid import.
+            ["users", "exercises", "workouts", "bodyweightEntries"].forEach((key) => {
                 if (!Array.isArray(data[key])) {
                     throw new Error(`Missing ${key}`);
                 }
@@ -3434,13 +3436,20 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         });
     }
 
+    const reactingExerciseIds = new Set();
     async function reactToExercise(exerciseId, reaction) {
         const exercise = exerciseById(exerciseId);
         if (!exercise || (reaction !== "like" && reaction !== "dislike")) {
             return;
         }
+        // Serialize per exercise: ignore taps while a request is in flight so two
+        // out-of-order responses can't leave the card in a stale/divergent state.
+        if (reactingExerciseIds.has(exerciseId)) {
+            return;
+        }
         const previous = { myReaction: exercise.myReaction || null, likeCount: exercise.likeCount || 0, dislikeCount: exercise.dislikeCount || 0 };
         const next = exercise.myReaction === reaction ? "none" : reaction;
+        reactingExerciseIds.add(exerciseId);
         applyReactionLocally(exercise, next);
         updateReactionUI(exercise);
         try {
@@ -3459,6 +3468,8 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             exercise.dislikeCount = previous.dislikeCount;
             updateReactionUI(exercise);
             handleUserFacingError(error, "react-exercise");
+        } finally {
+            reactingExerciseIds.delete(exerciseId);
         }
     }
 
