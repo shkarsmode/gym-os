@@ -70,16 +70,11 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Native pull-to-refresh suppression is needed ONLY on touch devices (where our
-   own PTR lives). On desktop, `overflow-x: hidden` makes <body> a zero-range
-   scroll container, and `overscroll-behavior: contain` there can trap the mouse
-   wheel so it never chains to <html> (the real scroller) — freezing main-content
-   scroll in some browsers. So scope it to touch-primary devices only. */
-@media (pointer: coarse) {
-    body {
-        overscroll-behavior-y: contain;
-    }
-}
+/* NOTE: do NOT put `overscroll-behavior` on <body>. Because `overflow-x: hidden`
+   makes <body> a zero-range scroll container (the real scroll lives on <html>),
+   `contain`/`none` there TRAPS the wheel/touch and freezes main-content scroll —
+   it broke desktop (wheel) and Android (touch). Native pull-to-refresh is instead
+   suppressed by the custom PTR's touchmove preventDefault (mobile only). */
 
 button,
 input,
@@ -1604,13 +1599,16 @@ select option {
 
 /* ---- First-set coach-mark (teaches new users to tap "complete set") ---- */
 .setdone-hint {
-    align-self: flex-start;
+    /* sit at the right, directly above the round complete-toggle, so the caret
+       points at the actual button (not the left of the row). */
+    align-self: flex-end;
     position: relative;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin: 0 0 -2px;
-    padding: 5px 8px 5px 11px;
+    max-width: 100%;
+    margin: 0 0 2px;
+    padding: 6px 13px;
     border: 1px solid var(--color-accent-border);
     border-radius: var(--radius-pill);
     background: var(--color-accent-dim);
@@ -1622,9 +1620,13 @@ select option {
     animation: gymHintIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-/* CSS-only caret (no lucide dependency) */
+/* CSS-only caret (no lucide dependency), pinned to point DOWN at the toggle.
+   The toggle centre is ~75px from the row's right edge: delete button (38) +
+   gap (6) + half the 38px toggle (19) + row padding (11) ≈ 74. */
 .setdone-hint-caret {
-    flex: 0 0 auto;
+    position: absolute;
+    right: 70px;
+    bottom: -5px;
     width: 0;
     height: 0;
     border-left: 5px solid transparent;
@@ -1633,20 +1635,6 @@ select option {
 }
 
 .setdone-hint-short { display: none; }
-
-.setdone-hint-x {
-    border: 0;
-    background: transparent;
-    color: var(--color-accent-strong);
-    cursor: pointer;
-    font-size: 16px;
-    line-height: 1;
-    padding: 0 2px;
-    margin-left: 2px;
-    opacity: 0.75;
-}
-
-.setdone-hint-x:hover { opacity: 1; }
 
 @keyframes gymHintIn {
     from { opacity: 0; transform: translateY(4px); }

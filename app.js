@@ -1479,36 +1479,18 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         const previousNote = lastNote
             ? `<div class="previous-note"><span class="previous-note-label"><i data-lucide="sticky-note"></i>Остання нотатка · ${formatDate(lastNote.date)}</span><p>${escapeHtml(lastNote.notes)}</p></div>`
             : "";
-        const showSetHint = !readonly && isFirstExercise && !setDoneHintSeen();
+        const showSetHint = !readonly && isFirstExercise;
         return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div>${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
-    }
-
-    // One-time onboarding flag — teaches new users to tap the "complete set" toggle.
-    const SETDONE_HINT_KEY = "gymos-hint-seen-setdone";
-
-    function setDoneHintSeen() {
-        try {
-            return Boolean(localStorage.getItem(SETDONE_HINT_KEY));
-        } catch (error) {
-            return true; // storage blocked → never nag
-        }
-    }
-
-    function markSetDoneHintSeen() {
-        try {
-            localStorage.setItem(SETDONE_HINT_KEY, "1");
-        } catch (error) {
-            // storage unavailable; ignore
-        }
     }
 
     function setRow(workoutExerciseId, set, readonly, index, showSetHint) {
         const target = `data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}"`;
         const lock = readonly ? "disabled" : "";
-        // Coach-mark only on the very first set of the first exercise, until earned.
+        // Coach-mark on the very first set of the first exercise (until that set is
+        // done). Shows every time a workout's first exercise is added — not one-time.
         const hintOn = Boolean(showSetHint) && index === 1 && !set.isCompleted;
         const hintChip = hintOn
-            ? `<div class="setdone-hint" role="status"><span class="setdone-hint-caret" aria-hidden="true"></span><span class="setdone-hint-full">Тисни кружечок, коли завершиш підхід</span><span class="setdone-hint-short">Тисни, коли завершиш підхід</span><button class="setdone-hint-x" type="button" data-action="dismiss-setdone-hint" aria-label="Зрозуміло">×</button></div>`
+            ? `<div class="setdone-hint" role="status"><span class="setdone-hint-full">Тисни кружечок праворуч, коли завершиш підхід</span><span class="setdone-hint-short">Тисни кружечок, коли завершиш</span><span class="setdone-hint-caret" aria-hidden="true"></span></div>`
             : "";
         return `${hintChip}<div class="set-row ${set.isCompleted ? "completed" : ""}">
             <div class="set-row-head">
@@ -2319,7 +2301,6 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
             "toggle-set": () => toggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
             "delete-set": () => deleteSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
-            "dismiss-setdone-hint": () => { markSetDoneHintSeen(); renderSection(); },
             "finish-workout": () => finishWorkout(actionElement.dataset.workoutId),
             "open-cardio-modal": () => openCardioModal(actionElement.dataset.workoutId, actionElement.dataset.cardioId || null),
             "save-cardio": () => saveCardio(actionElement.dataset.workoutId, actionElement.dataset.cardioId || null),
@@ -2448,7 +2429,6 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "activity-scope",
             "stats-user",
             "feedback-type",
-            "dismiss-setdone-hint",
             "react-exercise",
             "open-exercise",
             "open-user",
@@ -3217,9 +3197,6 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             return;
         }
         set.isCompleted = !set.isCompleted;
-        if (set.isCompleted) {
-            markSetDoneHintSeen(); // user understood the toggle — retire the coach-mark
-        }
         if (set.isCompleted && editWorkout()?.status === "active") {
             startTimer(set.restSeconds || 90);
             toast("Підхід завершено", `Таймер відпочинку: ${seconds(set.restSeconds || 90)}`);
