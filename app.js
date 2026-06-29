@@ -1950,6 +1950,22 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
 
         const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
 
+        // PTR must NOT hijack a drag that belongs to an inner scrollable region
+        // (a list, a portaled dropdown panel, any overflow:auto box). If the touch
+        // starts inside one that can actually scroll, let it scroll instead.
+        const insideScrollable = (node) => {
+            while (node && node !== document.body && node !== document.documentElement) {
+                if (node.nodeType === 1 && node.scrollHeight > node.clientHeight) {
+                    const overflowY = getComputedStyle(node).overflowY;
+                    if (overflowY === "auto" || overflowY === "scroll") {
+                        return true;
+                    }
+                }
+                node = node.parentElement;
+            }
+            return false;
+        };
+
         function setPull(px, animate) {
             pull = px;
             indicator.style.transition = animate ? "transform 0.26s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease" : "none";
@@ -1988,8 +2004,12 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
                 armed = false;
                 return;
             }
-            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .mobile-navigation, .floating-timer, input, textarea, select, [contenteditable]")) {
+            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
                 armed = false;
+                return;
+            }
+            if (insideScrollable(event.target)) {
+                armed = false; // let the inner list / scroll region take the drag
                 return;
             }
             if (!atTop()) {
@@ -5186,7 +5206,10 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             if (event.touches && event.touches.length > 1) {
                 return; // allow pinch-zoom
             }
-            const overlay = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer") : null;
+            // Include the portaled dropdown panels (.gselect-panel / .gdate-panel are
+            // appended to <body>, OUTSIDE .modal-layer) so their own list can scroll on
+            // touch while a modal is open — otherwise the guard would block them.
+            const overlay = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer, .gselect-panel, .gdate-panel") : null;
             if (!overlay) {
                 event.preventDefault(); // outside any overlay → never let the page behind scroll
                 return;
