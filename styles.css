@@ -25,6 +25,9 @@
     --color-warning-dim: rgba(251, 191, 36, 0.14);
     --color-info: #60a5fa;
     --color-info-dim: rgba(96, 165, 250, 0.14);
+    --color-improve: #a78bfa;
+    --color-improve-dim: rgba(167, 139, 250, 0.16);
+    --color-improve-border: rgba(167, 139, 250, 0.36);
 
     --shadow-card: 0 12px 36px rgba(0, 0, 0, 0.4);
     --shadow-soft: 0 2px 12px rgba(0, 0, 0, 0.28);
@@ -722,6 +725,185 @@ h3 {
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
+}
+
+/* ---------- Nav badge for the hub (e.g. new feedback count) ---------- */
+.nav-hub-badge {
+    flex: 0 0 auto;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent);
+    color: #06140d;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+/* ---------- Feedback / feature-request board ---------- */
+.fb-type-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.fb-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-weight: 600;
+    font-size: 13px;
+    transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.fb-type i,
+.fb-type svg {
+    width: 15px;
+    height: 15px;
+}
+
+.fb-type:hover {
+    color: var(--color-text);
+    border-color: var(--color-border-strong);
+}
+
+.fb-type.feature.active {
+    color: var(--color-accent-strong);
+    background: var(--color-accent-dim);
+    border-color: var(--color-accent-border);
+}
+
+.fb-type.fix.active {
+    color: var(--color-warning);
+    background: var(--color-warning-dim);
+    border-color: rgba(251, 191, 36, 0.36);
+}
+
+.fb-type.improvement.active {
+    color: var(--color-improve);
+    background: var(--color-improve-dim);
+    border-color: var(--color-improve-border);
+}
+
+.feedback-board {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.fb-item {
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.fb-item.type-feature { border-left-color: var(--color-accent); }
+.fb-item.type-fix { border-left-color: var(--color-warning); }
+.fb-item.type-improvement { border-left-color: var(--color-improve); }
+.fb-item.status-done { opacity: 0.72; }
+.fb-item.status-declined { opacity: 0.5; }
+
+.fb-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.fb-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.fb-type-badge i,
+.fb-type-badge svg {
+    width: 12px;
+    height: 12px;
+}
+
+.fb-type-badge.feature { color: var(--color-accent-strong); background: var(--color-accent-dim); }
+.fb-type-badge.fix { color: var(--color-warning); background: var(--color-warning-dim); }
+.fb-type-badge.improvement { color: var(--color-improve); background: var(--color-improve-dim); }
+
+.fb-status-badge {
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--color-muted);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.fb-status-badge.status-new { color: var(--color-info); background: var(--color-info-dim); }
+.fb-status-badge.status-planned { color: var(--color-improve); background: var(--color-improve-dim); }
+.fb-status-badge.status-in_progress { color: var(--color-warning); background: var(--color-warning-dim); }
+.fb-status-badge.status-done { color: var(--color-accent-strong); background: var(--color-accent-dim); }
+.fb-status-badge.status-declined { color: var(--color-faint); background: rgba(255, 255, 255, 0.05); }
+
+.fb-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.fb-desc {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.fb-meta {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--color-faint);
+    font-size: 12px;
+}
+
+.fb-dot { opacity: 0.6; }
+
+.fb-admin {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.fb-admin gym-select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .feedback-board {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ---------- Buttons ---------- */
