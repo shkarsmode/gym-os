@@ -1684,6 +1684,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
         window.addEventListener("hashchange", handleRoute);
+        // Guarantee scrolling is never left frozen by a stray overlay lock.
+        window.addEventListener("focus", ensureScrollUnlockedIfNoOverlay);
+        window.addEventListener("pageshow", ensureScrollUnlockedIfNoOverlay);
         window.addEventListener("resize", () => {
             clearTimeout(bindEvents.resizeTimer);
             bindEvents.resizeTimer = setTimeout(updateTopbarOffset, 150);
@@ -4960,9 +4963,10 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     }
 
     function unlockBackgroundScroll() {
-        if (!scrollLocked) {
-            return;
-        }
+        // Clear the lock styles UNCONDITIONALLY (idempotent) — even if the flag
+        // ever desyncs, a stuck position:fixed must never survive and kill page /
+        // mouse-wheel scrolling. Only restore scroll position if we were locked.
+        const wasLocked = scrollLocked;
         scrollLocked = false;
         const bodyStyle = document.body.style;
         bodyStyle.position = "";
@@ -4972,16 +4976,30 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         bodyStyle.width = "";
         bodyStyle.paddingRight = "";
         document.documentElement.classList.remove("overlay-open");
-        window.scrollTo(0, scrollLockY);
+        if (wasLocked) {
+            window.scrollTo(0, scrollLockY);
+        }
     }
 
     function closeOverlay() {
+        // Unlock FIRST so a later DOM error can't skip it and leave scroll frozen.
+        unlockBackgroundScroll();
         element("modalBackdrop").classList.add("hidden");
         element("modalLayer").classList.add("hidden");
         element("drawerLayer").classList.add("hidden");
         element("modalLayer").innerHTML = "";
         element("drawerLayer").innerHTML = "";
-        unlockBackgroundScroll();
+    }
+
+    // Self-heal: if no overlay is actually open but the body is still locked
+    // (e.g. an interrupted close), force scrolling back on. Runs on tab focus /
+    // bfcache restore and navigation so a stuck lock can never persist.
+    function ensureScrollUnlockedIfNoOverlay() {
+        const modalHidden = element("modalLayer").classList.contains("hidden");
+        const drawerHidden = element("drawerLayer").classList.contains("hidden");
+        if (modalHidden && drawerHidden && (scrollLocked || document.body.style.position === "fixed")) {
+            unlockBackgroundScroll();
+        }
     }
 
     function showBusyOverlay(options = {}) {
