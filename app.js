@@ -5147,57 +5147,49 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     }
 
     // --- Background scroll-lock for overlays (modal/drawer) ---
-    // Without this, iOS routes a touch-scroll to the page *behind* a position:fixed
-    // overlay (rubber-banding — "задник сердиться") and the overlay itself often
-    // won't scroll at all. Pinning <body> position:fixed makes the overlay the only
-    // scrollable surface; we save/restore scrollY so there is no jump on open/close.
-    let scrollLockY = 0;
+    // iOS would otherwise route a touch-scroll to the page *behind* an overlay
+    // (rubber-banding — "задник сердиться"). The previous fix pinned <body>
+    // position:fixed, but in an INSTALLED PWA (standalone) iOS recomputes the layout
+    // viewport when body goes fixed and visibly *jumps* the content + bottom-nav as a
+    // modal opens (works fine in a normal browser, so it slipped through). So we no
+    // longer mutate layout at all: a non-passive touchmove guard blocks any scroll
+    // that isn't inside the overlay's own scroll surface (.modal-layer / .drawer-layer
+    // are overflow:auto + overscroll-behavior:contain, so they scroll themselves and
+    // don't chain to the page). No layout change => no jump. Touch-only; the desktop
+    // mouse-wheel path is never touched.
     let scrollLocked = false;
+    let lockTouchMove = null;
 
     function lockBackgroundScroll() {
-        // Only lock on touch-primary devices (the iOS drawer rubber-band fix this
-        // was built for). On desktop a position:fixed <body> is unnecessary and has
-        // repeatedly risked freezing main-content scroll, so skip it entirely there.
         const touchPrimary = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
-        if (!touchPrimary) {
-            return;
-        }
-        if (scrollLocked) {
+        if (!touchPrimary || scrollLocked) {
             return;
         }
         scrollLocked = true;
-        scrollLockY = window.scrollY || window.pageYOffset || 0;
-        // compensate for the desktop scrollbar disappearing (no-op on mobile overlay scrollbars)
-        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-        const bodyStyle = document.body.style;
-        bodyStyle.position = "fixed";
-        bodyStyle.top = `-${scrollLockY}px`;
-        bodyStyle.left = "0";
-        bodyStyle.right = "0";
-        bodyStyle.width = "100%";
-        if (scrollbarWidth > 0) {
-            bodyStyle.paddingRight = `${scrollbarWidth}px`;
-        }
+        lockTouchMove = (event) => {
+            if (event.touches && event.touches.length > 1) {
+                return; // allow pinch-zoom
+            }
+            const scroller = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer") : null;
+            // Block the move when it's outside any overlay, or inside one that has
+            // nothing to scroll — otherwise it would chain to the page behind.
+            if (!scroller || scroller.scrollHeight <= scroller.clientHeight) {
+                event.preventDefault();
+            }
+        };
+        document.addEventListener("touchmove", lockTouchMove, { passive: false });
         document.documentElement.classList.add("overlay-open");
     }
 
     function unlockBackgroundScroll() {
-        // Clear the lock styles UNCONDITIONALLY (idempotent) — even if the flag
-        // ever desyncs, a stuck position:fixed must never survive and kill page /
-        // mouse-wheel scrolling. Only restore scroll position if we were locked.
-        const wasLocked = scrollLocked;
+        // Idempotent — even if the flag ever desyncs, the listener must never survive
+        // and keep swallowing touch-scroll.
         scrollLocked = false;
-        const bodyStyle = document.body.style;
-        bodyStyle.position = "";
-        bodyStyle.top = "";
-        bodyStyle.left = "";
-        bodyStyle.right = "";
-        bodyStyle.width = "";
-        bodyStyle.paddingRight = "";
-        document.documentElement.classList.remove("overlay-open");
-        if (wasLocked) {
-            window.scrollTo(0, scrollLockY);
+        if (lockTouchMove) {
+            document.removeEventListener("touchmove", lockTouchMove, { passive: false });
+            lockTouchMove = null;
         }
+        document.documentElement.classList.remove("overlay-open");
     }
 
     function closeOverlay() {
@@ -5216,7 +5208,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     function ensureScrollUnlockedIfNoOverlay() {
         const modalHidden = element("modalLayer").classList.contains("hidden");
         const drawerHidden = element("drawerLayer").classList.contains("hidden");
-        if (modalHidden && drawerHidden && (scrollLocked || document.body.style.position === "fixed")) {
+        if (modalHidden && drawerHidden && (scrollLocked || lockTouchMove)) {
             unlockBackgroundScroll();
         }
     }

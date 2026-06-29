@@ -2221,10 +2221,12 @@ tr:last-child td {
     -webkit-overflow-scrolling: touch;
 }
 
-/* NOTE: do NOT add `html.overlay-open { overflow: hidden }`. The body is already
-   pinned (position:fixed in JS, touch-only) which fully locks scroll; toggling the
-   root scroller's overflow made iOS recompute the viewport and visibly "bob" the
-   fixed bottom-nav / content when a modal opened. */
+/* NOTE: do NOT lock the overlay background by toggling the root scroller's overflow
+   or by pinning <body> position:fixed. Both make iOS recompute the layout viewport
+   and visibly "bob"/jump the fixed bottom-nav + content when a modal opens — worst of
+   all in an installed PWA (standalone). Background scroll is instead blocked in JS
+   with a non-passive touchmove guard (lockBackgroundScroll), which mutates no layout.
+   The overlay scrolls itself via overflow:auto + overscroll-behavior:contain below. */
 
 /* ---------- Pull-to-refresh ---------- */
 .ptr-indicator {
