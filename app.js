@@ -1761,7 +1761,98 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             }
         }
 
+        const isCoarse = () => !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+
+        // ---- Mobile: a clean bottom sheet instead of a finicky floating tip ----
+        let sheet = null;
+        let sheetBackdrop = null;
+        let sheetTitle = null;
+        let sheetBody = null;
+
+        function closeSheet() {
+            if (sheet) {
+                sheet.classList.remove("visible");
+                sheet.style.transform = "";
+            }
+            if (sheetBackdrop) {
+                sheetBackdrop.classList.remove("visible");
+            }
+        }
+
+        function ensureSheet() {
+            if (sheet) {
+                return;
+            }
+            sheetBackdrop = document.createElement("div");
+            sheetBackdrop.className = "tip-sheet-backdrop";
+            sheet = document.createElement("div");
+            sheet.className = "tip-sheet";
+            sheet.setAttribute("role", "dialog");
+            sheet.setAttribute("aria-modal", "true");
+            sheet.innerHTML = `<span class="tip-sheet-handle" aria-hidden="true"></span><div class="tip-sheet-head"><span class="tip-sheet-icon"><i data-lucide="info"></i></span><h4 class="tip-sheet-title"></h4></div><p class="tip-sheet-body"></p>`;
+            document.body.append(sheetBackdrop, sheet);
+            sheetTitle = sheet.querySelector(".tip-sheet-title");
+            sheetBody = sheet.querySelector(".tip-sheet-body");
+            sheetBackdrop.addEventListener("click", closeSheet);
+
+            // swipe the sheet down to dismiss
+            let startY = 0;
+            let deltaY = 0;
+            let dragging = false;
+            sheet.addEventListener("pointerdown", (event) => {
+                startY = event.clientY;
+                deltaY = 0;
+                dragging = true;
+                sheet.style.transition = "none";
+            });
+            sheet.addEventListener("pointermove", (event) => {
+                if (!dragging) {
+                    return;
+                }
+                deltaY = Math.max(0, event.clientY - startY);
+                sheet.style.transform = `translateY(${deltaY}px)`;
+            });
+            const endDrag = () => {
+                if (!dragging) {
+                    return;
+                }
+                dragging = false;
+                sheet.style.transition = "";
+                if (deltaY > 90) {
+                    closeSheet();
+                } else {
+                    sheet.style.transform = "";
+                }
+            };
+            sheet.addEventListener("pointerup", endDrag);
+            sheet.addEventListener("pointercancel", endDrag);
+        }
+
+        function openSheet(trigger) {
+            const title = trigger.getAttribute("data-tip-title") || "";
+            const body = trigger.getAttribute("data-tip-body") || "";
+            if (!body) {
+                return;
+            }
+            ensureSheet();
+            sheetTitle.textContent = title;
+            sheetBody.textContent = body;
+            if (window.lucide) {
+                window.lucide.createIcons({ root: sheet });
+            }
+            sheet.style.transform = "";
+            sheetBackdrop.classList.add("visible");
+            const reveal = () => sheet.classList.add("visible");
+            requestAnimationFrame(reveal);
+            setTimeout(reveal, 60); // fallback if rAF is throttled
+        }
+
+        // Touch devices synthesise mouseover/mouseout on tap (the flicker/lag) —
+        // skip the hover path there entirely; tap opens the sheet instead.
         document.addEventListener("mouseover", (event) => {
+            if (isCoarse()) {
+                return;
+            }
             const trigger = event.target.closest("[data-tip-body]");
             if (!trigger || trigger === activeTrigger) {
                 return;
@@ -1773,6 +1864,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         });
 
         document.addEventListener("mouseout", (event) => {
+            if (isCoarse()) {
+                return;
+            }
             const trigger = event.target.closest("[data-tip-body]");
             if (!trigger) {
                 return;
@@ -1783,14 +1877,17 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             hide();
         });
 
-        // Capture phase so a tap on the trigger toggles the tooltip without the
-        // click bubbling to a parent card action.
+        // Capture phase so a tap on the trigger doesn't bubble to a parent action.
         document.addEventListener("click", (event) => {
             pointerFocus = false;
             const trigger = event.target.closest("[data-tip-body]");
             if (trigger) {
                 event.preventDefault();
                 event.stopPropagation();
+                if (isCoarse()) {
+                    openSheet(trigger);
+                    return;
+                }
                 if (activeTrigger === trigger && tipEl && tipEl.classList.contains("visible")) {
                     hide();
                 } else {
@@ -1806,18 +1903,16 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             }
         }, true);
 
-        // A pointer (mouse/touch) press focuses the button; flag it so focusin
-        // doesn't open a tooltip the click handler would immediately toggle shut.
-        // Keyboard focus has no preceding pointerdown, so it still opens cleanly.
         document.addEventListener("pointerdown", (event) => {
             pointerFocus = !!(event.target.closest && event.target.closest("[data-tip-body]"));
         }, true);
-        // Clear after the pointer gesture ends so a later keyboard focus (which
-        // has no pointerdown) always opens cleanly — no stale-flag edge case.
         document.addEventListener("pointerup", () => {
             pointerFocus = false;
         }, true);
         document.addEventListener("focusin", (event) => {
+            if (isCoarse()) {
+                return;
+            }
             const trigger = event.target.closest && event.target.closest("[data-tip-body]");
             if (trigger && !pointerFocus) {
                 show(trigger);
@@ -1833,11 +1928,12 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         document.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
                 hide();
+                closeSheet();
             }
         });
         window.addEventListener("scroll", hide, true);
-        window.addEventListener("resize", hide);
-        window.addEventListener("hashchange", hide);
+        window.addEventListener("resize", () => { hide(); closeSheet(); });
+        window.addEventListener("hashchange", () => { hide(); closeSheet(); });
     }
 
     async function handleClick(event) {
