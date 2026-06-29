@@ -96,11 +96,9 @@ textarea:focus-visible {
     outline-offset: 2px;
 }
 
-* {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-}
-
+/* Chromium/Safari — precise slim scrollbar. (scrollbar-width is intentionally NOT
+   set here: when present it overrides ::-webkit-scrollbar in Chromium and renders
+   a wider "thin" bar, defeating the 6px below.) */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -117,6 +115,14 @@ textarea:focus-visible {
 
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.26);
+}
+
+/* Firefox (no ::-webkit-scrollbar) — slim native scrollbar instead. */
+@supports not selector(::-webkit-scrollbar) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
 }
 
 .hidden {
