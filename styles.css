@@ -608,10 +608,12 @@ h3 {
     transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease;
 }
 
-.nav-hub-item:hover {
-    border-color: var(--color-border-strong);
-    background: var(--color-elevated);
-    transform: translateY(-2px);
+@media (hover: hover) {
+    .nav-hub-item:hover {
+        border-color: var(--color-border-strong);
+        background: var(--color-elevated);
+        transform: translateY(-2px);
+    }
 }
 
 .nav-hub-item:active {
@@ -936,11 +938,13 @@ h3 {
     transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 
-.button:hover,
-.icon-button:hover,
-.segment-button:hover {
-    border-color: var(--color-border-strong);
-    background: var(--color-elevated);
+@media (hover: hover) {
+    .button:hover,
+    .icon-button:hover,
+    .segment-button:hover {
+        border-color: var(--color-border-strong);
+        background: var(--color-elevated);
+    }
 }
 
 .button {
@@ -1626,7 +1630,7 @@ select option {
 .setdone-hint-caret {
     position: absolute;
     right: 70px;
-    bottom: -5px;
+    bottom: -6px;
     width: 0;
     height: 0;
     border-left: 5px solid transparent;
@@ -1846,12 +1850,14 @@ select option {
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.exercise-card:hover,
-.user-card:hover,
-.history-card:hover,
-.quick-card:hover {
-    border-color: var(--color-border-strong);
-    background: var(--color-elevated);
+@media (hover: hover) {
+    .exercise-card:hover,
+    .user-card:hover,
+    .history-card:hover,
+    .quick-card:hover {
+        border-color: var(--color-border-strong);
+        background: var(--color-elevated);
+    }
 }
 
 .user-card.static {
@@ -2130,6 +2136,29 @@ tr:last-child td {
     background: var(--color-elevated);
 }
 
+/* Calendar event: member name on the left, workout number (#N) on the right. */
+.fc-ev {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+}
+
+.fc-ev-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-ev-num {
+    flex: 0 0 auto;
+    font-weight: 700;
+    opacity: 0.72;
+    font-variant-numeric: tabular-nums;
+}
+
 .fc .fc-list-event-dot {
     border-color: var(--color-accent) !important;
 }
@@ -2192,11 +2221,10 @@ tr:last-child td {
     -webkit-overflow-scrolling: touch;
 }
 
-/* While an overlay is open the <body> is pinned (position:fixed in JS); make the
-   document non-scrollable too so nothing behind the backdrop can move. */
-html.overlay-open {
-    overflow: hidden;
-}
+/* NOTE: do NOT add `html.overlay-open { overflow: hidden }`. The body is already
+   pinned (position:fixed in JS, touch-only) which fully locks scroll; toggling the
+   root scroller's overflow made iOS recompute the viewport and visibly "bob" the
+   fixed bottom-nav / content when a modal opened. */
 
 /* ---------- Pull-to-refresh ---------- */
 .ptr-indicator {
@@ -2836,7 +2864,7 @@ ul {
         position: fixed;
         left: calc(10px + env(safe-area-inset-left));
         right: calc(10px + env(safe-area-inset-right));
-        bottom: calc(10px + env(safe-area-inset-bottom));
+        bottom: max(8px, env(safe-area-inset-bottom));
         z-index: 60;
         display: grid;
         grid-template-columns: repeat(5, 1fr);
@@ -3582,10 +3610,11 @@ ul {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 3px 10px;
+    padding: 5px 10px;
     border-radius: var(--radius-pill);
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 700;
+    line-height: 1;
     letter-spacing: 0.4px;
     border: 1px solid var(--color-border);
     color: var(--color-muted);
@@ -4261,9 +4290,11 @@ ul {
     height: 16px;
 }
 
-.react-btn:hover {
-    border-color: var(--color-border-strong);
-    color: var(--color-text);
+@media (hover: hover) {
+    .react-btn:hover {
+        border-color: var(--color-border-strong);
+        color: var(--color-text);
+    }
 }
 
 .react-btn:active {
