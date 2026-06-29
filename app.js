@@ -801,7 +801,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         accent: "mint",           // mint | blue | purple | amber | red
         compactCards: "0",        // "1" = compact
         defaultRest: "90",
-        defaultWorkoutType: "push",
+        defaultWorkoutType: "custom",
         defaultSetType: "warmup",
         autoStartRest: "1"        // "1" = auto-start rest timer on set completion
     };
@@ -2404,6 +2404,10 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
                 setPref(actionElement.dataset.pref, actionElement.value);
             }
 
+            if (actionElement.dataset.action === "picker-filter-select") {
+                setPickerFilter(actionElement.dataset.key, actionElement.value);
+            }
+
             if (actionElement.dataset.action === "import-data") {
                 await importData(actionElement.files[0]);
             }
@@ -2722,18 +2726,24 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     function pickerBody() {
         const muscleGroups = unique(state.database.exercises.map((exercise) => exercise.primaryMuscleGroup).filter(Boolean));
         const equipmentList = unique(state.database.exercises.map((exercise) => exercise.equipment).filter(Boolean));
-        const chip = (key, value, label) => `<button class="segment-button ${state.filters[key] === value ? "active" : ""}" type="button" data-action="picker-filter" data-key="${key}" data-value="${escapeHtml(value)}">${escapeHtml(label)}</button>`;
-        return `<input type="search" placeholder="Пошук за назвою або alias" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-picker-search">
-            <div class="picker-filter-block"><span class="picker-filter-label">Група м'язів</span><div class="picker-chips">${chip("pickerMuscle", "all", "Усі")}${muscleGroups.map((value) => chip("pickerMuscle", value, value)).join("")}</div></div>
-            <div class="picker-filter-block"><span class="picker-filter-label">Обладнання</span><div class="picker-chips">${chip("pickerEquipment", "all", "Усі")}${equipmentList.map((value) => chip("pickerEquipment", value, value)).join("")}</div></div>
+        const option = (key, value, label) => `<option value="${escapeHtml(value)}" ${state.filters[key] === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
+        const muscleOptions = option("pickerMuscle", "all", "Усі м'язи") + muscleGroups.map((value) => option("pickerMuscle", value, value)).join("");
+        const equipmentOptions = option("pickerEquipment", "all", "Все обладнання") + equipmentList.map((value) => option("pickerEquipment", value, value)).join("");
+        return `<input type="search" class="picker-search" placeholder="Пошук вправи" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-picker-search">
+            <div class="picker-filter-row">
+                <gym-select data-action="picker-filter-select" data-key="pickerMuscle">${muscleOptions}</gym-select>
+                <gym-select data-action="picker-filter-select" data-key="pickerEquipment">${equipmentOptions}</gym-select>
+            </div>
             <div class="exercise-picker-grid" id="exercisePickerGrid">${exercisePickerCards()}</div>`;
     }
 
     function setPickerFilter(key, value) {
         state.filters[key] = value;
-        const body = element("exercisePickerBody");
-        if (body) {
-            body.innerHTML = pickerBody();
+        // Re-render only the results grid — leave the search input + filter selects
+        // intact (no focus loss, the selects already reflect the chosen value).
+        const grid = element("exercisePickerGrid");
+        if (grid) {
+            grid.innerHTML = exercisePickerCards();
             icons();
         }
     }
@@ -2779,7 +2789,13 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         const note = items.length > limit
             ? `<p class="card-caption picker-count">Показано ${limit} з ${items.length} — уточни пошук або фільтри.</p>`
             : `<p class="card-caption picker-count">Знайдено: ${items.length}</p>`;
-        return note + shown.map((exercise) => `<article class="exercise-card${exerciseMedia(exercise) ? " has-thumb" : ""}">${exerciseThumb(exercise)}<h3>${escapeHtml(exercise.name)}${isMyExercise(exercise) ? `<span class="picker-mine-flag"><i data-lucide="bookmark-check"></i>Моя</span>` : ""}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`).join("");
+        return note + shown.map((exercise) => {
+            const media = exerciseMedia(exercise);
+            const mineBadge = isMyExercise(exercise) ? `<span class="pill-badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : "";
+            const overlay = media && mineBadge ? `<div class="exercise-card-tags">${mineBadge}</div>` : "";
+            const inlineBadge = !media && mineBadge ? `<div class="exercise-card-tags inline">${mineBadge}</div>` : "";
+            return `<article class="exercise-card${media ? " has-thumb" : ""}">${exerciseThumb(exercise)}${overlay}${inlineBadge}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`;
+        }).join("");
     }
 
     function openCustomExercise(exercise = null) {

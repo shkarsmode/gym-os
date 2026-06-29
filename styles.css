@@ -3061,36 +3061,6 @@ ul {
         padding: 16px;
     }
 
-    /* Add-exercise picker: pin the search + filter blocks, scroll only the results.
-       Scoped via :has(#exercisePickerBody) because openModal() can't add a class.
-       On engines without :has() (none of the iOS PWA targets), the modal simply
-       falls back to the shared scroll-the-whole-thing behavior above — no breakage.
-       Fixed (not max-) height so the inner flex child has a definite box to fill;
-       the modal already lives inside the safe area via the centered top above. */
-    .modal-layer:has(#exercisePickerBody) {
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-    }
-
-    .modal-layer:has(#exercisePickerBody) #exercisePickerBody {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-    }
-
-    .modal-layer:has(#exercisePickerBody) .exercise-picker-grid {
-        flex: 1;
-        min-height: 0;
-        overflow-y: auto;
-        /* let results breathe under the home indicator while scrolling */
-        padding-bottom: 4px;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-    }
-
     .toast-stack {
         left: 10px;
         right: 10px;
@@ -3921,19 +3891,26 @@ ul {
     height: 12px;
 }
 
-.picker-mine-flag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--color-accent);
-    margin-left: 6px;
+/* Add-exercise picker controls — compact, unpinned (the modal scrolls as one) */
+.modal-layer:has(#exercisePickerBody) .modal-header {
+    margin-bottom: 10px;
 }
 
-.picker-mine-flag i {
-    width: 12px;
-    height: 12px;
+.picker-search {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.picker-filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.picker-filter-row gym-select {
+    min-width: 0;
 }
 
 .sidebar-upgrade {
@@ -5295,25 +5272,80 @@ ul {
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
-/* ===== Compact cards mode ===== */
+/* ===== Compact mode — genuinely denser fonts, blocks & spacing (opt-in) ===== */
+html.compact-ui {
+    --radius-lg: 12px;
+    --radius-md: 9px;
+    --radius-sm: 7px;
+}
+
+html.compact-ui body {
+    font-size: 13px;
+}
+
+html.compact-ui h1 {
+    font-size: clamp(20px, 2.4vw, 28px);
+}
+
+html.compact-ui h2 {
+    font-size: 16px;
+    margin-bottom: 9px;
+}
+
+html.compact-ui h3 {
+    font-size: 13.5px;
+    margin-bottom: 6px;
+}
+
+html.compact-ui .card-caption,
+html.compact-ui .stat-label,
+html.compact-ui .input-hint {
+    font-size: 11.5px;
+}
+
+html.compact-ui .grid,
+html.compact-ui .dashboard-grid {
+    gap: 9px;
+}
+
 html.compact-ui .card,
 html.compact-ui .panel,
 html.compact-ui .calendar-shell {
-    padding: 12px;
+    padding: 11px;
+}
+
+html.compact-ui .card-header {
+    margin-bottom: 10px;
 }
 
 html.compact-ui .metric-card {
-    padding: 9px 11px;
+    gap: 9px;
+    padding: 8px 10px;
 }
 
-html.compact-ui .dashboard-grid {
-    gap: 10px;
+html.compact-ui .metric-value {
+    font-size: 17px;
 }
 
 html.compact-ui .workout-exercise {
-    padding: 13px;
+    padding: 11px;
 }
 
 html.compact-ui .set-row {
-    padding: 8px 9px;
+    padding: 6px 8px;
+}
+
+html.compact-ui .button {
+    padding: 8px 13px;
+    font-size: 13px;
+}
+
+html.compact-ui .button.compact {
+    padding: 6px 10px;
+    font-size: 12.5px;
+}
+
+html.compact-ui .chip {
+    padding: 2px 8px;
+    font-size: 11px;
 }
