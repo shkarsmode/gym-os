@@ -1602,6 +1602,94 @@ select option {
     background: var(--color-accent-dim);
 }
 
+/* ---- First-set coach-mark (teaches new users to tap "complete set") ---- */
+.setdone-hint {
+    align-self: flex-start;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 -2px;
+    padding: 5px 8px 5px 11px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-dim);
+    color: var(--color-accent-strong);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    box-shadow: var(--shadow-soft);
+    animation: gymHintIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* CSS-only caret (no lucide dependency) */
+.setdone-hint-caret {
+    flex: 0 0 auto;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--color-accent);
+}
+
+.setdone-hint-short { display: none; }
+
+.setdone-hint-x {
+    border: 0;
+    background: transparent;
+    color: var(--color-accent-strong);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    margin-left: 2px;
+    opacity: 0.75;
+}
+
+.setdone-hint-x:hover { opacity: 1; }
+
+@keyframes gymHintIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Pulsing ring on the toggle — auto-retires after ~10s so a parked screen
+   doesn't pulse forever (the localStorage flag is NOT set by this). */
+.set-done.hinting {
+    position: relative;
+    color: var(--color-accent);
+    border-color: var(--color-accent-border);
+}
+
+.set-done.hinting::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    /* match the rounded-SQUARE toggle (.icon-button radius-sm + 3px outset),
+       not a circle — otherwise the button corners poke past the ring */
+    border-radius: var(--radius-md);
+    pointer-events: none;
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.42);
+    animation: gymHintPulse 2.6s ease-out 4;
+}
+
+@keyframes gymHintPulse {
+    0%   { box-shadow: 0 0 0 0   rgba(52, 211, 153, 0.42); }
+    70%  { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); }
+    100% { box-shadow: 0 0 0 0   rgba(52, 211, 153, 0); }
+}
+
+@media (max-width: 640px) {
+    .setdone-hint { font-size: 12px; }
+    .setdone-hint-full { display: none; }
+    .setdone-hint-short { display: inline; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .setdone-hint { animation: none; }
+    .set-done.hinting::after { animation: none; box-shadow: 0 0 0 2px var(--color-accent-border); }
+}
+
 .set-fields {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
