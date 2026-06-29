@@ -794,7 +794,38 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         }
     }
 
+    // ---- User preferences (theme / accent / compact / workout defaults) ----
+    // Stored via storage.readSetting/writeSetting (localStorage "gymos-setting-pref-*").
+    const PREF_DEFAULTS = {
+        theme: "dark",            // dark | system | blackout
+        accent: "mint",           // mint | blue | purple | amber | red
+        compactCards: "0",        // "1" = compact
+        defaultRest: "90",
+        defaultWorkoutType: "push",
+        defaultSetType: "warmup",
+        autoStartRest: "1"        // "1" = auto-start rest timer on set completion
+    };
+
+    function getPref(key) {
+        const value = storage.readSetting(`pref-${key}`);
+        return value === null || value === undefined || value === "" ? PREF_DEFAULTS[key] : value;
+    }
+
+    function setPref(key, value) {
+        storage.writeSetting(`pref-${key}`, String(value));
+    }
+
+    // Reflect appearance prefs onto <html> (CSS keys off [data-theme]/[data-accent]
+    // and .compact-ui; the defaults dark/mint map to the base :root, no override).
+    function applyPreferences() {
+        const root = document.documentElement;
+        root.dataset.theme = getPref("theme");
+        root.dataset.accent = getPref("accent");
+        root.classList.toggle("compact-ui", getPref("compactCards") === "1");
+    }
+
     async function initialize() {
+        applyPreferences();
         captureAuthToken();
         const overlay = showBusyOverlay({
             title: "Запускаємо GymOS",
@@ -1690,7 +1721,17 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
     function settings() {
         const modeOptions = storage.config.requireAuth ? `<option value="api" selected>Бекенд API</option>` : `<option value="local" ${storage.mode === "local" ? "selected" : ""}>Локальний</option><option value="api" ${storage.mode === "api" ? "selected" : ""}>Бекенд API</option>`;
         const modeCaption = storage.config.requireAuth ? "Застосунок працює тільки через backend API. Зміни даних доступні після Google OAuth." : "Застосунок працює локально через IndexedDB/localStorage або через бекенд API.";
-        content(`<div class="grid dashboard-grid"><section class="card span-6"><h2>Профіль</h2><p class="card-caption">Активний акаунт визначається авторизацією Google.</p><div class="list-row" style="margin-top:14px;">${avatar(currentUser())}<div><div class="profile-name">${escapeHtml(currentUser().displayName)}</div><div class="profile-meta">${escapeHtml(currentUser().name)}</div></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary compact" type="button" data-action="navigate" data-section="profile"><i data-lucide="user-round"></i>Відкрити профіль</button></div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп GymOS і окремий імпорт каталогу вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"><label class="button button-secondary" for="exerciseCatalogInput"><i data-lucide="file-up"></i>Імпортувати каталог вправ з JSON</label><input class="hidden" id="exerciseCatalogInput" type="file" accept="application/json" data-action="import-exercise-catalog"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button></div></section><section class="card span-6"><h2>Про застосунок</h2><div class="list-row" style="margin-top:6px;"><div><div class="profile-name">GymOS</div><div class="profile-meta">Версія v${APP_VERSION}</div></div></div></section></div>`);
+        const seg = (pref, value, label, extra = "") => `<button class="segment-button ${getPref(pref) === value ? "active" : ""}" type="button" data-action="set-pref" data-pref="${pref}" data-value="${value}">${extra}${escapeHtml(label)}</button>`;
+        const themeButtons = [["system", "System"], ["dark", "Dark"], ["blackout", "Blackout"]].map(([value, label]) => seg("theme", value, label)).join("");
+        const accentButtons = [["mint", "Mint", "#34d399"], ["blue", "Blue", "#3b82f6"], ["purple", "Purple", "#a78bfa"], ["amber", "Amber", "#f59e0b"], ["red", "Red", "#f43f5e"]].map(([value, label, color]) => seg("accent", value, label, `<span class="pref-dot" style="background:${color};"></span>`)).join("");
+        const compactButtons = [["0", "Стандартні"], ["1", "Компактні"]].map(([value, label]) => seg("compactCards", value, label)).join("");
+        const autoStartButtons = [["1", "Увімк."], ["0", "Вимк."]].map(([value, label]) => seg("autoStartRest", value, label)).join("");
+        const restOptions = [45, 60, 75, 90, 120, 150, 180].map((rest) => `<option value="${rest}" ${getPref("defaultRest") === String(rest) ? "selected" : ""}>${rest} сек</option>`).join("");
+        const workoutTypeOptions = Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultWorkoutType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+        const setTypeOptions = Object.entries(setTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultSetType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+        const appearanceCard = `<section class="card span-6"><h2>Вигляд</h2><div class="pref-row"><span class="pref-label">Тема</span><div class="segmented pref-seg">${themeButtons}</div></div><div class="pref-row"><span class="pref-label">Акцент</span><div class="segmented pref-seg">${accentButtons}</div></div><div class="pref-row"><span class="pref-label">Інтерфейс</span><div class="segmented pref-seg">${compactButtons}</div></div></section>`;
+        const workoutDefaultsCard = `<section class="card span-6"><h2>Тренування за замовчуванням</h2><div class="field-grid"><div class="field"><label>Відпочинок</label><gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select></div><div class="field"><label>Тип тренування</label><gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select></div></div><div class="field" style="margin-top:12px;"><label>Тип підходу</label><gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select></div><div class="pref-row" style="margin-top:14px;"><span class="pref-label">Авто-старт таймера відпочинку</span><div class="segmented pref-seg">${autoStartButtons}</div></div></section>`;
+        content(`<div class="grid dashboard-grid">${appearanceCard}${workoutDefaultsCard}<section class="card span-6"><h2>Профіль</h2><p class="card-caption">Активний акаунт визначається авторизацією Google.</p><div class="list-row" style="margin-top:14px;">${avatar(currentUser())}<div><div class="profile-name">${escapeHtml(currentUser().displayName)}</div><div class="profile-meta">${escapeHtml(currentUser().name)}</div></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary compact" type="button" data-action="navigate" data-section="profile"><i data-lucide="user-round"></i>Відкрити профіль</button></div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп GymOS і окремий імпорт каталогу вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"><label class="button button-secondary" for="exerciseCatalogInput"><i data-lucide="file-up"></i>Імпортувати каталог вправ з JSON</label><input class="hidden" id="exerciseCatalogInput" type="file" accept="application/json" data-action="import-exercise-catalog"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button></div></section><section class="card span-6"><h2>Про застосунок</h2><div class="list-row" style="margin-top:6px;"><div><div class="profile-name">GymOS</div><div class="profile-meta">Версія v${APP_VERSION}</div></div></div></section></div>`);
     }
 
     function changelog() {
@@ -2293,6 +2334,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "activity-scope": () => { state.filters.activityScope = actionElement.dataset.scope; renderSection(); },
             "stats-user": () => { state.filters.statsUserId = actionElement.dataset.userId; renderSection(); },
             "feedback-type": () => { state.filters.feedbackType = actionElement.dataset.type; document.querySelectorAll(".fb-type").forEach((btn) => btn.classList.toggle("active", btn.dataset.type === actionElement.dataset.type)); },
+            "set-pref": () => { setPref(actionElement.dataset.pref, actionElement.dataset.value); applyPreferences(); renderSection(); },
             "submit-feedback": submitFeedback,
             "delete-feedback": () => deleteFeedbackEntry(actionElement.dataset.feedbackId),
             "open-exercise": () => openExercise(actionElement.dataset.exerciseId),
@@ -2356,6 +2398,10 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
 
             if (actionElement.dataset.action === "set-feedback-status") {
                 await updateFeedbackStatus(actionElement.dataset.feedbackId, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "set-pref-select") {
+                setPref(actionElement.dataset.pref, actionElement.value);
             }
 
             if (actionElement.dataset.action === "import-data") {
@@ -2429,6 +2475,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             "activity-scope",
             "stats-user",
             "feedback-type",
+            "set-pref",
             "react-exercise",
             "open-exercise",
             "open-user",
@@ -3041,7 +3088,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             date: dateInput(now),
             title: "Тренування",
             status: "active",
-            workoutType: "custom",
+            workoutType: getPref("defaultWorkoutType"),
             startedAt: now.toISOString(),
             finishedAt: null,
             notes: "",
@@ -3186,7 +3233,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
             return;
         }
         const previousSet = workoutExercise.sets.at(-1);
-        workoutExercise.sets.push(previousSet ? { ...previousSet, id: createId("set"), isCompleted: false } : createSet("working", 0, 8, 8, 90, false));
+        workoutExercise.sets.push(previousSet ? { ...previousSet, id: createId("set"), isCompleted: false } : createSet(getPref("defaultSetType"), 0, 8, 8, Number(getPref("defaultRest")) || 90, false));
         await persistWorkout(editWorkout());
         renderSection();
     }
@@ -3198,8 +3245,12 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels } from "./lib/changelog.js";
         }
         set.isCompleted = !set.isCompleted;
         if (set.isCompleted && editWorkout()?.status === "active") {
-            startTimer(set.restSeconds || 90);
-            toast("Підхід завершено", `Таймер відпочинку: ${seconds(set.restSeconds || 90)}`);
+            if (getPref("autoStartRest") === "1") {
+                startTimer(set.restSeconds || 90);
+                toast("Підхід завершено", `Таймер відпочинку: ${seconds(set.restSeconds || 90)}`);
+            } else {
+                toast("Підхід завершено", "");
+            }
         }
         await persistWorkout(editWorkout());
         renderSection();

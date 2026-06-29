@@ -5124,3 +5124,150 @@ ul {
 .session-trend.up { color: var(--color-accent); }
 .session-trend.down { color: var(--color-danger); }
 .session-trend.flat { color: var(--color-faint); }
+
+/* ============================================================================
+   THEMING — Blackout (OLED) + Accent palettes + System light theme.
+   Applied via [data-theme] / [data-accent] on <html>. Default (dark + mint)
+   maps to the base :root, so no override needed for the defaults.
+   ============================================================================ */
+:root[data-theme="blackout"] {
+    --color-page: #000000;
+    --color-surface: #0a0a0b;
+    --color-surface-2: #131315;
+    --color-elevated: #1d1d21;
+    --color-border: rgba(255, 255, 255, 0.10);
+    --color-border-strong: rgba(255, 255, 255, 0.20);
+    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 28px rgba(0, 0, 0, 0.7);
+    --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.03), 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+:root[data-accent="mint"] { --color-accent: #34d399; --color-accent-strong: #6ee7b7; --color-accent-dim: rgba(52, 211, 153, 0.14); --color-accent-border: rgba(52, 211, 153, 0.32); }
+:root[data-accent="blue"] { --color-accent: #3b82f6; --color-accent-strong: #93c5fd; --color-accent-dim: rgba(59, 130, 246, 0.14); --color-accent-border: rgba(59, 130, 246, 0.32); }
+:root[data-accent="purple"] { --color-accent: #a78bfa; --color-accent-strong: #c4b5fd; --color-accent-dim: rgba(167, 139, 250, 0.14); --color-accent-border: rgba(167, 139, 250, 0.32); }
+:root[data-accent="amber"] { --color-accent: #f59e0b; --color-accent-strong: #fcd34d; --color-accent-dim: rgba(245, 158, 11, 0.14); --color-accent-border: rgba(245, 158, 11, 0.32); }
+:root[data-accent="red"] { --color-accent: #f43f5e; --color-accent-strong: #fda4af; --color-accent-dim: rgba(244, 63, 94, 0.14); --color-accent-border: rgba(244, 63, 94, 0.32); }
+
+@media (prefers-color-scheme: light) {
+    :root[data-theme="system"] {
+        color-scheme: light;
+        --color-page: #f6f7f8;
+        --color-surface: #ffffff;
+        --color-surface-2: #f1f2f4;
+        --color-elevated: #ffffff;
+        --color-border: rgba(9, 12, 20, 0.10);
+        --color-border-strong: rgba(9, 12, 20, 0.18);
+        --color-text: #15171c;
+        --color-muted: #5b6068;
+        --color-faint: #8b9097;
+        --color-accent: #0f9d6b;
+        --color-accent-strong: #0b8c5e;
+        --color-accent-dim: rgba(15, 157, 107, 0.12);
+        --color-accent-border: rgba(15, 157, 107, 0.30);
+        --color-danger: #dc2626;
+        --color-danger-dim: rgba(220, 38, 38, 0.12);
+        --color-warning: #b45309;
+        --color-warning-dim: rgba(180, 83, 9, 0.13);
+        --color-info: #2563eb;
+        --color-info-dim: rgba(37, 99, 235, 0.12);
+        --color-improve: #7c3aed;
+        --color-improve-dim: rgba(124, 58, 237, 0.12);
+        --color-improve-border: rgba(124, 58, 237, 0.30);
+        --shadow-card: 0 12px 32px rgba(15, 23, 42, 0.12);
+        --shadow-soft: 0 2px 10px rgba(15, 23, 42, 0.08);
+        --overlay-hi: rgba(9, 12, 20, 0.06);
+        --overlay-line: rgba(9, 12, 20, 0.12);
+        --glass-sheen: rgba(255, 255, 255, 0.50);
+        --glass-fill: rgba(255, 255, 255, 0.82);
+        --scrollbar: rgba(9, 12, 20, 0.22);
+        --scrollbar-hi: rgba(9, 12, 20, 0.38);
+        --shadow-pop: 0 18px 44px -16px rgba(15, 23, 42, 0.22);
+    }
+    /* per-accent deepened variants so the chosen accent still reads on white */
+    :root[data-theme="system"][data-accent="blue"] { --color-accent: #2563eb; --color-accent-strong: #1d4ed8; --color-accent-dim: rgba(37, 99, 235, 0.12); --color-accent-border: rgba(37, 99, 235, 0.30); }
+    :root[data-theme="system"][data-accent="purple"] { --color-accent: #7c3aed; --color-accent-strong: #6d28d9; --color-accent-dim: rgba(124, 58, 237, 0.12); --color-accent-border: rgba(124, 58, 237, 0.30); }
+    :root[data-theme="system"][data-accent="amber"] { --color-accent: #b45309; --color-accent-strong: #92400e; --color-accent-dim: rgba(180, 83, 9, 0.13); --color-accent-border: rgba(180, 83, 9, 0.30); }
+    :root[data-theme="system"][data-accent="red"] { --color-accent: #dc2626; --color-accent-strong: #b91c1c; --color-accent-dim: rgba(220, 38, 38, 0.12); --color-accent-border: rgba(220, 38, 38, 0.30); }
+
+    :root[data-theme="system"] body { background: radial-gradient(900px circle at 100% -5%, rgba(15, 157, 107, 0.08), transparent 60%), var(--color-page); }
+    :root[data-theme="system"] ::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+    :root[data-theme="system"] ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hi); }
+    @supports not selector(::-webkit-scrollbar) { :root[data-theme="system"] * { scrollbar-color: var(--scrollbar) transparent; } }
+    :root[data-theme="system"] .sidebar-collapse:hover, :root[data-theme="system"] .nav-button:hover { background: var(--overlay-hi); }
+    :root[data-theme="system"] .fb-status-badge, :root[data-theme="system"] .fb-status-badge.status-declined { background: var(--overlay-hi); }
+    :root[data-theme="system"] .square-loader { border-color: var(--overlay-line); }
+    :root[data-theme="system"] .ptr-track { stroke: var(--overlay-line); }
+    :root[data-theme="system"] .progress-track, :root[data-theme="system"] .floating-timer-bar, :root[data-theme="system"] .busy-progress { background: var(--overlay-hi); }
+    :root[data-theme="system"] .modal-backdrop { background: rgba(15, 23, 42, 0.32); }
+    :root[data-theme="system"] .tip-sheet-backdrop { background: rgba(15, 23, 42, 0.28); }
+    :root[data-theme="system"] .ptr-indicator { background: var(--glass-fill); box-shadow: var(--shadow-pop); }
+    :root[data-theme="system"] .ptr-indicator.ready { box-shadow: var(--shadow-pop), 0 0 0 3px var(--color-accent-dim); }
+    :root[data-theme="system"] .toast { background: linear-gradient(180deg, var(--glass-sheen), rgba(255, 255, 255, 0) 58%), var(--glass-fill); box-shadow: var(--shadow-pop), inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+    :root[data-theme="system"] .pill-badge { background: var(--glass-fill); border-color: var(--overlay-line); box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12); }
+    :root[data-theme="system"] .app-tooltip { background: rgba(255, 255, 255, 0.98); box-shadow: var(--shadow-pop); }
+    :root[data-theme="system"] .app-tooltip-arrow { background: rgba(255, 255, 255, 0.98); }
+    :root[data-theme="system"] .app-tooltip-title { color: var(--color-text); }
+    :root[data-theme="system"] .tip-sheet { background: linear-gradient(180deg, var(--glass-sheen), rgba(255, 255, 255, 0) 42%), var(--color-elevated); box-shadow: 0 -18px 48px -12px rgba(15, 23, 42, 0.18); }
+    :root[data-theme="system"] .gselect-panel, :root[data-theme="system"] .gdate-panel { box-shadow: var(--shadow-pop); }
+    :root[data-theme="system"] .plan-card.pro { box-shadow: 0 0 0 1px var(--color-accent-border), 0 18px 48px -16px rgba(15, 23, 42, 0.20); }
+    @media (max-width: 920px) {
+        :root[data-theme="system"] .mobile-navigation { background: linear-gradient(180deg, var(--glass-sheen), rgba(255, 255, 255, 0) 62%), var(--glass-fill); box-shadow: 0 16px 40px -10px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+        :root[data-theme="system"] .mnav-center-btn { box-shadow: 0 10px 24px -6px rgba(15, 157, 107, 0.40), 0 2px 6px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+        :root[data-theme="system"] .mnav-center.active .mnav-center-btn { box-shadow: 0 14px 30px -6px rgba(15, 157, 107, 0.55), 0 2px 6px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+    }
+}
+
+/* ===== Settings preference controls ===== */
+.pref-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.pref-row:first-of-type {
+    margin-top: 4px;
+}
+
+.pref-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-muted);
+}
+
+.pref-seg {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.pref-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 1px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+/* ===== Compact cards mode ===== */
+html.compact-ui .card,
+html.compact-ui .panel,
+html.compact-ui .calendar-shell {
+    padding: 12px;
+}
+
+html.compact-ui .metric-card {
+    padding: 9px 11px;
+}
+
+html.compact-ui .dashboard-grid {
+    gap: 10px;
+}
+
+html.compact-ui .workout-exercise {
+    padding: 13px;
+}
+
+html.compact-ui .set-row {
+    padding: 8px 9px;
+}
