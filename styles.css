@@ -2206,6 +2206,16 @@ tr:last-child td {
     z-index: 90;
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(4px);
+    /* Smooth fade in/out. JS toggles `.hidden` (display) around the `.visible`
+       state and delays the hide so the exit transition can play. */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+}
+
+.modal-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .modal-layer,
@@ -2219,6 +2229,16 @@ tr:last-child td {
        behind it (iOS rubber-band). Paired with the body scroll-lock in JS. */
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+}
+
+/* While not fully shown (entering frame / exit animation) the overlay must not
+   eat taps — only the .visible state is interactive. */
+.modal-layer:not(.visible),
+.drawer-layer:not(.visible) {
+    pointer-events: none;
 }
 
 /* NOTE: do NOT lock the overlay background by toggling the root scroller's overflow
@@ -2298,10 +2318,16 @@ tr:last-child td {
     top: calc(50% + (env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
     width: min(680px, calc(100vw - 28px));
     max-height: min(88vh, 840px);
-    transform: translate(-50%, -50%);
+    /* enter-from: slightly small; .visible scales to 1 (centering translate kept) */
+    transform: translate(-50%, -50%) scale(0.96);
     overflow: auto;
     border-radius: var(--radius-lg);
     padding: 20px;
+}
+
+.modal-layer.visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
 }
 
 .drawer-layer {
@@ -2312,6 +2338,21 @@ tr:last-child td {
     overflow: auto;
     border-radius: var(--radius-lg);
     padding: 20px;
+    /* enter-from: a small rise */
+    transform: translateY(10px);
+}
+
+.drawer-layer.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .modal-backdrop,
+    .modal-layer,
+    .drawer-layer {
+        transition: none;
+    }
 }
 
 .confirm-message {

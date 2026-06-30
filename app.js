@@ -5204,27 +5204,53 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         return document.getElementById(id);
     }
 
+    let overlayCloseTimer = null;
+
+    // Reveal an overlay layer (backdrop + modal/drawer) with a fade/scale-in.
+    function revealOverlay(layer) {
+        const backdrop = element("modalBackdrop");
+        backdrop.classList.remove("hidden");
+        layer.classList.remove("hidden");
+        if (layer.classList.contains("visible")) {
+            backdrop.classList.add("visible"); // already shown (content swap) — no re-animate
+            return;
+        }
+        // Force a sync reflow so the enter-from state (opacity 0 / scaled) is committed,
+        // THEN flip to .visible and the transition plays. (More reliable than rAF, which
+        // can be throttled when the tab isn't actively compositing → modal stuck hidden.)
+        void layer.offsetWidth;
+        backdrop.classList.add("visible");
+        layer.classList.add("visible");
+    }
+
     function openModal(html) {
-        closeOverlay();
-        element("modalBackdrop").classList.remove("hidden");
-        element("modalLayer").innerHTML = html;
-        element("modalLayer").classList.remove("hidden");
-        iconsIn(element("modalLayer"));
+        clearTimeout(overlayCloseTimer);
+        const drawer = element("drawerLayer");
+        drawer.classList.add("hidden");
+        drawer.classList.remove("visible");
+        drawer.innerHTML = "";
+        const modal = element("modalLayer");
+        modal.innerHTML = html;
+        iconsIn(modal);
         lockBackgroundScroll();
+        revealOverlay(modal);
     }
 
     // Reliable in-app confirmation (native confirm() is unreliable/blocked on mobile).
     function confirmDialog(message, options = {}) {
         const { title = "Підтвердження", confirmLabel = "Підтвердити", cancelLabel = "Скасувати", danger = true } = options;
         return new Promise((resolve) => {
-            closeOverlay();
+            clearTimeout(overlayCloseTimer);
             const backdrop = element("modalBackdrop");
             const layer = element("modalLayer");
-            backdrop.classList.remove("hidden");
+            const drawer = element("drawerLayer");
+            drawer.classList.add("hidden");
+            drawer.classList.remove("visible");
+            drawer.innerHTML = "";
             layer.innerHTML = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
-            layer.classList.remove("hidden");
             iconsIn(layer);
             lockBackgroundScroll();
+            revealOverlay(layer);
             let settled = false;
             const finish = (result) => {
                 if (settled) {
@@ -5243,12 +5269,16 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     }
 
     function openDrawer(html) {
-        closeOverlay();
-        element("modalBackdrop").classList.remove("hidden");
-        element("drawerLayer").innerHTML = html;
-        element("drawerLayer").classList.remove("hidden");
-        iconsIn(element("drawerLayer"));
+        clearTimeout(overlayCloseTimer);
+        const modal = element("modalLayer");
+        modal.classList.add("hidden");
+        modal.classList.remove("visible");
+        modal.innerHTML = "";
+        const drawer = element("drawerLayer");
+        drawer.innerHTML = html;
+        iconsIn(drawer);
         lockBackgroundScroll();
+        revealOverlay(drawer);
     }
 
     // --- Background scroll-lock for overlays (modal/drawer) ---
@@ -5319,11 +5349,24 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     function closeOverlay() {
         // Unlock FIRST so a later DOM error can't skip it and leave scroll frozen.
         unlockBackgroundScroll();
-        element("modalBackdrop").classList.add("hidden");
-        element("modalLayer").classList.add("hidden");
-        element("drawerLayer").classList.add("hidden");
-        element("modalLayer").innerHTML = "";
-        element("drawerLayer").innerHTML = "";
+        const backdrop = element("modalBackdrop");
+        const modal = element("modalLayer");
+        const drawer = element("drawerLayer");
+        if (backdrop.classList.contains("hidden")) {
+            return; // nothing open
+        }
+        // Animate out (drop .visible), then hide + clear after the exit transition.
+        backdrop.classList.remove("visible");
+        modal.classList.remove("visible");
+        drawer.classList.remove("visible");
+        clearTimeout(overlayCloseTimer);
+        overlayCloseTimer = setTimeout(() => {
+            backdrop.classList.add("hidden");
+            modal.classList.add("hidden");
+            drawer.classList.add("hidden");
+            modal.innerHTML = "";
+            drawer.innerHTML = "";
+        }, 240);
     }
 
     // Self-heal: if no overlay is actually open but the body is still locked
