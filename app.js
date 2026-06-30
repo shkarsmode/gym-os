@@ -2409,7 +2409,8 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             "export-data": exportData,
             "reset-curated-exercises": resetCuratedExercises,
             reset: resetData,
-            "close-overlay": closeOverlay
+            "close-overlay": closeOverlay,
+            "close-sheet": closeSheet
         };
 
         if (actions[action]) {
@@ -3077,17 +3078,26 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             ["bar-chart-3", "Розширена аналітика", "Глибша статистика прогресу та PR"],
             ["cloud", "Пріоритетна синхронізація", "Швидші бекапи й відновлення"]
         ];
-        openModal(`<div class="paywall">
+        // Stack on top if a modal is already open (e.g. day-sheet → "Почати" → quota),
+        // so dismissing returns to it instead of closing everything.
+        const stacked = !element("modalBackdrop").classList.contains("hidden");
+        const closeAction = stacked ? "close-sheet" : "close-overlay";
+        const html = `<div class="paywall">
             <div class="paywall-glow"></div>
-            <button class="icon-button paywall-close" type="button" data-action="close-overlay"><i data-lucide="x"></i></button>
+            <button class="icon-button paywall-close" type="button" data-action="${closeAction}"><i data-lucide="x"></i></button>
             <div class="paywall-badge"><i data-lucide="zap"></i>GymOS PRO</div>
             <h2 class="paywall-title">${escapeHtml(title)}</h2>
             <p class="paywall-reason">${escapeHtml(reason)} ${limitsLine}</p>
             <div class="paywall-price"><span class="paywall-amount">$2</span><span class="paywall-period">/місяць</span></div>
             <ul class="paywall-perks">${perks.map(([icon, title, sub]) => `<li><span class="paywall-perk-icon"><i data-lucide="${icon}"></i></span><span><strong>${escapeHtml(title)}</strong><em>${escapeHtml(sub)}</em></span></li>`).join("")}</ul>
-            <div class="paywall-actions"><button class="button button-primary paywall-cta" type="button" data-action="upgrade-plan"><i data-lucide="rocket"></i>Оформити PRO за $2/міс</button><button class="button button-secondary" type="button" data-action="close-overlay">Можливо пізніше</button></div>
+            <div class="paywall-actions"><button class="button button-primary paywall-cta" type="button" data-action="upgrade-plan"><i data-lucide="rocket"></i>Оформити PRO за $2/міс</button><button class="button button-secondary" type="button" data-action="${closeAction}">Можливо пізніше</button></div>
             <p class="paywall-foot">Оплата скоро з'явиться — зараз це прев'ю тарифу.</p>
-        </div>`);
+        </div>`;
+        if (stacked) {
+            openSheet(html);
+        } else {
+            openModal(html);
+        }
     }
 
     function showUpgradeComingSoon() {
@@ -5298,18 +5308,26 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     function confirmDialog(message, options = {}) {
         const { title = "Підтвердження", confirmLabel = "Підтвердити", cancelLabel = "Скасувати", danger = true } = options;
         return new Promise((resolve) => {
-            clearTimeout(overlayCloseTimer);
-            const backdrop = element("modalBackdrop");
-            const layer = element("modalLayer");
-            const drawer = element("drawerLayer");
-            drawer.classList.add("hidden");
-            drawer.classList.remove("visible");
-            drawer.innerHTML = "";
-            layer.classList.remove("modal-fullscreen"); // confirm is always a compact card
-            layer.innerHTML = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
-            iconsIn(layer);
-            lockBackgroundScroll();
-            revealOverlay(layer);
+            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
+            // If a modal is already open, STACK the confirm on top (sheet layer) so it
+            // doesn't replace it and cancelling returns to it. Standalone → modal layer.
+            const stacked = !element("modalBackdrop").classList.contains("hidden");
+            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
+            if (stacked) {
+                openSheet(html);
+            } else {
+                clearTimeout(overlayCloseTimer);
+                const drawer = element("drawerLayer");
+                drawer.classList.add("hidden");
+                drawer.classList.remove("visible");
+                drawer.innerHTML = "";
+                const layer = element("modalLayer");
+                layer.classList.remove("modal-fullscreen"); // confirm is always a compact card
+                layer.innerHTML = html;
+                iconsIn(layer);
+                lockBackgroundScroll();
+                revealOverlay(layer);
+            }
             let settled = false;
             const finish = (result) => {
                 if (settled) {
@@ -5317,7 +5335,11 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
                 }
                 settled = true;
                 backdrop.removeEventListener("click", onBackdrop);
-                closeOverlay();
+                if (stacked) {
+                    closeSheet();
+                } else {
+                    closeOverlay();
+                }
                 resolve(result);
             };
             const onBackdrop = () => finish(false);
