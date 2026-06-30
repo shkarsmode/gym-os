@@ -2355,6 +2355,40 @@ tr:last-child td {
     }
 }
 
+/* Nested sheet (e.g. muscle-group picker) stacks above the modal */
+.sheet-backdrop {
+    z-index: 110;
+}
+
+.sheet-layer {
+    z-index: 120;
+}
+
+/* Content-heavy modals go full-screen on phones (edge-to-edge, no border/radius).
+   Toggled via the .modal-fullscreen class in openModal/openSheet; desktop ignores it. */
+@media (max-width: 920px) {
+    .modal-layer.modal-fullscreen {
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        max-height: none;
+        height: 100%;
+        border: none;
+        border-radius: 0;
+        padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+        /* enter-from: a gentle rise (no centering translate for the full-bleed sheet) */
+        transform: translateY(16px);
+    }
+
+    .modal-layer.modal-fullscreen.visible {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
 .confirm-message {
     margin: 0;
     color: var(--color-text);

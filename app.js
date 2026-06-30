@@ -873,7 +873,25 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         }
         renderShell();
         handleRoute();
+        preloadAvatars();
         requestAnimationFrame(maybeShowWhatsNew);
+    }
+
+    // Warm the browser cache with member avatars so they paint instantly (no flash)
+    // when switching tabs / re-rendering.
+    function preloadAvatars() {
+        try {
+            (state.database.users || []).forEach((user) => {
+                const url = imageUrl(user && user.avatarUrl);
+                if (url) {
+                    const img = new Image();
+                    img.decoding = "async";
+                    img.src = url;
+                }
+            });
+        } catch (error) {
+            // non-fatal
+        }
     }
 
     function createEmptyDatabase() {
@@ -1886,6 +1904,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             document.addEventListener(eventName, (event) => event.preventDefault(), { passive: false });
         });
         element("modalBackdrop").addEventListener("click", closeOverlay);
+        element("modalBackdrop2").addEventListener("click", closeSheet);
         element("openQuickActionButton").addEventListener("click", openQuickAction);
         element("openUserSwitcherButton").addEventListener("click", () => navigate("profile"));
         const collapseButton = element("sidebarCollapseButton");
@@ -2343,9 +2362,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": openAddExerciseModal,
-            "open-muscle-grid": () => { element("modalLayer").innerHTML = pickerMuscleContent(); iconsIn(element("modalLayer")); },
-            "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; element("modalLayer").innerHTML = pickerListContent(); iconsIn(element("modalLayer")); },
-            "muscle-grid-back": () => { element("modalLayer").innerHTML = pickerListContent(); iconsIn(element("modalLayer")); },
+            "open-muscle-grid": () => openSheet(pickerMuscleContent(), { fullscreen: true }),
+            "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; closeSheet(); element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
+            "muscle-grid-back": closeSheet,
             "picker-filter": () => setPickerFilter(actionElement.dataset.key, actionElement.dataset.value),
             "add-exercise": () => addExercise(actionElement.dataset.exerciseId),
             "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
@@ -2749,7 +2768,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     }
 
     function openAddExerciseModal() {
-        openModal(pickerListContent());
+        openModal(pickerListContent(), { fullscreen: true });
     }
 
     function pickerListContent() {
@@ -5107,7 +5126,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
 
     function avatar(user, size = "") {
         const url = imageUrl(user?.avatarUrl);
-        const image = url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.remove()">` : "";
+        // eager + sync decode so a cached avatar paints WITH the layout (no initials→photo
+        // flash when switching tabs); the initials stay only as the pre-load / error fallback.
+        const image = url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" loading="eager" decoding="sync" onerror="this.remove()">` : "";
         return `<div class="avatar ${size}" style="background:${escapeHtml(user.avatarColor)};">${escapeHtml(user.avatarInitials)}${image}</div>`;
     }
 
@@ -5205,6 +5226,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     }
 
     let overlayCloseTimer = null;
+    let sheetCloseTimer = null;
 
     // Reveal an overlay layer (backdrop + modal/drawer) with a fade/scale-in.
     function revealOverlay(layer) {
@@ -5223,7 +5245,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         layer.classList.add("visible");
     }
 
-    function openModal(html) {
+    function openModal(html, opts = {}) {
         clearTimeout(overlayCloseTimer);
         const drawer = element("drawerLayer");
         drawer.classList.add("hidden");
@@ -5231,9 +5253,45 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         drawer.innerHTML = "";
         const modal = element("modalLayer");
         modal.innerHTML = html;
+        modal.classList.toggle("modal-fullscreen", !!opts.fullscreen);
         iconsIn(modal);
         lockBackgroundScroll();
         revealOverlay(modal);
+    }
+
+    // Second-level sheet stacked ABOVE the modal (e.g. the muscle-group picker).
+    // Animates like the modal; does NOT touch the scroll-lock (parent modal holds it).
+    function openSheet(html, opts = {}) {
+        clearTimeout(sheetCloseTimer);
+        const backdrop = element("modalBackdrop2");
+        const layer = element("modalLayer2");
+        layer.innerHTML = html;
+        layer.classList.toggle("modal-fullscreen", !!opts.fullscreen);
+        iconsIn(layer);
+        backdrop.classList.remove("hidden");
+        layer.classList.remove("hidden");
+        if (!layer.classList.contains("visible")) {
+            void layer.offsetWidth;
+        }
+        backdrop.classList.add("visible");
+        layer.classList.add("visible");
+    }
+
+    function closeSheet() {
+        const backdrop = element("modalBackdrop2");
+        const layer = element("modalLayer2");
+        if (backdrop.classList.contains("hidden")) {
+            return;
+        }
+        backdrop.classList.remove("visible");
+        layer.classList.remove("visible");
+        clearTimeout(sheetCloseTimer);
+        sheetCloseTimer = setTimeout(() => {
+            backdrop.classList.add("hidden");
+            layer.classList.add("hidden");
+            layer.innerHTML = "";
+            layer.classList.remove("modal-fullscreen");
+        }, 240);
     }
 
     // Reliable in-app confirmation (native confirm() is unreliable/blocked on mobile).
@@ -5247,6 +5305,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             drawer.classList.add("hidden");
             drawer.classList.remove("visible");
             drawer.innerHTML = "";
+            layer.classList.remove("modal-fullscreen"); // confirm is always a compact card
             layer.innerHTML = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
             iconsIn(layer);
             lockBackgroundScroll();
@@ -5349,6 +5408,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     function closeOverlay() {
         // Unlock FIRST so a later DOM error can't skip it and leave scroll frozen.
         unlockBackgroundScroll();
+        closeSheet(); // a nested sheet (muscle picker) closes with its parent
         const backdrop = element("modalBackdrop");
         const modal = element("modalLayer");
         const drawer = element("drawerLayer");
