@@ -1,5 +1,6 @@
-﻿import { registerSelectIcons } from "./components/select.js";
+﻿import "./components/select.js";
 import "./components/datepicker.js";
+import { muscleIcons } from "./lib/muscle-icons.js";
 import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv, unique, imageUrl } from "./lib/format.js";
 import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
 import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
@@ -2342,6 +2343,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": openAddExerciseModal,
+            "open-muscle-grid": () => { element("exercisePickerBody").innerHTML = muscleGridBody(); iconsIn(element("modalLayer")); },
+            "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
+            "muscle-grid-back": () => { element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
             "picker-filter": () => setPickerFilter(actionElement.dataset.key, actionElement.dataset.value),
             "add-exercise": () => addExercise(actionElement.dataset.exerciseId),
             "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
@@ -2494,6 +2498,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             "open-day-sheet",
             "open-add-exercise-modal",
             "picker-filter",
+            "open-muscle-grid",
+            "pick-muscle",
+            "muscle-grid-back",
             "open-custom-exercise",
             "edit-exercise",
             "upgrade-plan",
@@ -2745,44 +2752,44 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         openModal(`<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою + фільтри за групою м'язів і обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody">${pickerBody()}</div>`);
     }
 
-    // Muscle-group filter: custom display order + small inline-SVG glyphs (currentColor)
-    // shown left of each option in the <gym-select>. The text label stays the source of
-    // truth; the icon adds a quick visual cue.
+    // Muscle-group filter priority order (the rest fall back alphabetically).
     const MUSCLE_ORDER = ["Груди", "Спина", "Трицепс", "Біцепс", "Плечі", "Прес"];
-    const MUSCLE_ICONS = {
-        all: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="6" r="3"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>`,
-        "Груди": `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.3 9.2c0-2.7-2-4.2-4.7-4.2C4.2 5 2.7 6.7 3 9.3c.3 2.9 2.3 4.7 4.9 4.5 2.3-.2 3.4-1.9 3.4-4.6Z"/><path d="M12.7 9.2c0-2.7 2-4.2 4.7-4.2 2.4 0 3.9 1.7 3.6 4.3-.3 2.9-2.3 4.7-4.9 4.5-2.3-.2-3.4-1.9-3.4-4.6Z"/></svg>`,
-        "Спина": `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5h7l-1.4 8.2A3 3 0 0 1 3 12.5Z"/><path d="M21 5h-7l1.4 8.2A3 3 0 0 0 21 12.5Z"/></svg>`,
-        "Трицепс": `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 21v-3.4A3.6 3.6 0 0 0 14.4 14 2.4 2.4 0 0 1 12 11.6V6a2 2 0 1 0-4 0v3.4A6.6 6.6 0 0 0 14.6 16H14v5Z"/></svg>`,
-        "Біцепс": `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 21v-3.4A3.6 3.6 0 0 1 9.6 14 2.4 2.4 0 0 0 12 11.6V6a2 2 0 1 1 4 0v3.4A6.6 6.6 0 0 1 9.4 16H10v5Z"/></svg>`,
-        "Плечі": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15a9 9 0 0 1 18 0"/><circle cx="3.5" cy="15" r="1.6" fill="currentColor" stroke="none"/><circle cx="20.5" cy="15" r="1.6" fill="currentColor" stroke="none"/></svg>`,
-        "Прес": `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="6.6" height="4" rx="2"/><rect x="13.4" y="4" width="6.6" height="4" rx="2"/><rect x="4" y="10" width="6.6" height="4" rx="2"/><rect x="13.4" y="10" width="6.6" height="4" rx="2"/><rect x="4" y="16" width="6.6" height="4" rx="2"/><rect x="13.4" y="16" width="6.6" height="4" rx="2"/></svg>`,
-        "Квадрицепс": `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8l-1 7c-.5 3.5-1 6-3 11h-2l1-8c-2-1-3-3-3-6Z"/></svg>`,
-        "Задня поверхня стегна": `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 3H8l1 7c.5 3.5 1 6 3 11h2l-1-8c2-1 3-3 3-6Z"/></svg>`,
-        "Литки": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3v5c0 3-3 4.5-3 8a4 4 0 0 0 6 3.2"/><path d="M11 8c3 .5 4 3 4 6"/></svg>`,
-        "Передпліччя": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l8.5 8.5"/><rect x="11.5" y="11.5" width="7.5" height="6.5" rx="2.5"/></svg>`,
-        other: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5"/><path d="M3.5 9 6 6.5 8.5 9"/><path d="M15.5 15 18 17.5 20.5 15"/></svg>`
-    };
-    registerSelectIcons(MUSCLE_ICONS);
 
-    function pickerBody() {
+    function orderedMuscleGroups() {
         const muscleGroups = unique(state.database.exercises.map((exercise) => exercise.primaryMuscleGroup).filter(Boolean));
-        const equipmentList = unique(state.database.exercises.map((exercise) => exercise.equipment).filter(Boolean));
-        // Custom priority order, then the rest alphabetically.
-        const orderedMuscles = muscleGroups.slice().sort((left, right) => {
+        return muscleGroups.slice().sort((left, right) => {
             const li = MUSCLE_ORDER.indexOf(left);
             const ri = MUSCLE_ORDER.indexOf(right);
             const lr = li === -1 ? MUSCLE_ORDER.length : li;
             const rr = ri === -1 ? MUSCLE_ORDER.length : ri;
             return lr !== rr ? lr - rr : String(left).localeCompare(String(right), "uk");
         });
+    }
+
+    function muscleLabel(value) {
+        return value === "all" ? "Усі м'язи" : value;
+    }
+
+    function muscleIcon(value) {
+        return muscleIcons[value] || muscleIcons.all;
+    }
+
+    // The muscle filter opens a visual grid of body-silhouette cards (in-modal view
+    // swap — no second overlay, since the picker is itself a modal).
+    function muscleGridBody() {
+        const card = (value) => `<button type="button" class="muscle-card${state.filters.pickerMuscle === value ? " active" : ""}" data-action="pick-muscle" data-value="${escapeHtml(value)}"><span class="muscle-card-ic">${muscleIcon(value)}</span><span class="muscle-card-label">${escapeHtml(muscleLabel(value))}</span></button>`;
+        const cards = card("all") + orderedMuscleGroups().map(card).join("");
+        return `<div class="muscle-grid-head"><button class="icon-button" type="button" data-action="muscle-grid-back" aria-label="Назад"><i data-lucide="arrow-left"></i></button><h3>Група м'язів</h3></div><div class="muscle-grid">${cards}</div>`;
+    }
+
+    function pickerBody() {
+        const equipmentList = unique(state.database.exercises.map((exercise) => exercise.equipment).filter(Boolean));
         const option = (key, value, label) => `<option value="${escapeHtml(value)}" ${state.filters[key] === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
-        const muscleOption = (value, label) => `<option value="${escapeHtml(value)}" data-icon="${MUSCLE_ICONS[value] ? escapeHtml(value) : "other"}" ${state.filters.pickerMuscle === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
-        const muscleOptions = muscleOption("all", "Усі м'язи") + orderedMuscles.map((value) => muscleOption(value, value)).join("");
         const equipmentOptions = option("pickerEquipment", "all", "Все обладнання") + equipmentList.map((value) => option("pickerEquipment", value, value)).join("");
+        const muscle = state.filters.pickerMuscle;
         return `<input type="search" class="picker-search" placeholder="Пошук вправи" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-picker-search">
             <div class="picker-filter-row">
-                <gym-select data-action="picker-filter-select" data-key="pickerMuscle">${muscleOptions}</gym-select>
+                <button type="button" class="picker-muscle-trigger" data-action="open-muscle-grid"><span class="picker-muscle-ic">${muscleIcon(muscle)}</span><span class="picker-muscle-label">${escapeHtml(muscleLabel(muscle))}</span><i data-lucide="chevron-down" class="gselect-caret"></i></button>
                 <gym-select data-action="picker-filter-select" data-key="pickerEquipment">${equipmentOptions}</gym-select>
             </div>
             <div class="exercise-picker-grid" id="exercisePickerGrid">${exercisePickerCards()}</div>`;
