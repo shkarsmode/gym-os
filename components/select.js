@@ -6,6 +6,14 @@
 // The dropdown panel is portaled to <body> so it never clips inside cards.
 import { escapeHtml, refreshIcons, revealOnNextFrame, registerOpenPanel, unregisterOpenPanel } from "./util.js";
 
+// Optional per-option icons. The host app registers a map { key: "<svg…>" } and an
+// <option data-icon="key"> then renders that icon to the left of its label (and on
+// the trigger when selected). Icons are raw inline SVG (use currentColor).
+const OPTION_ICONS = {};
+export function registerSelectIcons(map) {
+    Object.assign(OPTION_ICONS, map || {});
+}
+
 class GymSelect extends HTMLElement {
     connectedCallback() {
         if (this.initialized) {
@@ -16,6 +24,7 @@ class GymSelect extends HTMLElement {
         this.options = [...this.querySelectorAll("option")].map((option) => ({
             value: option.getAttribute("value") ?? option.textContent,
             label: option.textContent,
+            icon: option.getAttribute("data-icon") || "",
             selected: option.hasAttribute("selected")
         }));
         const attrValue = this.getAttribute("value");
@@ -76,7 +85,9 @@ class GymSelect extends HTMLElement {
     }
 
     renderTrigger() {
-        this.trigger.innerHTML = `<span class="gselect-label">${escapeHtml(this.currentLabel())}</span><i data-lucide="chevron-down" class="gselect-caret"></i>`;
+        const current = this.options.find((item) => String(item.value) === String(this._value));
+        const icon = current && OPTION_ICONS[current.icon] ? `<span class="gselect-opt-icon">${OPTION_ICONS[current.icon]}</span>` : "";
+        this.trigger.innerHTML = `${icon}<span class="gselect-label">${escapeHtml(this.currentLabel())}</span><i data-lucide="chevron-down" class="gselect-caret"></i>`;
         refreshIcons();
     }
 
@@ -100,7 +111,8 @@ class GymSelect extends HTMLElement {
         panel.setAttribute("role", "listbox");
         panel.innerHTML = this.options.map((option, index) =>
             `<div class="gselect-option${String(option.value) === String(this._value) ? " is-selected" : ""}" role="option" data-index="${index}">` +
-            `<span>${escapeHtml(option.label)}</span><i data-lucide="check" class="gselect-check"></i></div>`
+            `${OPTION_ICONS[option.icon] ? `<span class="gselect-opt-icon">${OPTION_ICONS[option.icon]}</span>` : ""}` +
+            `<span class="gselect-opt-label">${escapeHtml(option.label)}</span><i data-lucide="check" class="gselect-check"></i></div>`
         ).join("");
         document.body.appendChild(panel);
         this.panel = panel;
