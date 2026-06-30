@@ -1486,7 +1486,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
                     <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button></div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
                 </div>
                 ${contextBanner}
-                ${readonly ? "" : `<div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}" data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тип</label><gym-select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></div></div>`}
+                ${readonly ? "" : `<div class="field-grid three" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}" data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div><div class="field"><label>Тип</label><gym-select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></div></div>`}
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;"><button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
@@ -3319,7 +3319,11 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         if (!workoutItem) {
             return;
         }
-        workoutItem[field] = value;
+        if (field === "durationOverride") {
+            workoutItem.durationOverride = (value === "auto" || value === "" || value == null) ? null : Math.max(0, Math.round(Number(value)) || 0);
+        } else {
+            workoutItem[field] = value;
+        }
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
@@ -4502,11 +4506,31 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         return round(Math.max(average, load), 1);
     }
 
-    function duration(workoutItem) {
+    // The clock-based duration (finishedAt - startedAt). Reopening + finishing a
+    // session later inflates this, which is why a manual override exists below.
+    function autoDuration(workoutItem) {
         if (!workoutItem.startedAt) {
             return 0;
         }
         return Math.max(0, Math.round(((workoutItem.finishedAt ? new Date(workoutItem.finishedAt) : new Date()) - new Date(workoutItem.startedAt)) / 60000));
+    }
+
+    // Manual override (minutes) wins when set; otherwise fall back to the clock.
+    function duration(workoutItem) {
+        if (workoutItem.durationOverride != null && workoutItem.durationOverride !== "") {
+            return Math.max(0, Math.round(Number(workoutItem.durationOverride)));
+        }
+        return autoDuration(workoutItem);
+    }
+
+    function formatDurationLabel(minutes) {
+        const total = Math.max(0, Math.round(Number(minutes) || 0));
+        if (total < 60) {
+            return `${total} хв`;
+        }
+        const hours = Math.floor(total / 60);
+        const rest = total % 60;
+        return rest ? `${hours} год ${rest} хв` : `${hours} год`;
     }
 
     function previousPerformance(userId, exerciseId, excludedWorkoutId = null) {
@@ -5660,6 +5684,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             status: workoutItem.status || "active",
             workoutType: workoutItem.workoutType || "custom",
             notes: workoutItem.notes || "",
+            // undefined (not null) when unset → JSON.stringify drops the key, so an
+            // older backend that hasn't deployed this field yet won't 400 on it.
+            durationOverride: (workoutItem.durationOverride === undefined || workoutItem.durationOverride === null || workoutItem.durationOverride === "") ? undefined : Math.round(Number(workoutItem.durationOverride)),
             exercises: (workoutItem.exercises || []).map((exercise, index) => ({
                 exerciseId: exercise.exerciseId,
                 order: exercise.order || index + 1,
