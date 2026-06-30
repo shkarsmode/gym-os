@@ -802,6 +802,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         compactCards: "0",        // "1" = compact
         defaultRest: "90",
         defaultWorkoutType: "custom",
+        defaultDuration: "90",    // minutes; "auto" = clock-based. Default 1.5 год
         defaultSetType: "warmup",
         autoStartRest: "1"        // "1" = auto-start rest timer on set completion
     };
@@ -1729,8 +1730,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         const restOptions = [45, 60, 75, 90, 120, 150, 180].map((rest) => `<option value="${rest}" ${getPref("defaultRest") === String(rest) ? "selected" : ""}>${rest} сек</option>`).join("");
         const workoutTypeOptions = Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultWorkoutType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
         const setTypeOptions = Object.entries(setTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultSetType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+        const durationDefaultOptions = `<option value="auto" ${getPref("defaultDuration") === "auto" ? "selected" : ""}>Авто (за часом)</option>` + [15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${getPref("defaultDuration") === String(min) ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("");
         const appearanceCard = `<section class="card span-6"><h2>Вигляд</h2><div class="pref-row"><span class="pref-label">Тема</span><div class="segmented pref-seg">${themeButtons}</div></div><div class="pref-row"><span class="pref-label">Акцент</span><div class="segmented pref-seg">${accentButtons}</div></div><div class="pref-row"><span class="pref-label">Інтерфейс</span><div class="segmented pref-seg">${compactButtons}</div></div></section>`;
-        const workoutDefaultsCard = `<section class="card span-6"><h2>Тренування за замовчуванням</h2><div class="field-grid"><div class="field"><label>Відпочинок</label><gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select></div><div class="field"><label>Тип тренування</label><gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select></div></div><div class="field" style="margin-top:12px;"><label>Тип підходу</label><gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select></div><div class="pref-row" style="margin-top:14px;"><span class="pref-label">Авто-старт таймера відпочинку</span><div class="segmented pref-seg">${autoStartButtons}</div></div></section>`;
+        const workoutDefaultsCard = `<section class="card span-6"><h2>Тренування за замовчуванням</h2><div class="field-grid"><div class="field"><label>Відпочинок</label><gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select></div><div class="field"><label>Тип тренування</label><gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select></div></div><div class="field-grid" style="margin-top:12px;"><div class="field"><label>Тип підходу</label><gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select></div><div class="field"><label>Тривалість</label><gym-select data-action="set-pref-select" data-pref="defaultDuration">${durationDefaultOptions}</gym-select></div></div><div class="pref-row" style="margin-top:14px;"><span class="pref-label">Авто-старт таймера відпочинку</span><div class="segmented pref-seg">${autoStartButtons}</div></div></section>`;
         content(`<div class="grid dashboard-grid">${appearanceCard}${workoutDefaultsCard}<section class="card span-6"><h2>Профіль</h2><p class="card-caption">Активний акаунт визначається авторизацією Google.</p><div class="list-row" style="margin-top:14px;">${avatar(currentUser())}<div><div class="profile-name">${escapeHtml(currentUser().displayName)}</div><div class="profile-meta">${escapeHtml(currentUser().name)}</div></div></div><div class="action-row" style="margin-top:14px;"><button class="button button-secondary compact" type="button" data-action="navigate" data-section="profile"><i data-lucide="user-round"></i>Відкрити профіль</button></div></section><section class="card span-6"><h2>Авторизація</h2><p class="card-caption">Продакшн-режим передбачає тільки Google OAuth.</p><div class="action-row"><button class="button button-primary" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></section><section class="card span-6"><h2>Імпорт / експорт</h2><p class="card-caption">JSON-дамп GymOS і окремий імпорт каталогу вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button><label class="button button-secondary" for="importInput"><i data-lucide="upload"></i>Імпорт JSON</label><input class="hidden" id="importInput" type="file" accept="application/json" data-action="import-data"><label class="button button-secondary" for="exerciseCatalogInput"><i data-lucide="file-up"></i>Імпортувати каталог вправ з JSON</label><input class="hidden" id="exerciseCatalogInput" type="file" accept="application/json" data-action="import-exercise-catalog"></div></section><section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button></div></section><section class="card span-6"><h2>Про застосунок</h2><div class="list-row" style="margin-top:6px;"><div><div class="profile-name">GymOS</div><div class="profile-meta">Версія v${APP_VERSION}</div></div></div></section></div>`);
     }
 
@@ -3118,6 +3120,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             return;
         }
         const now = new Date();
+        const defaultDur = getPref("defaultDuration");
         const workoutItem = {
             id: createId("workout"),
             userId: currentUser().id,
@@ -3125,6 +3128,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             title: "Тренування",
             status: "active",
             workoutType: getPref("defaultWorkoutType"),
+            durationOverride: (defaultDur === "auto" || defaultDur === "" || defaultDur == null) ? null : (Math.max(0, Math.round(Number(defaultDur))) || null),
             startedAt: now.toISOString(),
             finishedAt: null,
             notes: "",
