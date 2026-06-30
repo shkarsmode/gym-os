@@ -2343,9 +2343,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": openAddExerciseModal,
-            "open-muscle-grid": () => { element("exercisePickerBody").innerHTML = muscleGridBody(); iconsIn(element("modalLayer")); },
-            "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
-            "muscle-grid-back": () => { element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
+            "open-muscle-grid": () => { element("modalLayer").innerHTML = pickerMuscleContent(); iconsIn(element("modalLayer")); },
+            "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; element("modalLayer").innerHTML = pickerListContent(); iconsIn(element("modalLayer")); },
+            "muscle-grid-back": () => { element("modalLayer").innerHTML = pickerListContent(); iconsIn(element("modalLayer")); },
             "picker-filter": () => setPickerFilter(actionElement.dataset.key, actionElement.dataset.value),
             "add-exercise": () => addExercise(actionElement.dataset.exerciseId),
             "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
@@ -2749,7 +2749,11 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     }
 
     function openAddExerciseModal() {
-        openModal(`<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою + фільтри за групою м'язів і обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody">${pickerBody()}</div>`);
+        openModal(pickerListContent());
+    }
+
+    function pickerListContent() {
+        return `<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою + фільтри за групою м'язів і обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody">${pickerBody()}</div>`;
     }
 
     // Muscle-group filter priority order (the rest fall back alphabetically).
@@ -2776,10 +2780,11 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
 
     // The muscle filter opens a visual grid of body-silhouette cards (in-modal view
     // swap — no second overlay, since the picker is itself a modal).
-    function muscleGridBody() {
+    function pickerMuscleContent() {
         const card = (value) => `<button type="button" class="muscle-card${state.filters.pickerMuscle === value ? " active" : ""}" data-action="pick-muscle" data-value="${escapeHtml(value)}"><span class="muscle-card-ic">${muscleIcon(value)}</span><span class="muscle-card-label">${escapeHtml(muscleLabel(value))}</span></button>`;
         const cards = card("all") + orderedMuscleGroups().map(card).join("");
-        return `<div class="muscle-grid-head"><button class="icon-button" type="button" data-action="muscle-grid-back" aria-label="Назад"><i data-lucide="arrow-left"></i></button><h3>Група м'язів</h3></div><div class="muscle-grid">${cards}</div>`;
+        // Top-right X returns to the exercise picker (acts as back), not close-all.
+        return `<div class="modal-header"><div><h2>Група м'язів</h2><p class="card-caption">Оберіть групу для фільтра.</p></div><button class="icon-button" type="button" data-action="muscle-grid-back" aria-label="Назад до пошуку"><i data-lucide="x"></i></button></div><div class="muscle-grid">${cards}</div>`;
     }
 
     function pickerBody() {

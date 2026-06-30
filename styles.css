@@ -3965,17 +3965,6 @@ ul {
 }
 
 /* Muscle-group grid (in-modal view) */
-.muscle-grid-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-}
-
-.muscle-grid-head h3 {
-    margin: 0;
-}
-
 .muscle-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
