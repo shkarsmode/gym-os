@@ -4,6 +4,8 @@ import { muscleIcons } from "./lib/muscle-icons.js";
 import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv, unique, imageUrl } from "./lib/format.js";
 import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
 import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
+import { levelForXp, XP_REWARDS, LEVEL_COUNT } from "./lib/levels.js";
+import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } from "./lib/frames.js";
 
 (() => {
     "use strict";
@@ -1407,23 +1409,33 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         const user = currentUser();
         const button = element("openUserSwitcherButton");
         const url = imageUrl(user.avatarUrl);
+        const tier = frameForLevel(userLevel(user.id).level);
         button.style.background = user.avatarColor;
+        button.style.setProperty("--fgi", tier.glow);
+        button.style.setProperty("--fglowc", tier.glowColor);
+        button.classList.add("has-frame");
+        button.classList.toggle("is-anim", tier.conic);
         button.innerHTML = `${escapeHtml(user.avatarInitials)}${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" decoding="async" onerror="this.remove()">` : ""}`;
     }
 
     function renderSidebarProfile() {
         const user = currentUser();
         const stats = userStats(user.id);
+        const info = userLevel(user.id);
         element("sidebarProfileCard").innerHTML = `
             <div class="profile-row">
-                ${avatar(user, "small")}
+                ${framedAvatar(user, "small", info.level)}
                 <div>
                     <div class="profile-name">${escapeHtml(user.displayName)}</div>
                     <div class="profile-meta">${stats.completedWorkouts} тренувань · ${number(stats.totalVolume)} кг${infoTip("Загальний підсумок", "Загальний підсумок твоєї активності. Показує кількість проведених тренувань та сумарну вагу, яку ти підняв за весь час. Допомагає бачити глобальний масштаб твоєї роботи та мотивує не зупинятися.")}</div>
                 </div>
             </div>
-            <div class="progress-track" style="margin-top: 14px;"><div class="progress-fill" style="width: ${Math.min(100, stats.completedWorkouts * 5)}%;"></div></div>
-            <div class="profile-meta" style="margin-top: 8px;">Поточний рівень: ${escapeHtml(mainRank(user.id))}</div>
+            <div class="sidebar-level" data-action="navigate" data-section="levels">
+                ${levelBadge(info)}
+                <span class="sidebar-level-caption">${info.isMax ? "Максимальний рівень" : `${number(info.xpToNext)} XP до Рів. ${info.level + 1}`}</span>
+                ${infoTip("Рівні та XP", XP_HOWTO)}
+            </div>
+            <div class="progress-track" style="margin-top: 10px;"><div class="progress-fill" style="width: ${Math.round(info.progress * 100)}%;"></div></div>
             ${hasUnlimited()
                 ? `<div class="sidebar-role" style="margin-top: 10px;">${roleStatusBadge(user)}</div>`
                 : `<button class="button button-primary compact sidebar-upgrade" type="button" data-action="navigate" data-section="subscription"><i data-lucide="rocket"></i>Апгрейд до PRO</button>`}
@@ -1446,7 +1458,7 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         } else {
             element("sectionTitle").textContent = item.title;
         }
-        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, users, feedback, admin: adminPanel, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
+        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, levels, users, feedback, admin: adminPanel, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         iconsIn(element("pageContent")); // shell icons already converted in renderShell()
         // Subtle enter animation only when the section actually changes (not on
@@ -1667,7 +1679,12 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     }
 
     function rankings() {
-        content(`<section class="card"><div class="card-header"><div><h2>Командний рейтинг</h2><p class="card-caption">За регулярністю, обсягом і найкращим підйомом. Натисни на учасника, щоб відкрити його тренування.</p></div></div><div class="table-wrap"><table><thead><tr><th>Користувач</th><th>Завершено</th><th>Обсяг</th><th>Найкращий підйом</th><th>Бал</th></tr></thead><tbody>${leaderboard().map((row, index) => `<tr class="row-link" data-action="open-user" data-user-id="${row.user.id}"><td><div class="list-row">${avatar(row.user, "tiny")}<strong>${index + 1}. ${escapeHtml(row.user.displayName)}</strong>${roleStatusBadge(row.user)}</div></td><td>${row.completedWorkouts}</td><td>${number(row.totalVolume)} кг</td><td>${row.bestLift ? `${escapeHtml(row.bestLift.exercise.name)} · ${number(row.bestLift.estimatedOneRepMax)} кг` : "—"}</td><td>${number(row.score)}</td></tr>`).join("")}</tbody></table></div></section>`);
+        const muscle = state.filters.rankingsMuscle || "all";
+        const muscleOptions = [`<option value="all"${muscle === "all" ? " selected" : ""}>Найкращий загалом</option>`]
+            .concat(orderedMuscleGroups().map((group) => `<option value="${escapeHtml(group)}"${muscle === group ? " selected" : ""}>${escapeHtml(group)}</option>`))
+            .join("");
+        const liftHeader = muscle === "all" ? "Найкращий підйом" : `Найкращий: ${escapeHtml(muscle)}`;
+        content(`<section class="card"><div class="card-header rankings-header"><div><h2>Командний рейтинг</h2><p class="card-caption">За рівнем, регулярністю та обсягом. Натисни на учасника, щоб відкрити його тренування.</p></div><div class="rankings-lift-picker"><label>Найкращий підйом</label><gym-select data-action="rankings-lift-filter">${muscleOptions}</gym-select></div></div><div class="table-wrap"><table><thead><tr><th>Користувач</th><th>Рівень</th><th>Завершено</th><th>Обсяг</th><th>${liftHeader}</th></tr></thead><tbody>${leaderboard(muscle).map((row, index) => `<tr class="row-link" data-action="open-user" data-user-id="${row.user.id}"><td><div class="list-row">${framedAvatar(row.user, "tiny", row.level)}<strong>${index + 1}. ${escapeHtml(row.user.displayName)}</strong>${roleStatusBadge(row.user)}</div></td><td>${levelBadge({ level: row.level })}</td><td>${row.completedWorkouts}</td><td>${number(row.totalVolume)} кг</td><td>${row.bestLift ? `${escapeHtml(row.bestLift.exercise.name)} · ${number(row.bestLift.estimatedOneRepMax)} кг` : "—"}</td></tr>`).join("")}</tbody></table></div></section>`);
     }
 
     function users() {
@@ -1682,12 +1699,61 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
     function profile() {
         const user = currentUser();
         const summary = userStats(user.id);
+        const info = userLevel(user.id);
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:10px;"><span class="badge accent">${escapeHtml(user.trainingGoal)}</span>${roleStatusBadge(user)}<span class="status-badge completed">Можна редагувати</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="changelog"><i data-lucide="sparkles"></i>Що нового</button><button class="button button-secondary compact" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></div></section>${isAdmin() ? approvalQueueCard() : ""}${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${framedAvatar(user, "large", info.level)}<div><div class="tag-row" style="margin-bottom:10px;">${levelBadge(info, { link: true })}<span class="badge accent">${escapeHtml(user.trainingGoal)}</span>${roleStatusBadge(user)}<span class="status-badge completed">Можна редагувати</span></div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="levels"><i data-lucide="medal"></i>Рівні</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="changelog"><i data-lucide="sparkles"></i>Що нового</button><button class="button button-secondary compact" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button></div></div></section>${isAdmin() ? approvalQueueCard() : ""}${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
         });
+    }
+
+    function levels() {
+        const user = currentUser();
+        const info = userLevel(user.id);
+        const tier = frameForLevel(info.level);
+        const nextTier = nextFrameForLevel(info.level);
+        const recent = xpEvents(user.id).slice(0, 14);
+        const pct = Math.round(info.progress * 100);
+        const xpSources = [
+            ["dumbbell", "Завершене тренування", `+${XP_REWARDS.workout}`],
+            ["boxes", "Обсяг підйомів за сесію", `до +${XP_REWARDS.volumeCap}`],
+            ["flame", "Серія тренувань підряд", `+${XP_REWARDS.streak}`],
+            ["trophy", "Особистий рекорд (1ПМ)", `+${XP_REWARDS.record}`],
+            ["plus-circle", "Твоя вправа в каталозі", `+${XP_REWARDS.exercise}`],
+            ["lightbulb", "Ідея зі статусом «Готово»", `+${XP_REWARDS.ideaDone}`]
+        ];
+        const heroCard = `<section class="card span-12 level-hero">
+            <div class="level-hero-main">${framedAvatar(user, "large", info.level)}<div class="level-hero-info">
+                <div class="tag-row">${levelBadge(info)}<span class="frame-name-badge">${escapeHtml(tier.name)}</span>${roleStatusBadge(user)}<span class="badge locked">Силовий клас: ${escapeHtml(mainRank(user.id))}</span></div>
+                <h2>Рівень ${info.level}${infoTip("Рівні та XP", XP_HOWTO)}</h2>
+                <p class="card-caption">${info.isMax ? "Максимальний рівень досягнуто" : `${number(info.xpToNext)} XP до рівня ${info.level + 1}`} · Загалом ${number(info.xp)} XP</p>
+                <div class="level-progress"><div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div><span class="level-progress-label">${info.isMax ? "MAX" : `${number(info.xpIntoLevel)} / ${number(info.xpForLevel)} XP`}</span></div>
+            </div></div>
+        </section>`;
+        const frameCard = `<section class="card span-6">
+            <h2>Рамка аватара</h2>
+            <p class="card-caption">Рамка оновлюється кожні ${FRAME_TIER_SIZE} рівнів — усього ${FRAME_TIER_COUNT} рангів. Що вищий рівень — то крутіша рамка.</p>
+            <div class="frame-preview-row">
+                <div class="frame-preview">${framedAvatar(user, "large", info.level)}<strong class="frame-preview-name">${escapeHtml(tier.name)}</strong><span class="frame-preview-meta">Зараз · ранг ${tier.index + 1}/${FRAME_TIER_COUNT}</span></div>
+                <div class="frame-preview-arrow"><i data-lucide="arrow-right"></i></div>
+                ${nextTier
+                    ? `<div class="frame-preview">${avatar(user, "large", { frameTier: nextTier })}<strong class="frame-preview-name">${escapeHtml(nextTier.name)}</strong><span class="frame-preview-meta">Рівень ${nextTier.unlockLevel} · ранг ${nextTier.index + 1}/${FRAME_TIER_COUNT}</span></div>`
+                    : `<div class="frame-preview"><strong class="frame-preview-name">Найвища рамка</strong><span class="frame-preview-meta">Ти на вершині</span></div>`}
+            </div>
+        </section>`;
+        const howCard = `<section class="card span-6">
+            <h2>Як заробити XP</h2>
+            <ul class="xp-source-list">${xpSources.map(([icon, label, amount]) => `<li><span class="xp-source-ico"><i data-lucide="${icon}"></i></span><span class="xp-source-label">${escapeHtml(label)}</span><span class="xp-amount">${escapeHtml(amount)}</span></li>`).join("")}</ul>
+            <p class="card-caption">XP нараховується автоматично з усієї твоєї історії — нічого не треба вмикати. ${LEVEL_COUNT} рівнів: перші даються швидко, далі — цінніші.</p>
+        </section>`;
+        const historyCard = `<section class="card span-12">
+            <h2>Останні нарахування XP</h2>
+            ${recent.length
+                ? `<div class="xp-history">${recent.map((event) => `<div class="xp-history-row"><span class="xp-history-ico kind-${event.kind}"><i data-lucide="${event.icon}"></i></span><div class="xp-history-main"><strong>${escapeHtml(event.label)}</strong><span class="xp-history-date">${formatDate(event.date)}</span></div><span class="xp-amount">+${number(event.amount)}</span></div>`).join("")}</div>`
+                : emptyInline("Ще немає активності", "Заверши перше тренування, щоб почати набирати XP.")}
+        </section>`;
+        content(`<div class="grid dashboard-grid">${heroCard}${frameCard}${howCard}${historyCard}</div>`);
     }
 
     // ---- Feedback / feature-request board (public; admin manages statuses) ----
@@ -2517,6 +2583,11 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
 
             if (actionElement.dataset.action === "picker-filter-select") {
                 setPickerFilter(actionElement.dataset.key, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "rankings-lift-filter") {
+                state.filters.rankingsMuscle = actionElement.value;
+                renderSection();
             }
 
             if (actionElement.dataset.action === "import-data") {
@@ -4142,8 +4213,9 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
 
     function userCard(user) {
         const summary = userStats(user.id);
+        const info = userLevel(user.id);
         const isCurrent = user.id === currentUser().id;
-        return `<article class="user-card" data-action="open-user" data-user-id="${user.id}"><div class="list-row">${avatar(user, "xl")}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal || "")}</p></div></div><div style="margin-top:14px;">${kpi([{ label: "Тренування", value: summary.completedWorkouts }, { label: "Обсяг", value: number(summary.totalVolume) }, { label: "Кардіо", value: summary.cardioMinutes }])}</div><div class="tag-row" style="margin-top:12px;"><span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Це ви" : "Учасник"}</span>${roleStatusBadge(user)}</div></article>`;
+        return `<article class="user-card" data-action="open-user" data-user-id="${user.id}"><div class="list-row">${framedAvatar(user, "xl", info.level)}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal || "")}</p></div></div><div style="margin-top:14px;">${kpi([{ label: "Тренування", value: summary.completedWorkouts }, { label: "Обсяг", value: number(summary.totalVolume) }, { label: "Кардіо", value: summary.cardioMinutes }])}</div><div class="tag-row" style="margin-top:12px;">${levelBadge(info)}<span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Це ви" : "Учасник"}</span>${roleStatusBadge(user)}</div></article>`;
     }
 
     function userDetail(userId) {
@@ -4153,9 +4225,10 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             return;
         }
         const summary = userStats(user.id);
+        const info = userLevel(user.id);
         const isCurrent = user.id === currentUser().id;
         const history = workoutsFor(user.id).sort(byDateDesc);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${avatar(user, "large")}<div><div class="tag-row" style="margin-bottom:8px;"><span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${roleStatusBadge(user)}${isCurrent ? `<span class="status-badge completed">Це ви</span>` : ""}</div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}<section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${framedAvatar(user, "large", info.level)}<div><div class="tag-row" style="margin-bottom:8px;">${levelBadge(info, { link: isCurrent })}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${roleStatusBadge(user)}${isCurrent ? `<span class="status-badge completed">Це ви</span>` : ""}</div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}<section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section></div>`);
     }
 
     function exerciseMedia(exercise) {
@@ -4515,12 +4588,21 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         return { best, currentLevel, nextLevel, progress: upper === lower ? 100 : (best.estimatedOneRepMax - lower) / (upper - lower) * 100 };
     }
 
-    function leaderboard() {
+    function bestLiftByMuscle(userId, muscle, records = null) {
+        const list = records || recordsFor(userId);
+        if (!muscle || muscle === "all") {
+            return list[0] || null;
+        }
+        return list.find((record) => record.exercise.primaryMuscleGroup === muscle) || null;
+    }
+
+    function leaderboard(muscle = "all") {
         return state.database.users.map((user) => {
+            const records = recordsFor(user.id);
             const summary = userStats(user.id);
-            const bestLift = recordsFor(user.id)[0] || null;
-            return { user, completedWorkouts: summary.completedWorkouts, totalVolume: summary.totalVolume, bestLift, mainRank: mainRank(user.id), score: summary.completedWorkouts * 25 + summary.totalVolume / 500 + (bestLift?.estimatedOneRepMax || 0) * 3 };
-        }).sort((left, right) => right.score - left.score);
+            const info = userLevel(user.id, records);
+            return { user, completedWorkouts: summary.completedWorkouts, totalVolume: summary.totalVolume, bestLift: bestLiftByMuscle(user.id, muscle, records), level: info.level, xp: info.xp };
+        }).sort((left, right) => right.xp - left.xp);
     }
 
     function insights(userId) {
@@ -4789,6 +4871,54 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
             }
         }
         return count;
+    }
+
+    // ---- Progression: XP, levels, avatar frames (all computed from existing data) ----
+    // Reconstructs a dated XP ledger from the user's real activity. Total XP drives
+    // the level (see lib/levels.js) and the events power the Levels-page history.
+    function xpEvents(userId, records = null) {
+        const events = [];
+        let previousDate = null;
+        workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc).forEach((workoutItem) => {
+            const volume = workoutVolume(workoutItem);
+            const volumeBonus = Math.min(XP_REWARDS.volumeCap, Math.floor(volume / XP_REWARDS.volumePerXp));
+            const continues = previousDate && dayDiff(new Date(workoutItem.date), new Date(previousDate)) <= 2;
+            events.push({ date: workoutItem.date, amount: XP_REWARDS.workout + volumeBonus + (continues ? XP_REWARDS.streak : 0), kind: "workout", icon: "dumbbell", label: `Тренування · ${number(volume)} кг${continues ? " · серія" : ""}` });
+            previousDate = workoutItem.date;
+        });
+        (records || recordsFor(userId)).forEach((record) => {
+            events.push({ date: record.date, amount: XP_REWARDS.record, kind: "record", icon: "flame", label: `Рекорд: ${record.exercise.name} · ${number(record.estimatedOneRepMax)} кг` });
+        });
+        (state.database.featureRequests || []).filter((item) => item.userId === userId && item.status === "done").forEach((item) => {
+            events.push({ date: item.updatedAt || item.createdAt, amount: XP_REWARDS.ideaDone, kind: "idea", icon: "lightbulb", label: `Ідею втілено: ${item.title}` });
+        });
+        state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).forEach((exercise) => {
+            events.push({ date: exercise.createdAt, amount: XP_REWARDS.exercise, kind: "exercise", icon: "plus-circle", label: `Додано вправу: ${exercise.name}` });
+        });
+        return events.filter((event) => event.date).sort((left, right) => new Date(right.date) - new Date(left.date));
+    }
+
+    function userXp(userId, records = null) {
+        return xpEvents(userId, records).reduce((sum, event) => sum + event.amount, 0);
+    }
+
+    function userLevel(userId, records = null) {
+        return levelForXp(userXp(userId, records));
+    }
+
+    const XP_HOWTO = `XP нараховується автоматично за реальну активність: тренування (+${XP_REWARDS.workout}), обсяг підйомів (до +${XP_REWARDS.volumeCap} за сесію), серію тренувань підряд (+${XP_REWARDS.streak}), кожен особистий рекорд (+${XP_REWARDS.record}), твої вправи в каталозі (+${XP_REWARDS.exercise}) та ідеї, які позначили «Готово» (+${XP_REWARDS.ideaDone}). Усього ${LEVEL_COUNT} рівнів — що вищий рівень, то крутіша рамка аватара.`;
+
+    // Wrap an avatar in its level-based frame ring. `size` matches the avatar size class.
+    function framedAvatar(user, size = "", level = null) {
+        const resolved = level === null ? userLevel(user.id).level : level;
+        return avatar(user, size, { frameTier: frameForLevel(resolved) });
+    }
+
+    function levelBadge(info, options = {}) {
+        const tier = frameForLevel(info.level);
+        const link = options.link ? ` data-action="navigate" data-section="levels"` : "";
+        const cls = `level-badge${options.link ? " level-badge-link" : ""}`;
+        return `<span class="${cls}" title="${escapeHtml(tier.name)} · Рівень ${info.level}"${link}><i data-lucide="medal"></i>Рів. ${info.level}</span>`;
     }
 
     function startTimer(duration) {
@@ -5199,12 +5329,17 @@ import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from ".
         return item ? statusLabel(item.status) : "Тренувань сьогодні ще немає";
     }
 
-    function avatar(user, size = "") {
+    function avatar(user, size = "", options = {}) {
         const url = imageUrl(user?.avatarUrl);
         // eager + sync decode so a cached avatar paints WITH the layout (no initials→photo
         // flash when switching tabs); the initials stay only as the pre-load / error fallback.
         const image = url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" loading="eager" decoding="sync" onerror="this.remove()">` : "";
-        return `<div class="avatar ${size}" style="background:${escapeHtml(user.avatarColor)};">${escapeHtml(user.avatarInitials)}${image}</div>`;
+        const inner = `<div class="avatar ${size}" style="background:${escapeHtml(user.avatarColor)};">${escapeHtml(user.avatarInitials)}${image}</div>`;
+        const tier = options.frameTier;
+        if (!tier) {
+            return inner;
+        }
+        return `<div class="avatar-frame ${size}${tier.conic ? " is-conic is-anim" : ""}" style="--fgrad:${tier.gradient};--fgi:${tier.glow};--fglowc:${tier.glowColor};">${inner}</div>`;
     }
 
     function ordered(items) {
