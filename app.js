@@ -5,7 +5,7 @@ import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv
 import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
 import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
 import { levelForXp, XP_REWARDS, LEVEL_COUNT } from "./lib/levels.js";
-import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } from "./lib/frames.js";
+import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_TIER_COUNT } from "./lib/frames.js";
 
 (() => {
     "use strict";
@@ -26,6 +26,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } f
         profileUserId: null,
         editingWorkoutId: null,
         viewUserId: null,
+        frameOverride: null, // admin-only local frame preview; resets on reload
         authUser: null,
         database: null,
         charts: new Map(),
@@ -1409,7 +1410,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } f
         const user = currentUser();
         const button = element("openUserSwitcherButton");
         const url = imageUrl(user.avatarUrl);
-        const tier = frameForLevel(userLevel(user.id).level);
+        const tier = frameTierFor(user, userLevel(user.id).level);
         button.style.background = user.avatarColor;
         button.style.setProperty("--fgi", tier.glow);
         button.style.setProperty("--fglowc", tier.glowColor);
@@ -1741,6 +1742,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } f
                     ? `<div class="frame-preview">${avatar(user, "large", { frameTier: nextTier })}<strong class="frame-preview-name">${escapeHtml(nextTier.name)}</strong><span class="frame-preview-meta">Рівень ${nextTier.unlockLevel} · ранг ${nextTier.index + 1}/${FRAME_TIER_COUNT}</span></div>`
                     : `<div class="frame-preview"><strong class="frame-preview-name">Найвища рамка</strong><span class="frame-preview-meta">Ти на вершині</span></div>`}
             </div>
+            ${isAdmin() ? `<div class="action-row" style="margin-top:16px;"><button class="button button-secondary compact" type="button" data-action="admin-frame-test"><i data-lucide="palette"></i>Тестувати рамки (адмін)</button></div>` : ""}
         </section>`;
         const howCard = `<section class="card span-6">
             <h2>Як заробити XP</h2>
@@ -1754,6 +1756,15 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } f
                 : emptyInline("Ще немає активності", "Заверши перше тренування, щоб почати набирати XP.")}
         </section>`;
         content(`<div class="grid dashboard-grid">${heroCard}${frameCard}${howCard}${historyCard}</div>`);
+    }
+
+    // Admin-only local frame preview: shows all tiers; picking one previews it on the
+    // admin's own avatar (state.frameOverride, in-memory) so they can review the frames.
+    function frameGallery() {
+        const user = currentUser();
+        const active = state.frameOverride;
+        const cards = FRAME_TIERS.map((tier) => `<button class="frame-gallery-card${active === tier.index ? " active" : ""}" type="button" data-action="apply-frame-override" data-tier="${tier.index}">${avatar(user, "large", { frameTier: tier })}<strong class="frame-preview-name">${escapeHtml(tier.name)}</strong><span class="frame-preview-meta">Ранг ${tier.index + 1} · Рів. ${tier.unlockLevel}+</span></button>`).join("");
+        return `<div class="frame-gallery-head"><div><h2>Тест рамок (адмін)</h2><p class="card-caption">Обери рамку, щоб приміряти її на свій аватар. Лише локально — скидається після перезавантаження.</p></div><button class="icon-button" type="button" data-action="close-overlay" aria-label="Закрити"><i data-lucide="x"></i></button></div><div class="frame-gallery">${cards}</div><div class="action-row" style="margin-top:16px;"><button class="button button-secondary" type="button" data-action="reset-frame-override"><i data-lucide="rotate-ccw"></i>Скинути до мого рівня (Рів. ${userLevel(user.id).level})</button></div>`;
     }
 
     // ---- Feedback / feature-request board (public; admin manages statuses) ----
@@ -2496,6 +2507,9 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } f
             "open-muscle-grid": () => openSheet(pickerMuscleContent(), { fullscreen: true }),
             "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; closeSheet(); element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
             "muscle-grid-back": closeSheet,
+            "admin-frame-test": () => { if (isAdmin()) { openModal(frameGallery(), { fullscreen: true }); } },
+            "apply-frame-override": () => { state.frameOverride = Number(actionElement.dataset.tier); renderSection(); element("modalLayer").innerHTML = frameGallery(); iconsIn(element("modalLayer")); },
+            "reset-frame-override": () => { state.frameOverride = null; renderSection(); element("modalLayer").innerHTML = frameGallery(); iconsIn(element("modalLayer")); },
             "picker-filter": () => setPickerFilter(actionElement.dataset.key, actionElement.dataset.value),
             "add-exercise": () => addExercise(actionElement.dataset.exerciseId),
             "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
@@ -4908,10 +4922,20 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } f
 
     const XP_HOWTO = `XP нараховується автоматично за реальну активність: тренування (+${XP_REWARDS.workout}), обсяг підйомів (до +${XP_REWARDS.volumeCap} за сесію), серію тренувань підряд (+${XP_REWARDS.streak}), кожен особистий рекорд (+${XP_REWARDS.record}), твої вправи в каталозі (+${XP_REWARDS.exercise}) та ідеї, які позначили «Готово» (+${XP_REWARDS.ideaDone}). Усього ${LEVEL_COUNT} рівнів — що вищий рівень, то крутіша рамка аватара.`;
 
+    // Resolve which frame tier to draw. Admins can locally preview any tier via the
+    // frame test tool (state.frameOverride) — it only affects the admin's OWN avatar
+    // and resets on reload (in-memory only), so it never touches other users.
+    function frameTierFor(user, level) {
+        if (state.frameOverride !== null && user && user.id === currentUser()?.id) {
+            return FRAME_TIERS[state.frameOverride];
+        }
+        return frameForLevel(level);
+    }
+
     // Wrap an avatar in its level-based frame ring. `size` matches the avatar size class.
     function framedAvatar(user, size = "", level = null) {
         const resolved = level === null ? userLevel(user.id).level : level;
-        return avatar(user, size, { frameTier: frameForLevel(resolved) });
+        return avatar(user, size, { frameTier: frameTierFor(user, resolved) });
     }
 
     function levelBadge(info, options = {}) {
@@ -5339,7 +5363,8 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIER_SIZE, FRAME_TIER_COUNT } f
         if (!tier) {
             return inner;
         }
-        return `<div class="avatar-frame ${size}${tier.conic ? " is-conic is-anim" : ""}" style="--fgrad:${tier.gradient};--fgi:${tier.glow};--fglowc:${tier.glowColor};">${inner}</div>`;
+        const classes = `avatar-frame ${size}${tier.conic ? " is-conic is-anim" : ""}${tier.sheen ? " has-sheen" : ""}${tier.pulse ? " is-pulse" : ""}`;
+        return `<div class="${classes}" style="--fgrad:${tier.gradient};--fgi:${tier.glow};--fglowc:${tier.glowColor};--fw:${tier.width}px;">${inner}</div>`;
     }
 
     function ordered(items) {
