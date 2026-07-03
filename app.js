@@ -1743,7 +1743,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
                 <div class="frame-preview">${framedAvatar(user, "large", info.level)}<strong class="frame-preview-name">${escapeHtml(tier.name)}</strong><span class="frame-preview-meta">Зараз · ранг ${tier.index + 1}/${FRAME_TIER_COUNT}</span></div>
                 <div class="frame-preview-arrow"><i data-lucide="arrow-right"></i></div>
                 ${nextTier
-                    ? `<div class="frame-preview">${avatar(user, "large", { frameTier: nextTier })}<strong class="frame-preview-name">${escapeHtml(nextTier.name)}</strong><span class="frame-preview-meta">Рівень ${nextTier.unlockLevel} · ранг ${nextTier.index + 1}/${FRAME_TIER_COUNT}</span></div>`
+                    ? `<div class="frame-preview">${avatar(user, "large", { frameTier: nextTier, plateLevel: nextTier.unlockLevel })}<strong class="frame-preview-name">${escapeHtml(nextTier.name)}</strong><span class="frame-preview-meta">Рівень ${nextTier.unlockLevel} · ранг ${nextTier.index + 1}/${FRAME_TIER_COUNT}</span></div>`
                     : `<div class="frame-preview"><strong class="frame-preview-name">Найвища рамка</strong><span class="frame-preview-meta">Ти на вершині</span></div>`}
             </div>
             ${isAdmin() ? `<div class="action-row" style="margin-top:16px;"><button class="button button-secondary compact" type="button" data-action="admin-frame-test"><i data-lucide="palette"></i>Тестувати рамки (адмін)</button></div>` : ""}
@@ -1767,7 +1767,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
     function frameGallery() {
         const user = currentUser();
         const active = state.frameOverride;
-        const cards = FRAME_TIERS.map((tier) => `<button class="frame-gallery-card${active === tier.index ? " active" : ""}" type="button" data-action="apply-frame-override" data-tier="${tier.index}">${avatar(user, "large", { frameTier: tier })}<strong class="frame-preview-name">${escapeHtml(tier.name)}</strong><span class="frame-preview-meta">Ранг ${tier.index + 1} · Рів. ${tier.unlockLevel}+</span></button>`).join("");
+        const cards = FRAME_TIERS.map((tier) => `<button class="frame-gallery-card${active === tier.index ? " active" : ""}" type="button" data-action="apply-frame-override" data-tier="${tier.index}">${avatar(user, "large", { frameTier: tier, plateLevel: tier.unlockLevel })}<strong class="frame-preview-name">${escapeHtml(tier.name)}</strong><span class="frame-preview-meta">Ранг ${tier.index + 1} · Рів. ${tier.unlockLevel}+</span></button>`).join("");
         return `<div class="frame-gallery-head"><div><h2>Тест рамок (адмін)</h2><p class="card-caption">Обери рамку, щоб приміряти її на свій аватар. Лише локально — скидається після перезавантаження.</p></div><button class="icon-button" type="button" data-action="close-overlay" aria-label="Закрити"><i data-lucide="x"></i></button></div><div class="frame-gallery">${cards}</div><div class="action-row" style="margin-top:16px;"><button class="button button-secondary" type="button" data-action="reset-frame-override"><i data-lucide="rotate-ccw"></i>Скинути до мого рівня (Рів. ${userLevel(user.id).level})</button></div>`;
     }
 
@@ -4957,7 +4957,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
     // Wrap an avatar in its level-based frame ring. `size` matches the avatar size class.
     function framedAvatar(user, size = "", level = null) {
         const resolved = level === null ? userLevel(user.id).level : level;
-        return avatar(user, size, { frameTier: frameTierFor(user, resolved) });
+        return avatar(user, size, { frameTier: frameTierFor(user, resolved), plateLevel: resolved });
     }
 
     function levelBadge(info, options = {}) {
@@ -5453,8 +5453,35 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         if (!tier) {
             return inner;
         }
-        const classes = `avatar-frame ${size}${tier.conic ? " is-conic is-anim" : ""}${tier.sheen ? " has-sheen" : ""}${tier.pulse ? " is-pulse" : ""}`;
-        return `<div class="${classes}" style="--fgrad:${tier.gradient};--fgi:${tier.glow};--fglowc:${tier.glowColor};--fw:${tier.width}px;">${inner}</div>`;
+        // Layered "ranked badge": the proven ring/conic/sheen/glow stays on the inner
+        // overflow-hidden .avatar-frame; the outer overflow-visible .avatar-frame-wrap
+        // carries the aura, orbiting sparkles and level nameplate. Heavy layers only on
+        // the big identity surfaces so the tiny leaderboard avatars stay cheap.
+        const big = size === "large" || size === "xl";
+        const medium = big || size === "small";
+        const showAura = tier.aura && medium;
+        const showSpark = tier.spark && big;
+        const showPlate = tier.plate && size === "large" && options.plateLevel != null;
+        const frameMods = [
+            tier.conic ? "is-conic is-anim" : "",
+            tier.sheen ? "has-sheen" : "",
+            tier.ornament ? "has-ornament" : "",
+            tier.pulse ? "is-pulse" : ""
+        ].filter(Boolean).join(" ");
+        const wrapMods = [
+            showAura ? "has-aura" : "",
+            showSpark ? "has-spark" : "",
+            showPlate ? "has-plate" : "",
+            (tier.pulse && showAura) ? "is-pulse" : ""
+        ].filter(Boolean).join(" ");
+        const vars = `--fgrad:${tier.gradient};--fgi:${tier.glow};--fglowc:${tier.glowColor};--fw:${tier.width}px;`;
+        const auraLayer = showAura ? `<span class="af-aura" aria-hidden="true"></span>` : "";
+        const sparkLayer = showSpark ? `<span class="af-spark" aria-hidden="true"></span>` : "";
+        const plate = showPlate
+            ? `<span class="af-plate" aria-hidden="true">${tier.emblem ? `<span class="af-emblem">${tier.emblem}</span>` : ""}LVL ${escapeHtml(String(options.plateLevel))}</span>`
+            : "";
+        const frame = `<div class="avatar-frame ${size} ${frameMods}">${inner}</div>`;
+        return `<div class="avatar-frame-wrap ${size} ${wrapMods}" style="${vars}">${auraLayer}${frame}${sparkLayer}${plate}</div>`;
     }
 
     function ordered(items) {

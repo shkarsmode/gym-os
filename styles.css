@@ -5613,9 +5613,109 @@ html.compact-ui .chip {
     border-radius: calc(var(--radius-lg) + 4px);
 }
 
+/* ---- Layered "ranked badge": wrapper carries aura + sparkles + nameplate ---- */
+.avatar-frame-wrap {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    isolation: isolate;
+}
+
+.avatar-frame-wrap > .avatar-frame {
+    position: relative;
+    z-index: 1;
+}
+
+/* Reserve room for the nameplate so it never overlaps a label below the avatar. */
+.avatar-frame-wrap.has-plate {
+    margin-bottom: 13px;
+}
+
+.af-aura {
+    position: absolute;
+    inset: calc(-7px - 14px * var(--fgi, 0));
+    z-index: 0;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--fglowc, transparent) calc(65% * var(--fgi, 0)), transparent), transparent 72%);
+    filter: blur(7px);
+    pointer-events: none;
+}
+
+.avatar-frame-wrap.is-pulse .af-aura {
+    animation: afAuraPulse 2.8s ease-in-out infinite;
+}
+
+.af-spark {
+    position: absolute;
+    inset: -4px;
+    z-index: 2;
+    border-radius: 50%;
+    pointer-events: none;
+    background:
+        radial-gradient(2px 2px at 50% 1%, #fff, transparent 60%),
+        radial-gradient(1.6px 1.6px at 97% 40%, color-mix(in srgb, var(--fglowc) 85%, #fff), transparent 60%),
+        radial-gradient(1.6px 1.6px at 8% 88%, color-mix(in srgb, var(--fglowc) 85%, #fff), transparent 60%);
+    filter: drop-shadow(0 0 3px var(--fglowc));
+    animation: afOrbit 6s linear infinite;
+}
+
+.af-plate {
+    position: absolute;
+    left: 50%;
+    bottom: -9px;
+    transform: translateX(-50%);
+    z-index: 3;
+    padding: 2px 9px 3px;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    color: #fff;
+    white-space: nowrap;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--fglowc) 45%, var(--color-elevated)), var(--color-surface-2));
+    border: 1px solid color-mix(in srgb, var(--fglowc) 60%, var(--color-border));
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 0 calc(4px + 10px * var(--fgi, 0)) color-mix(in srgb, var(--fglowc) 45%, transparent);
+    pointer-events: none;
+}
+
+.af-emblem {
+    margin-right: 3px;
+    color: color-mix(in srgb, var(--fglowc) 80%, #fff);
+}
+
+.avatar-frame.has-ornament > .avatar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--fglowc) 60%, #fff 25%);
+    pointer-events: none;
+}
+
 @keyframes frameSpin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+@keyframes afOrbit {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes afAuraPulse {
+    0%, 100% {
+        opacity: 0.72;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.08);
     }
 }
 
@@ -5926,7 +6026,9 @@ html.compact-ui .chip {
 @media (prefers-reduced-motion: reduce) {
     .avatar-frame.is-anim::before,
     .avatar-frame.is-pulse,
-    .avatar-button.has-frame.is-anim {
+    .avatar-button.has-frame.is-anim,
+    .af-spark,
+    .avatar-frame-wrap.is-pulse .af-aura {
         animation: none;
     }
 }
