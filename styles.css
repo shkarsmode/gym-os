@@ -5969,3 +5969,80 @@ html.compact-ui .chip {
     border-color: var(--color-accent-border);
     background: var(--color-accent-dim);
 }
+
+/* ---- Workout limit notice (replaces the add/start button when not addable) ---- */
+.day-sheet-action {
+    margin-top: 16px;
+}
+
+.workout-limit-block {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+}
+
+.workout-limit-block > i {
+    width: 22px;
+    height: 22px;
+    color: var(--color-warning);
+    flex: 0 0 auto;
+}
+
+.workout-limit-block .wlb-text {
+    flex: 1;
+    min-width: 180px;
+}
+
+.workout-limit-block .wlb-text strong {
+    display: block;
+    font-size: 14px;
+    color: var(--color-text);
+}
+
+.workout-limit-block .wlb-text span {
+    font-size: 12.5px;
+    color: var(--color-muted);
+}
+
+.workout-limit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.workout-limit-chip i {
+    width: 14px;
+    height: 14px;
+    color: var(--color-warning);
+}
+
+.quick-card-locked i {
+    color: var(--color-warning);
+}
+
+.cmp-admin-note {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 12px;
+}
+
+.cmp-admin-note i {
+    width: 15px;
+    height: 15px;
+    color: var(--color-accent);
+    flex: 0 0 auto;
+}

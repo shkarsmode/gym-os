@@ -1525,7 +1525,9 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
                         </div>
                     </div>
                     <div class="action-row wrap">
-                        <button class="button button-primary large-workout-button" type="button" data-action="${active ? "edit-workout" : "start-workout"}"${active ? ` data-workout-id="${active.id}"` : ""}><i data-lucide="${active ? "activity" : "play"}"></i>${active ? "Продовжити тренування" : "Почати тренування"}</button>
+                        ${active
+                            ? `<button class="button button-primary large-workout-button" type="button" data-action="edit-workout" data-workout-id="${active.id}"><i data-lucide="activity"></i>Продовжити тренування</button>`
+                            : startWorkoutButton(null)}
                         <button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Перейти до календаря</button>
                     </div>
                 </section>
@@ -1561,7 +1563,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
     }
 
     function workoutStarter() {
-        return `<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions"><button class="button button-primary large-workout-button" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button><button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>`;
+        return `<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>`;
     }
 
     function workoutEditor(workoutItem) {
@@ -1641,7 +1643,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
     function calendar() {
         const overview = calendarOverview();
         const history = workoutsFor(currentUser().id).sort(byDateDesc).slice(0, 8);
-        content(`<div class="grid dashboard-grid">${metric("Цього тижня", overview.weekWorkouts, "calendar-check", "Тренувань", "span-3")}${metric("Завершено", overview.weekCompleted, "check-circle-2", "За поточний тиждень", "span-3")}${metric("Цього місяця", overview.monthWorkouts, "calendar-range", "Усі тренування", "span-3")}${metric("Серія", `${overview.streak} дн.`, "flame", "Завершені тренування поспіль", "span-3")}<section class="calendar-shell span-8"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div><button class="button button-primary compact" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button></div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-4"><h2>Огляд</h2>${kpi([{ label: "Тиждень", value: overview.weekWorkouts }, { label: "Місяць", value: overview.monthWorkouts }, { label: "Кардіо дні", value: overview.cardioDays }, { label: "Усього", value: workoutsFor(currentUser().id).length }])}</section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
+        content(`<div class="grid dashboard-grid">${metric("Цього тижня", overview.weekWorkouts, "calendar-check", "Тренувань", "span-3")}${metric("Завершено", overview.weekCompleted, "check-circle-2", "За поточний тиждень", "span-3")}${metric("Цього місяця", overview.monthWorkouts, "calendar-range", "Усі тренування", "span-3")}${metric("Серія", `${overview.streak} дн.`, "flame", "Завершені тренування поспіль", "span-3")}<section class="calendar-shell span-8"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div>${startWorkoutButton(null, { compact: true })}</div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-4"><h2>Огляд</h2>${kpi([{ label: "Тиждень", value: overview.weekWorkouts }, { label: "Місяць", value: overview.monthWorkouts }, { label: "Кардіо дні", value: overview.cardioDays }, { label: "Усього", value: workoutsFor(currentUser().id).length }])}</section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
         requestAnimationFrame(renderCalendar);
     }
 
@@ -1950,13 +1952,15 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
             ? "У тебе повний доступ адміністратора."
             : (isPro ? "Дякуємо! Активний PRO — безліміт у всьому." : "Ти на безкоштовному тарифі. Прокачайся до PRO за $2/міс.");
         const freeFeatures = [
-            ["dumbbell", "1 тренування/день, 2/тиждень"],
+            ["dumbbell", "1 тренування/день, 2 на поточний тиждень"],
+            ["calendar-x", "Тренування лише в межах поточного тижня"],
             ["list-plus", "1 власна вправа на місяць"],
             ["bar-chart-3", "Базова статистика"],
             ["users", "Команда, рейтинги, календар"]
         ];
         const proFeatures = [
-            ["dumbbell", "До 2 тренувань на день, без тижневого ліміту"],
+            ["dumbbell", "До 2 тренувань на день"],
+            ["calendar-days", "Минулий, поточний і наступний тиждень (5 / 6 / 5)"],
             ["list-plus", "До 30 власних вправ"],
             ["lightbulb", "До 3 запитів-ідей на день"],
             ["bar-chart-3", "Розширена аналітика й прогрес"],
@@ -1967,7 +1971,8 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         ];
         const cmp = [
             ["Тренувань на день", "1", "2"],
-            ["Тренувань на тиждень", "2", "без ліміту"],
+            ["Тижні для тренувань", "поточний", "мин. + поточ. + наст."],
+            ["Тренувань на тиждень (мин / пот / наст)", "— / 2 / —", "5 / 6 / 5"],
             ["Власні вправи", "1 / міс", "до 30"],
             ["Запитів-ідей на день", "1", "3"],
             ["Розширена аналітика", false, true],
@@ -1987,7 +1992,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
                 : `<button class="button button-primary paywall-cta" type="button" data-action="upgrade-plan"><i data-lucide="rocket"></i>Апгрейд до PRO</button>`}</div></section>
             <section class="plan-card free span-6 ${planKey === "free" ? "current" : ""}"><div class="plan-head"><h3>Free</h3><div class="plan-price"><span class="plan-amount">$0</span></div></div><p class="card-caption">Базовий доступ для старту.</p><ul class="plan-features">${freeFeatures.map(([icon, text]) => `<li><i data-lucide="${icon}"></i><span>${escapeHtml(text)}</span></li>`).join("")}</ul>${planKey === "free" ? `<div class="plan-current-tag">Поточний план</div>` : ""}</section>
             <section class="plan-card pro span-6 ${isPro ? "current" : ""}"><div class="plan-glow"></div><div class="plan-head"><h3><i data-lucide="crown"></i>PRO</h3><div class="plan-price"><span class="plan-amount">$2</span><span class="plan-period">/міс</span></div></div><p class="card-caption">Безліміт і всі можливості GymOS.</p><ul class="plan-features">${proFeatures.map(([icon, text]) => `<li><i data-lucide="${icon}"></i><span>${escapeHtml(text)}</span></li>`).join("")}</ul>${proCta}</section>
-            <section class="card span-12"><div class="card-header"><div><h2>Порівняння тарифів</h2><p class="card-caption">Що входить у кожен тариф.</p></div></div><div class="table-wrap"><table class="cmp-table"><thead><tr><th>Можливість</th><th>Free</th><th class="cmp-pro-col">PRO</th></tr></thead><tbody>${cmp.map((row) => `<tr><td>${escapeHtml(row[0])}</td><td class="cmp-free">${cmpCell(row[1])}</td><td class="cmp-pro-col">${cmpCell(row[2])}</td></tr>`).join("")}</tbody></table></div></section>
+            <section class="card span-12"><div class="card-header"><div><h2>Порівняння тарифів</h2><p class="card-caption">Що входить у кожен тариф.</p></div></div><div class="table-wrap"><table class="cmp-table"><thead><tr><th>Можливість</th><th>Free</th><th class="cmp-pro-col">PRO</th></tr></thead><tbody>${cmp.map((row) => `<tr><td>${escapeHtml(row[0])}</td><td class="cmp-free">${cmpCell(row[1])}</td><td class="cmp-pro-col">${cmpCell(row[2])}</td></tr>`).join("")}</tbody></table></div><p class="card-caption cmp-admin-note"><i data-lucide="shield"></i>Адмін — без обмежень за датою та кількістю тренувань.</p></section>
             <p class="card-caption sub-foot">Онлайн-оплата скоро запрацює — зараз це прев'ю тарифу PRO.</p>
         </div>`);
     }
@@ -2497,7 +2502,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         const action = actionElement.dataset.action;
         const actions = {
             navigate: () => navigate(actionElement.dataset.section),
-            "start-workout": startNewWorkout,
+            "start-workout": () => startNewWorkout(actionElement && actionElement.dataset ? actionElement.dataset.date : undefined),
             "edit-workout": () => openWorkoutEditor(actionElement.dataset.workoutId),
             "reopen-workout": () => reopenWorkout(actionElement.dataset.workoutId),
             "start-existing-workout": () => startExistingWorkout(actionElement.dataset.workoutId),
@@ -2886,7 +2891,11 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
     }
 
     function openQuickAction() {
-        openModal(`<div class="modal-header"><div><h2>Швидка дія</h2><p class="card-caption">Почати тренування або перейти в потрібний розділ.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="quick-grid"><button class="quick-card" type="button" data-action="start-workout"><i data-lucide="play"></i><h3>Почати тренування</h3><p class="card-caption">Нова сесія — додавай вправи та підходи.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i><h3>Календар</h3><p class="card-caption">Історія та керування тренуваннями.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i><h3>Рейтинги</h3><p class="card-caption">Поточний силовий рівень.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="exercises"><i data-lucide="list-filter"></i><h3>Каталог вправ</h3><p class="card-caption">Техніка, помилки і безпека.</p></button></div>`);
+        const limit = workoutLimitState(currentUser().id);
+        const startCard = limit.allowed
+            ? `<button class="quick-card" type="button" data-action="start-workout"><i data-lucide="play"></i><h3>Почати тренування</h3><p class="card-caption">Нова сесія — додавай вправи та підходи.</p></button>`
+            : `<button class="quick-card quick-card-locked" type="button" data-action="navigate" data-section="${limit.tier === "free" ? "subscription" : "calendar"}"><i data-lucide="lock"></i><h3>Ліміт тренувань</h3><p class="card-caption">${escapeHtml(limit.message)}</p></button>`;
+        openModal(`<div class="modal-header"><div><h2>Швидка дія</h2><p class="card-caption">Почати тренування або перейти в потрібний розділ.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="quick-grid">${startCard}<button class="quick-card" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i><h3>Календар</h3><p class="card-caption">Історія та керування тренуваннями.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i><h3>Рейтинги</h3><p class="card-caption">Поточний силовий рівень.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="exercises"><i data-lucide="list-filter"></i><h3>Каталог вправ</h3><p class="card-caption">Техніка, помилки і безпека.</p></button></div>`);
     }
 
     function openDaySheet(date) {
@@ -2898,7 +2907,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
             const manage = canManage(workoutItem);
             return `<article class="day-row"><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? "" : `<span class="chip">${escapeHtml(owner.displayName)}</span>`}</div><strong>${escapeHtml(workoutLabel(workoutItem))}</strong><p class="card-caption">${number(workoutVolume(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions">${manage ? `<button class="button button-secondary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button><button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : `<button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button>`}</div></article>`;
         }).join("");
-        openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div>${isToday ? `<div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-primary" type="button" data-action="start-workout"><i data-lucide="play"></i>Почати тренування</button></div>` : ""}`);
+        openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div><div class="day-sheet-action">${startWorkoutButton(date, { label: isToday ? "Почати тренування" : "Додати тренування", buttonClass: "button button-primary" })}</div>`);
     }
 
     function openStartWorkoutModal() {
@@ -3326,30 +3335,33 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         }
     }
 
-    async function startNewWorkout() {
-        if (!isAdmin()) {
-            const quota = workoutQuotaState(currentUser().id);
-            if (quota.over) {
-                closeOverlay();
-                openPaywallModal(Object.assign({ type: "workout" }, quota));
+    async function startNewWorkout(dateOverride) {
+        const now = new Date();
+        const targetDate = dateOverride ? String(dateOverride).slice(0, 10) : dateInput(now);
+        const isToday = targetDate === dateInput(now);
+        const limit = workoutLimitState(currentUser().id, targetDate);
+        if (!limit.allowed) {
+            closeOverlay();
+            renderSection();
+            toast("Ліміт тренувань", limit.message);
+            return;
+        }
+        if (isToday) {
+            const canStart = await ensureSingleActiveWorkout();
+            if (!canStart) {
                 return;
             }
         }
-        const canStart = await ensureSingleActiveWorkout();
-        if (!canStart) {
-            return;
-        }
-        const now = new Date();
         const defaultDur = getPref("defaultDuration");
         const workoutItem = {
             id: createId("workout"),
             userId: currentUser().id,
-            date: dateInput(now),
+            date: targetDate,
             title: "Тренування",
-            status: "active",
+            status: isToday ? "active" : "planned",
             workoutType: getPref("defaultWorkoutType"),
             durationOverride: (defaultDur === "auto" || defaultDur === "" || defaultDur == null) ? null : (Math.max(0, Math.round(Number(defaultDur))) || null),
-            startedAt: now.toISOString(),
+            startedAt: isToday ? now.toISOString() : null,
             finishedAt: null,
             notes: "",
             exercises: [],
@@ -3362,7 +3374,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         await persistWorkout(workoutItem);
         closeOverlay();
         goToWorkoutEditor(workoutItem.id);
-        toast("Тренування почато", "Додай вправи, підходи або кардіо.");
+        toast(isToday ? "Тренування почато" : "Тренування додано", "Додай вправи, підходи або кардіо.");
     }
 
     function openWorkoutEditor(workoutId) {
@@ -5158,26 +5170,80 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         return owner ? owner.displayName : "GymOS";
     }
 
-    // Free-tier workout quota (mirrors the backend): 1/day, 2/ISO-week. Admins exempt.
-    function workoutQuotaState(userId, when) {
+    // Per-tier workout limits mirrored from the backend (see workout-quota.ts). `weeks` maps
+    // the allowed Monday–Sunday windows to their cap; a window not present is not addable.
+    const WORKOUT_LIMITS = {
+        free: { perDay: 1, weeks: { current: 2 } },
+        premium: { perDay: 2, weeks: { prev: 5, current: 6, next: 5 } }
+    };
+
+    function workoutWindow(date) {
+        const diffWeeks = Math.round(dayDiff(startWeek(date), startWeek(new Date())) / 7);
+        return diffWeeks === 0 ? "current" : diffWeeks === -1 ? "prev" : diffWeeks === 1 ? "next" : "out";
+    }
+
+    function workoutLimitSummary(tier) {
+        return tier === "premium"
+            ? "PRO: до 2 тренувань на день; 5 за минулий тиждень, 6 за поточний, 5 за наступний."
+            : "Безкоштовний тариф: до 1 тренування на день і 2 на поточний тиждень.";
+    }
+
+    // Tier-aware check for whether the current user may add a workout on `when` (a Date or a
+    // "YYYY-MM-DD" string; default today). Mirrors the backend so the UI can hide the add
+    // button and show an inline block before any request. Admins are always allowed.
+    function workoutLimitState(userId, when) {
         const date = when ? new Date(when) : new Date();
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(startOfDay);
-        endOfDay.setDate(endOfDay.getDate() + 1);
-        const startOfWeek = new Date(startOfDay);
-        const mondayOffset = (startOfWeek.getDay() + 6) % 7;
-        startOfWeek.setDate(startOfWeek.getDate() - mondayOffset);
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(endOfWeek.getDate() + 7);
+        if (isAdmin()) {
+            return { allowed: true, tier: "admin" };
+        }
+        const tier = effectiveRole() === "premium" ? "premium" : "free";
+        const config = WORKOUT_LIMITS[tier];
+        const summary = workoutLimitSummary(tier);
+        const window = workoutWindow(date);
+        const weekCap = config.weeks[window];
+        if (weekCap === undefined) {
+            return { allowed: false, scope: "window", tier, window, summary,
+                message: tier === "premium"
+                    ? "PRO дозволяє додавати тренування лише за минулий, поточний і наступний тиждень."
+                    : "Безкоштовний тариф дозволяє додавати тренування лише в межах поточного тижня." };
+        }
+        const dayKey = dateInput(date);
+        const weekKey = dateInput(startWeek(date));
         const mine = workoutsFor(userId);
-        const inRange = (workoutItem, from, to) => {
-            const value = new Date(workoutItem.date);
-            return value >= from && value < to;
-        };
-        const day = mine.filter((workoutItem) => inRange(workoutItem, startOfDay, endOfDay)).length;
-        const week = mine.filter((workoutItem) => inRange(workoutItem, startOfWeek, endOfWeek)).length;
-        return { day, week, dayLimit: 1, weekLimit: 2, overDay: day >= 1, overWeek: week >= 2, over: day >= 1 || week >= 2 };
+        const day = mine.filter((workoutItem) => String(workoutItem.date).slice(0, 10) === dayKey).length;
+        const week = mine.filter((workoutItem) => dateInput(startWeek(workoutItem.date)) === weekKey).length;
+        if (day >= config.perDay) {
+            return { allowed: false, scope: "day", tier, window, summary, day, week,
+                message: `Ліміт на день досягнуто — ${config.perDay} тренування на день.` };
+        }
+        if (week >= weekCap) {
+            return { allowed: false, scope: "week", tier, window, summary, day, week,
+                message: `Ліміт на цей тиждень досягнуто — ${weekCap} тренувань.` };
+        }
+        return { allowed: true, tier, window, day, week };
+    }
+
+    function workoutLimitBlock(state, compact = false) {
+        const icon = state.scope === "window" ? "calendar-x" : "lock";
+        if (compact) {
+            return `<span class="workout-limit-chip"><i data-lucide="${icon}"></i>${escapeHtml(state.message)}</span>`;
+        }
+        const upsell = state.tier === "free"
+            ? `<button class="button button-secondary compact" type="button" data-action="navigate" data-section="subscription"><i data-lucide="rocket"></i>Дізнатись про PRO</button>`
+            : "";
+        return `<div class="workout-limit-block"><i data-lucide="${icon}"></i><div class="wlb-text"><strong>${escapeHtml(state.message)}</strong><span>${escapeHtml(state.summary)}</span></div>${upsell}</div>`;
+    }
+
+    // A ready-to-place add/start-workout button, or the inline limit block when the current
+    // user cannot add a workout on `dateOverride` (a "YYYY-MM-DD" string; default today).
+    function startWorkoutButton(dateOverride, opts = {}) {
+        const state = workoutLimitState(currentUser().id, dateOverride);
+        if (!state.allowed) {
+            return workoutLimitBlock(state, opts.compact);
+        }
+        const dataDate = dateOverride ? ` data-date="${escapeHtml(String(dateOverride).slice(0, 10))}"` : "";
+        const cls = opts.buttonClass || (opts.compact ? "button button-primary compact" : "button button-primary large-workout-button");
+        return `<button class="${cls}" type="button" data-action="start-workout"${dataDate}><i data-lucide="play"></i>${escapeHtml(opts.label || "Почати тренування")}</button>`;
     }
 
     function canManage(workoutItem) {
