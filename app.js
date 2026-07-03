@@ -1571,6 +1571,8 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         const readonly = !canManage(workoutItem);
         const completedSets = workoutItem.exercises.flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
         const active = activeWorkoutFor(currentUser().id);
+        const dateBounds = workoutDateBounds();
+        const dateAttrs = dateBounds.min ? ` min="${dateBounds.min}" max="${dateBounds.max}"` : "";
         const isOtherThanActive = !readonly && active && active.id !== workoutItem.id;
         const contextBanner = !readonly && workoutItem.status !== "active"
             ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutItem.status).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
@@ -1586,7 +1588,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
                     <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button></div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
                 </div>
                 ${contextBanner}
-                ${readonly ? "" : `<div class="field-grid three" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}" data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div><div class="field"><label>Тип</label><gym-select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></div></div>`}
+                ${readonly ? "" : `<div class="field-grid three" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div><div class="field"><label>Тип</label><gym-select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></div></div>`}
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;"><button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
@@ -3555,7 +3557,15 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         if (!workoutItem) {
             return;
         }
-        if (field === "durationOverride") {
+        if (field === "date") {
+            const limit = workoutLimitState(currentUser().id, value, workoutItem.id);
+            if (!limit.allowed) {
+                toast("Недоступна дата", `${limit.message} Оберіть іншу дату.`);
+                renderSection();
+                return;
+            }
+            workoutItem.date = value;
+        } else if (field === "durationOverride") {
             workoutItem.durationOverride = (value === "auto" || value === "" || value == null) ? null : Math.max(0, Math.round(Number(value)) || 0);
         } else {
             workoutItem[field] = value;
@@ -5191,7 +5201,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
     // Tier-aware check for whether the current user may add a workout on `when` (a Date or a
     // "YYYY-MM-DD" string; default today). Mirrors the backend so the UI can hide the add
     // button and show an inline block before any request. Admins are always allowed.
-    function workoutLimitState(userId, when) {
+    function workoutLimitState(userId, when, excludeId) {
         const date = when ? new Date(when) : new Date();
         if (isAdmin()) {
             return { allowed: true, tier: "admin" };
@@ -5209,7 +5219,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         }
         const dayKey = dateInput(date);
         const weekKey = dateInput(startWeek(date));
-        const mine = workoutsFor(userId);
+        const mine = workoutsFor(userId).filter((workoutItem) => workoutItem.id !== excludeId);
         const day = mine.filter((workoutItem) => String(workoutItem.date).slice(0, 10) === dayKey).length;
         const week = mine.filter((workoutItem) => dateInput(startWeek(workoutItem.date)) === weekKey).length;
         if (day >= config.perDay) {
@@ -5221,6 +5231,20 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
                 message: `Ліміт на цей тиждень досягнуто — ${weekCap} тренувань.` };
         }
         return { allowed: true, tier, window, day, week };
+    }
+
+    // Allowed date range for the current user's tier, as "YYYY-MM-DD" min/max for the
+    // date picker (empty = unrestricted, i.e. admin). Caps are still checked on change.
+    function workoutDateBounds() {
+        if (isAdmin()) {
+            return { min: "", max: "" };
+        }
+        const tier = effectiveRole() === "premium" ? "premium" : "free";
+        const weeks = WORKOUT_LIMITS[tier].weeks;
+        const monday = startWeek(new Date());
+        const minOffset = "prev" in weeks ? -7 : 0;
+        const maxOffset = ("next" in weeks ? 7 : 0) + 6;
+        return { min: dateInput(addDays(monday, minOffset)), max: dateInput(addDays(monday, maxOffset)) };
     }
 
     function workoutLimitBlock(state, compact = false) {
