@@ -5461,6 +5461,9 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         const medium = big || size === "small";
         const showAura = tier.aura && medium;
         const showSpark = tier.spark && big;
+        const showCorners = tier.corners && medium;
+        const showCrest = tier.crest && big;
+        const showOrbit = tier.orbit && big;
         const showPlate = tier.plate && size === "large" && options.plateLevel != null;
         const frameMods = [
             tier.conic ? "is-conic is-anim" : "",
@@ -5471,17 +5474,24 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         const wrapMods = [
             showAura ? "has-aura" : "",
             showSpark ? "has-spark" : "",
+            showCrest ? "has-crest" : "",
+            showOrbit ? "has-orbit" : "",
             showPlate ? "has-plate" : "",
             (tier.pulse && showAura) ? "is-pulse" : ""
         ].filter(Boolean).join(" ");
         const vars = `--fgrad:${tier.gradient};--fgi:${tier.glow};--fglowc:${tier.glowColor};--fw:${tier.width}px;`;
         const auraLayer = showAura ? `<span class="af-aura" aria-hidden="true"></span>` : "";
+        const orbitLayer = showOrbit
+            ? `<span class="af-orbit" aria-hidden="true"></span>${tier.orbit2 ? `<span class="af-orbit af-orbit-rev" aria-hidden="true"></span>` : ""}`
+            : "";
+        const cornersLayer = showCorners ? `<span class="af-corners" aria-hidden="true"></span>` : "";
+        const crestLayer = showCrest ? `<span class="af-crest" aria-hidden="true"></span>` : "";
         const sparkLayer = showSpark ? `<span class="af-spark" aria-hidden="true"></span>` : "";
         const plate = showPlate
             ? `<span class="af-plate" aria-hidden="true">${tier.emblem ? `<span class="af-emblem">${tier.emblem}</span>` : ""}LVL ${escapeHtml(String(options.plateLevel))}</span>`
             : "";
         const frame = `<div class="avatar-frame ${size} ${frameMods}">${inner}</div>`;
-        return `<div class="avatar-frame-wrap ${size} ${wrapMods}" style="${vars}">${auraLayer}${frame}${sparkLayer}${plate}</div>`;
+        return `<div class="avatar-frame-wrap ${size} ${wrapMods}" style="${vars}">${auraLayer}${orbitLayer}${frame}${cornersLayer}${crestLayer}${sparkLayer}${plate}</div>`;
     }
 
     function ordered(items) {
