@@ -5632,10 +5632,23 @@ html.compact-ui .chip {
     margin-bottom: 13px;
 }
 
-/* Headroom for the crest chip + outer orbit arcs so they don't clip against
-   whatever sits above the avatar. */
-.avatar-frame-wrap.has-crest {
-    margin-top: 7px;
+/* Headroom per shape so top decorations never collide with content above; only
+   when decorations actually render (has-deco), so tiny rows stay aligned. */
+.avatar-frame-wrap.has-deco.shape-crystal {
+    margin-top: 5px;
+}
+
+.avatar-frame-wrap.has-deco.shape-neon {
+    margin: 5px 8px 5px;
+}
+
+.avatar-frame-wrap.has-deco.shape-flame,
+.avatar-frame-wrap.has-deco.shape-holo {
+    margin-top: 13px;
+}
+
+.avatar-frame-wrap.has-deco.shape-apex {
+    margin-top: 16px;
 }
 
 .af-aura {
@@ -5666,40 +5679,210 @@ html.compact-ui .chip {
     animation: afOrbit 6s linear infinite;
 }
 
-/* HUD-style corner brackets floating just outside the ring (T6+). */
-.af-corners {
-    --fbc: color-mix(in srgb, var(--fglowc) 80%, #fff);
+/* ---- Shape language per rarity band (one block per band, not per tier) ---- */
+
+/* Metal (T1-5): clean bevelled ring — a subtle machined edge, no decorations. */
+.avatar-frame.shape-metal > .avatar::after {
+    content: "";
     position: absolute;
-    inset: -4px;
+    inset: 0;
     z-index: 2;
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.45);
     pointer-events: none;
-    background:
-        linear-gradient(var(--fbc), var(--fbc)) left 0 top 0 / 11px 2px,
-        linear-gradient(var(--fbc), var(--fbc)) left 0 top 0 / 2px 11px,
-        linear-gradient(var(--fbc), var(--fbc)) right 0 top 0 / 11px 2px,
-        linear-gradient(var(--fbc), var(--fbc)) right 0 top 0 / 2px 11px,
-        linear-gradient(var(--fbc), var(--fbc)) left 0 bottom 0 / 11px 2px,
-        linear-gradient(var(--fbc), var(--fbc)) left 0 bottom 0 / 2px 11px,
-        linear-gradient(var(--fbc), var(--fbc)) right 0 bottom 0 / 11px 2px,
-        linear-gradient(var(--fbc), var(--fbc)) right 0 bottom 0 / 2px 11px;
-    background-repeat: no-repeat;
-    filter: drop-shadow(0 0 calc(2px + 3px * var(--fgi, 0)) var(--fglowc));
-    opacity: 0.9;
 }
 
-/* Crest — a gem chip notched into the top edge of the badge (T11+). */
-.af-crest {
+/* Crystal (T6-10): diamond gem anchors on the four corners, softly pulsing. */
+.af-gems {
     position: absolute;
-    top: -7px;
-    left: 50%;
-    width: 12px;
-    height: 12px;
+    inset: 0;
     z-index: 3;
-    transform: translateX(-50%) rotate(45deg);
-    border-radius: 3px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--fglowc) 60%, #fff), var(--fglowc));
-    border: 1px solid color-mix(in srgb, var(--fglowc) 55%, #fff);
-    box-shadow: 0 0 calc(4px + 6px * var(--fgi, 0)) color-mix(in srgb, var(--fglowc) 70%, transparent);
+    pointer-events: none;
+}
+
+.af-gems b {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    transform: rotate(45deg);
+    border-radius: 2px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--fglowc) 45%, #fff), var(--fglowc));
+    border: 1px solid color-mix(in srgb, var(--fglowc) 50%, #fff);
+    box-shadow: 0 0 5px color-mix(in srgb, var(--fglowc) 80%, transparent);
+    animation: afGemPulse 2.6s ease-in-out infinite;
+}
+
+.af-gems b:nth-child(1) { top: -4px; left: -4px; }
+.af-gems b:nth-child(2) { top: -4px; right: -4px; animation-delay: -0.6s; }
+.af-gems b:nth-child(3) { bottom: -4px; left: -4px; animation-delay: -1.2s; }
+.af-gems b:nth-child(4) { bottom: -4px; right: -4px; animation-delay: -1.8s; }
+
+/* Neon (T11-15): a breathing outer neon tube + white-hot energy nodes on the sides. */
+.af-tube {
+    position: absolute;
+    inset: -5px;
+    z-index: 0;
+    border-radius: calc(var(--radius-md) + 8px);
+    border: 1.5px solid color-mix(in srgb, var(--fglowc) 85%, #fff);
+    box-shadow: 0 0 8px var(--fglowc), inset 0 0 6px color-mix(in srgb, var(--fglowc) 40%, transparent);
+    animation: afNeonBreath 3.2s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.af-nodes {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.af-nodes::before,
+.af-nodes::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin-top: -3px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 6px 2px var(--fglowc);
+    animation: afNeonBreath 3.2s ease-in-out infinite;
+}
+
+.af-nodes::before { left: -8px; }
+.af-nodes::after { right: -8px; animation-delay: -1.6s; }
+
+/* Flame (T16-20): fire shards rising from the top corners. */
+.af-wings {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.af-wings::before,
+.af-wings::after {
+    content: "";
+    position: absolute;
+    top: -13px;
+    width: 14px;
+    height: 16px;
+    background: linear-gradient(to top, var(--fglowc), color-mix(in srgb, var(--fglowc) 35%, #fff));
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    filter: drop-shadow(0 0 4px var(--fglowc));
+    animation: afFlicker 2.8s ease-in-out infinite;
+}
+
+.af-wings::before { left: 5px; transform: rotate(-18deg); }
+.af-wings::after { right: 5px; transform: rotate(18deg); animation-delay: -1.4s; }
+
+/* Holo (T21-24): asymmetric prism arcs hugging opposite corners. */
+.af-arcs {
+    position: absolute;
+    inset: -6px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.af-arcs::before,
+.af-arcs::after {
+    content: "";
+    position: absolute;
+    border: 2px solid transparent;
+    filter: drop-shadow(0 0 4px var(--fglowc));
+}
+
+.af-arcs::before {
+    top: 0;
+    left: 0;
+    width: 46%;
+    height: 46%;
+    border-top-color: color-mix(in srgb, var(--fglowc) 75%, #fff);
+    border-left-color: color-mix(in srgb, var(--fglowc) 75%, #fff);
+    border-top-left-radius: calc(var(--radius-lg) + 8px);
+}
+
+.af-arcs::after {
+    bottom: 0;
+    right: 0;
+    width: 62%;
+    height: 62%;
+    border-bottom-color: var(--fglowc);
+    border-right-color: var(--fglowc);
+    border-bottom-right-radius: calc(var(--radius-lg) + 8px);
+    opacity: 0.8;
+}
+
+/* Holo + Apex rings shift hue while spinning — true holographic iridescence. */
+.avatar-frame.shape-holo.is-anim::before,
+.avatar-frame.shape-apex.is-anim::before {
+    animation: frameSpin 7s linear infinite, afHueShift 9s linear infinite;
+}
+
+/* Apex (T25, endgame): crown, orbiting fragments and a second layered aura. */
+.af-crown {
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    width: 40px;
+    height: 18px;
+    z-index: 4;
+    transform: translateX(-50%);
+    pointer-events: none;
+    animation: afCrownGlow 2.6s ease-in-out infinite;
+}
+
+.af-crown::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 11px;
+    height: 11px;
+    margin-left: -5.5px;
+    transform: rotate(45deg);
+    border-radius: 2px;
+    background: linear-gradient(135deg, #fff, var(--fglowc));
+    border: 1px solid color-mix(in srgb, var(--fglowc) 45%, #fff);
+    box-shadow: 0 0 8px var(--fglowc);
+}
+
+.af-crown::after {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #fff, var(--fglowc));
+    box-shadow: 0 0 5px var(--fglowc), 20px 0 0 0 color-mix(in srgb, var(--fglowc) 70%, #fff), 20px 0 5px 0 var(--fglowc);
+}
+
+.af-frags {
+    position: absolute;
+    inset: -12px;
+    z-index: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    background:
+        radial-gradient(3px 3px at 50% 1%, #fff, transparent 70%),
+        radial-gradient(2.5px 2.5px at 93% 28%, color-mix(in srgb, var(--fglowc) 85%, #fff), transparent 70%),
+        radial-gradient(2.5px 2.5px at 12% 78%, color-mix(in srgb, var(--fglowc) 85%, #fff), transparent 70%);
+    filter: drop-shadow(0 0 4px var(--fglowc));
+    animation: afOrbitRev 12s linear infinite;
+}
+
+.af-aura2 {
+    position: absolute;
+    inset: -26px;
+    z-index: 0;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--fglowc) 38%, transparent), transparent 75%);
+    filter: blur(10px);
+    animation: afAuraPulse 3.6s ease-in-out infinite;
+    animation-delay: -1.8s;
     pointer-events: none;
 }
 
@@ -5781,6 +5964,52 @@ html.compact-ui .chip {
 @keyframes afOrbitRev {
     to {
         transform: rotate(-360deg);
+    }
+}
+
+@keyframes afGemPulse {
+    0%, 100% {
+        opacity: 0.85;
+        filter: brightness(1);
+    }
+    50% {
+        opacity: 1;
+        filter: brightness(1.35);
+    }
+}
+
+@keyframes afNeonBreath {
+    0%, 100% {
+        opacity: 0.75;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes afFlicker {
+    0%, 100% {
+        opacity: 0.8;
+        filter: drop-shadow(0 0 3px var(--fglowc)) brightness(1);
+    }
+    50% {
+        opacity: 1;
+        filter: drop-shadow(0 0 6px var(--fglowc)) brightness(1.25);
+    }
+}
+
+@keyframes afHueShift {
+    to {
+        filter: hue-rotate(360deg);
+    }
+}
+
+@keyframes afCrownGlow {
+    0%, 100% {
+        filter: brightness(1);
+    }
+    50% {
+        filter: brightness(1.4) drop-shadow(0 0 6px var(--fglowc));
     }
 }
 
@@ -6105,6 +6334,15 @@ html.compact-ui .chip {
     .avatar-button.has-frame.is-anim,
     .af-spark,
     .af-orbit,
+    .af-gems b,
+    .af-tube,
+    .af-nodes::before,
+    .af-nodes::after,
+    .af-wings::before,
+    .af-wings::after,
+    .af-crown,
+    .af-frags,
+    .af-aura2,
     .avatar-frame-wrap.is-pulse .af-aura {
         animation: none;
     }

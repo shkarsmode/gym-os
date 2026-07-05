@@ -5459,22 +5459,39 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         // the big identity surfaces so the tiny leaderboard avatars stay cheap.
         const big = size === "large" || size === "xl";
         const medium = big || size === "small";
+        const shape = tier.shape || "metal";
         const showAura = tier.aura && medium;
         const showSpark = tier.spark && big;
-        const showCorners = tier.corners && medium;
-        const showCrest = tier.crest && big;
         const showOrbit = tier.orbit && big;
         const showPlate = tier.plate && size === "large" && options.plateLevel != null;
+        // Per-band SHAPE decorations — each rarity band has its own silhouette, only on
+        // the identity surfaces (tiny/default stay a bare ring for performance).
+        let deco = "";
+        if (medium) {
+            if (shape === "crystal") {
+                deco = `<span class="af-gems" aria-hidden="true"><b></b><b></b><b></b><b></b></span>`;
+            } else if (shape === "neon") {
+                deco = `<span class="af-tube" aria-hidden="true"></span><span class="af-nodes" aria-hidden="true"></span>`;
+            } else if (shape === "flame") {
+                deco = `<span class="af-wings" aria-hidden="true"></span>`;
+            } else if (shape === "holo") {
+                deco = `<span class="af-arcs" aria-hidden="true"></span>`;
+            } else if (shape === "apex") {
+                deco = `<span class="af-crown" aria-hidden="true"></span>${big ? `<span class="af-frags" aria-hidden="true"></span><span class="af-aura2" aria-hidden="true"></span>` : ""}`;
+            }
+        }
         const frameMods = [
+            `shape-${shape}`,
             tier.conic ? "is-conic is-anim" : "",
             tier.sheen ? "has-sheen" : "",
             tier.ornament ? "has-ornament" : "",
             tier.pulse ? "is-pulse" : ""
         ].filter(Boolean).join(" ");
         const wrapMods = [
+            `shape-${shape}`,
+            deco ? "has-deco" : "",
             showAura ? "has-aura" : "",
             showSpark ? "has-spark" : "",
-            showCrest ? "has-crest" : "",
             showOrbit ? "has-orbit" : "",
             showPlate ? "has-plate" : "",
             (tier.pulse && showAura) ? "is-pulse" : ""
@@ -5484,14 +5501,12 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         const orbitLayer = showOrbit
             ? `<span class="af-orbit" aria-hidden="true"></span>${tier.orbit2 ? `<span class="af-orbit af-orbit-rev" aria-hidden="true"></span>` : ""}`
             : "";
-        const cornersLayer = showCorners ? `<span class="af-corners" aria-hidden="true"></span>` : "";
-        const crestLayer = showCrest ? `<span class="af-crest" aria-hidden="true"></span>` : "";
         const sparkLayer = showSpark ? `<span class="af-spark" aria-hidden="true"></span>` : "";
         const plate = showPlate
             ? `<span class="af-plate" aria-hidden="true">${tier.emblem ? `<span class="af-emblem">${tier.emblem}</span>` : ""}LVL ${escapeHtml(String(options.plateLevel))}</span>`
             : "";
         const frame = `<div class="avatar-frame ${size} ${frameMods}">${inner}</div>`;
-        return `<div class="avatar-frame-wrap ${size} ${wrapMods}" style="${vars}">${auraLayer}${orbitLayer}${frame}${cornersLayer}${crestLayer}${sparkLayer}${plate}</div>`;
+        return `<div class="avatar-frame-wrap ${size} ${wrapMods}" style="${vars}">${auraLayer}${orbitLayer}${frame}${deco}${sparkLayer}${plate}</div>`;
     }
 
     function ordered(items) {
