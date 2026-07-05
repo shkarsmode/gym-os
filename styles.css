@@ -6392,6 +6392,15 @@ html.compact-ui .chip {
     color: var(--color-warning);
 }
 
+.sync-chip.offline {
+    border-color: rgba(251, 191, 36, 0.4);
+    color: var(--color-warning);
+}
+
+.sync-chip.offline .sync-chip-ico {
+    color: var(--color-warning);
+}
+
 /* ---- Personal workout templates ---- */
 .tpl-grid {
     display: grid;

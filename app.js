@@ -919,6 +919,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             bindEvents();
             applySidebarState();
             state.authUser = storage.currentUser;
+            // Push any offline-queued workout changes BEFORE loading, so /export
+            // already includes them (snapshots survive reloads via localStorage).
+            await flushOfflineQueue().catch(() => {});
             if (storage.requiresAuthentication()) {
                 state.database = createEmptyDatabase();
                 renderAuthGate();
@@ -964,6 +967,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 renderSection();
             }
         });
+        window.addEventListener("online", () => flushOfflineQueue());
+        if (readOfflineQueue().length) {
+            showOfflineChip();
+        }
     }
 
     // Warm the browser cache with member avatars so they paint instantly (no flash)
@@ -3620,7 +3627,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 await storage.apiClient.deleteWorkout(workoutId);
                 showSyncIndicator("success", "Видалено");
             } catch (error) {
-                if (Number(error?.status) !== 404) {
+                if (isNetworkError(error)) {
+                    enqueueOffline({ kind: "delete", id: workoutId });
+                } else if (Number(error?.status) !== 404) {
                     showSyncIndicator("error", friendlyError(error));
                     throw error;
                 }
@@ -5101,7 +5110,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             workouts: workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc),
             records: records || recordsFor(userId),
             ideas: (state.database.featureRequests || []).filter((item) => item.userId === userId),
-            customExercises: state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt))
+            customExercises: state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt)),
+            exerciseInfo: (id) => {
+                const exercise = exerciseById(id);
+                return { name: exercise.name || "", primaryMuscleGroup: exercise.primaryMuscleGroup || "" };
+            }
         };
     }
 
@@ -6501,6 +6514,94 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return saver;
     }
 
+    // ---- Offline queue: failed workout writes wait locally and sync on reconnect ----
+    // Entries: {kind:"save", id, payload} | {kind:"delete", id}. Saves keep a payload
+    // snapshot so a reload while offline can still push; when the workout is still in
+    // memory the freshest state wins at flush time. localStorage-backed.
+    function isNetworkError(error) {
+        return Boolean(error) && !Number(error.status) && !/base url/i.test(String(error.message || ""));
+    }
+
+    function readOfflineQueue() {
+        try {
+            return JSON.parse(storage.readSetting("offline-queue") || "[]") || [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function writeOfflineQueue(queue) {
+        storage.writeSetting("offline-queue", JSON.stringify(queue));
+    }
+
+    function enqueueOffline(entry) {
+        const queue = readOfflineQueue().filter((item) => !(item.id === entry.id && item.kind === entry.kind));
+        queue.push({ ...entry, ts: Date.now() });
+        writeOfflineQueue(queue);
+        showOfflineChip();
+    }
+
+    function showOfflineChip() {
+        const chip = document.getElementById("syncChip");
+        if (!chip) {
+            return;
+        }
+        const count = readOfflineQueue().length;
+        clearTimeout(syncIndicatorTimeoutId);
+        chip.className = "sync-chip visible offline";
+        chip.innerHTML = `<span class="sync-chip-ico" aria-hidden="true"><i data-lucide="wifi-off"></i></span><span class="sync-chip-text">Офлайн · ${count} ${count === 1 ? "зміна очікує" : "змін очікують"}</span>`;
+        iconsIn(chip);
+    }
+
+    let offlineFlushRunning = false;
+
+    async function flushOfflineQueue() {
+        if (offlineFlushRunning || !(storage.mode === "api" && storage.apiClient.hasBaseUrl())) {
+            return;
+        }
+        let queue = readOfflineQueue();
+        if (!queue.length) {
+            return;
+        }
+        offlineFlushRunning = true;
+        showSyncIndicator("loading", "Синхронізуємо офлайн-зміни…");
+        try {
+            while (queue.length) {
+                const entry = queue[0];
+                try {
+                    if (entry.kind === "delete") {
+                        try {
+                            await storage.apiClient.deleteWorkout(entry.id);
+                        } catch (error) {
+                            if (Number(error?.status) !== 404) {
+                                throw error;
+                            }
+                        }
+                    } else {
+                        const workoutItem = state.database?.workouts?.find((item) => item.id === entry.id);
+                        const payload = workoutItem ? workoutPayload(workoutItem) : entry.payload;
+                        if (payload) {
+                            await storage.apiClient.saveWorkout(entry.id, payload);
+                        }
+                    }
+                } catch (error) {
+                    if (isNetworkError(error)) {
+                        showOfflineChip();
+                        return;
+                    }
+                    // A real backend rejection (e.g. limit) — drop the entry so the
+                    // queue can't jam forever, and surface the reason.
+                    toast("Не вдалося синхронізувати", friendlyError(error), "error");
+                }
+                queue.shift();
+                writeOfflineQueue(queue);
+            }
+            showSyncIndicator("success", "Офлайн-зміни синхронізовано");
+        } finally {
+            offlineFlushRunning = false;
+        }
+    }
+
     function requestWorkoutSave(workoutItem, debounceMs = 0) {
         if (!workoutItem) {
             return;
@@ -6552,12 +6653,24 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 handleUserFacingError(error, "save-workout");
                 return;
             }
+            // Network loss (gym basement mode): park the save in the offline queue
+            // instead of burning retries — it syncs when the connection returns.
+            if (isNetworkError(error)) {
+                enqueueOffline({ kind: "save", id: workoutId, payload: workoutPayload(workoutItem) });
+                saver.queued = true;
+            }
         } finally {
             saver.running = false;
             if (saver.dirty) {
                 runWorkoutSave(workoutId);
             } else if (ok) {
                 showSyncIndicator("success", "Збережено");
+                if (readOfflineQueue().length) {
+                    flushOfflineQueue();
+                }
+            } else if (saver.queued) {
+                saver.queued = false;
+                saver.retries = 0;
             } else if (saver.retries < 3) {
                 saver.retries += 1;
                 showSyncIndicator("loading", "Повтор збереження…");
