@@ -6,6 +6,7 @@ import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusL
 import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
 import { levelForXp, XP_REWARDS, LEVEL_COUNT } from "./lib/levels.js";
 import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_TIER_COUNT } from "./lib/frames.js";
+import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
 (() => {
     "use strict";
@@ -943,6 +944,9 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         handleRoute();
         preloadAvatars();
         requestAnimationFrame(maybeShowWhatsNew);
+        // Toast achievements unlocked since the last visit (e.g. an idea marked
+        // "done" while away); the very first run seeds silently.
+        setTimeout(checkAchievementUnlocks, 1200);
     }
 
     // Warm the browser cache with member avatars so they paint instantly (no flash)
@@ -1726,7 +1730,8 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
             ["flame", "Серія тренувань підряд", `+${XP_REWARDS.streak}`],
             ["trophy", "Особистий рекорд (1ПМ)", `+${XP_REWARDS.record}`],
             ["plus-circle", "Твоя вправа в каталозі", `+${XP_REWARDS.exercise}`],
-            ["lightbulb", "Ідея зі статусом «Готово»", `+${XP_REWARDS.ideaDone}`]
+            ["lightbulb", "Ідея зі статусом «Готово»", `+${XP_REWARDS.ideaDone}`],
+            ["award", "Відкрите досягнення", "+50–400"]
         ];
         const heroCard = `<section class="card span-12 level-hero">
             <div class="level-hero-main">${framedAvatar(user, "large", info.level)}<div class="level-hero-info">
@@ -1753,13 +1758,19 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
             <ul class="xp-source-list">${xpSources.map(([icon, label, amount]) => `<li><span class="xp-source-ico"><i data-lucide="${icon}"></i></span><span class="xp-source-label">${escapeHtml(label)}</span><span class="xp-amount">${escapeHtml(amount)}</span></li>`).join("")}</ul>
             <p class="card-caption">XP нараховується автоматично з усієї твоєї історії — нічого не треба вмикати. ${LEVEL_COUNT} рівнів: перші даються швидко, далі — цінніші.</p>
         </section>`;
+        const achievements = userAchievements(user.id);
+        const unlockedCount = achievements.filter((achievement) => achievement.unlockedAt).length;
+        const achievementsCard = `<section class="card span-12">
+            <div class="card-header"><div><h2>Досягнення</h2><p class="card-caption">Відкрито ${unlockedCount} з ${achievements.length} — кожне дає XP</p></div></div>
+            <div class="ach-grid">${achievements.map((achievement) => `<div class="ach-card${achievement.unlockedAt ? " unlocked" : ""}"><span class="ach-ico"><i data-lucide="${achievement.unlockedAt ? achievement.icon : "lock"}"></i></span><strong class="ach-title">${escapeHtml(achievement.title)}</strong><span class="ach-cap">${escapeHtml(achievement.caption)}</span><span class="ach-meta">${achievement.unlockedAt ? `${formatDate(achievement.unlockedAt)} · +${achievement.xp} XP` : `+${achievement.xp} XP`}</span></div>`).join("")}</div>
+        </section>`;
         const historyCard = `<section class="card span-12">
             <h2>Останні нарахування XP</h2>
             ${recent.length
                 ? `<div class="xp-history">${recent.map((event) => `<div class="xp-history-row"><span class="xp-history-ico kind-${event.kind}"><i data-lucide="${event.icon}"></i></span><div class="xp-history-main"><strong>${escapeHtml(event.label)}</strong><span class="xp-history-date">${formatDate(event.date)}</span></div><span class="xp-amount">+${number(event.amount)}</span></div>`).join("")}</div>`
                 : emptyInline("Ще немає активності", "Заверши перше тренування, щоб почати набирати XP.")}
         </section>`;
-        content(`<div class="grid dashboard-grid">${heroCard}${frameCard}${howCard}${historyCard}</div>`);
+        content(`<div class="grid dashboard-grid">${heroCard}${frameCard}${howCard}${achievementsCard}${historyCard}</div>`);
     }
 
     // Admin-only local frame preview: shows all tiers; picking one previews it on the
@@ -3222,6 +3233,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         closeOverlay();
         renderSection();
         toast(status === "pending" ? "Відправлено на модерацію" : "Власну вправу створено", name);
+        checkAchievementUnlocks();
     }
 
     function openPaywallModal(context = {}) {
@@ -3587,6 +3599,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         await persistWorkout(workoutItem);
         renderSection();
         toast("Тренування завершено", "Статистику та рекорди перераховано.");
+        checkAchievementUnlocks();
     }
 
     async function saveCardio(workoutId, cardioId = null) {
@@ -4912,8 +4925,23 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
     // ---- Progression: XP, levels, avatar frames (all computed from existing data) ----
     // Reconstructs a dated XP ledger from the user's real activity. Total XP drives
     // the level (see lib/levels.js) and the events power the Levels-page history.
+    // Everything an achievement check can look at, pre-filtered to the user.
+    function achievementData(userId, records = null) {
+        return {
+            workouts: workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc),
+            records: records || recordsFor(userId),
+            ideas: (state.database.featureRequests || []).filter((item) => item.userId === userId),
+            customExercises: state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt))
+        };
+    }
+
+    function userAchievements(userId, records = null) {
+        return evaluateAchievements(achievementData(userId, records));
+    }
+
     function xpEvents(userId, records = null) {
         const events = [];
+        const recordList = records || recordsFor(userId);
         let previousDate = null;
         workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc).forEach((workoutItem) => {
             const volume = workoutVolume(workoutItem);
@@ -4922,7 +4950,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
             events.push({ date: workoutItem.date, amount: XP_REWARDS.workout + volumeBonus + (continues ? XP_REWARDS.streak : 0), kind: "workout", icon: "dumbbell", label: `Тренування · ${number(volume)} кг${continues ? " · серія" : ""}` });
             previousDate = workoutItem.date;
         });
-        (records || recordsFor(userId)).forEach((record) => {
+        recordList.forEach((record) => {
             events.push({ date: record.date, amount: XP_REWARDS.record, kind: "record", icon: "flame", label: `Рекорд: ${record.exercise.name} · ${number(record.estimatedOneRepMax)} кг` });
         });
         (state.database.featureRequests || []).filter((item) => item.userId === userId && item.status === "done").forEach((item) => {
@@ -4931,7 +4959,41 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).forEach((exercise) => {
             events.push({ date: exercise.createdAt, amount: XP_REWARDS.exercise, kind: "exercise", icon: "plus-circle", label: `Додано вправу: ${exercise.name}` });
         });
+        userAchievements(userId, recordList).filter((achievement) => achievement.unlockedAt).forEach((achievement) => {
+            events.push({ date: achievement.unlockedAt, amount: achievement.xp, kind: "achievement", icon: "award", label: `Досягнення: ${achievement.title}` });
+        });
         return events.filter((event) => event.date).sort((left, right) => new Date(right.date) - new Date(left.date));
+    }
+
+    // Toasts newly unlocked achievements (first run seeds silently so history
+    // doesn't spam). Called at boot and after actions that can unlock something.
+    function checkAchievementUnlocks() {
+        const user = currentUser();
+        if (!user) {
+            return;
+        }
+        const unlockedIds = userAchievements(user.id).filter((achievement) => achievement.unlockedAt).map((achievement) => achievement.id);
+        const key = `ach-seen-${user.id}`;
+        const raw = storage.readSetting(key);
+        if (raw === null || raw === undefined || raw === "") {
+            storage.writeSetting(key, JSON.stringify(unlockedIds));
+            return;
+        }
+        let seen;
+        try {
+            seen = new Set(JSON.parse(raw));
+        } catch (error) {
+            seen = new Set();
+        }
+        const fresh = unlockedIds.filter((id) => !seen.has(id));
+        if (!fresh.length) {
+            return;
+        }
+        fresh.forEach((id, index) => {
+            const achievement = ACHIEVEMENTS.find((item) => item.id === id);
+            setTimeout(() => toast("Досягнення відкрито", `«${achievement.title}» · +${achievement.xp} XP`, "achievement"), 350 + index * 900);
+        });
+        storage.writeSetting(key, JSON.stringify(unlockedIds));
     }
 
     function userXp(userId, records = null) {
@@ -4942,7 +5004,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         return levelForXp(userXp(userId, records));
     }
 
-    const XP_HOWTO = `XP нараховується автоматично за реальну активність: тренування (+${XP_REWARDS.workout}), обсяг підйомів (до +${XP_REWARDS.volumeCap} за сесію), серію тренувань підряд (+${XP_REWARDS.streak}), кожен особистий рекорд (+${XP_REWARDS.record}), твої вправи в каталозі (+${XP_REWARDS.exercise}) та ідеї, які позначили «Готово» (+${XP_REWARDS.ideaDone}). Усього ${LEVEL_COUNT} рівнів — що вищий рівень, то крутіша рамка аватара.`;
+    const XP_HOWTO = `XP нараховується автоматично за реальну активність: тренування (+${XP_REWARDS.workout}), обсяг підйомів (до +${XP_REWARDS.volumeCap} за сесію), серію тренувань підряд (+${XP_REWARDS.streak}), кожен особистий рекорд (+${XP_REWARDS.record}), твої вправи в каталозі (+${XP_REWARDS.exercise}), ідеї, які позначили «Готово» (+${XP_REWARDS.ideaDone}), та відкриті досягнення (+50–400). Усього ${LEVEL_COUNT} рівнів — що вищий рівень, то крутіша рамка аватара.`;
 
     // Resolve which frame tier to draw. Admins can locally preview any tier via the
     // frame test tool (state.frameOverride) — it only affects the admin's OWN avatar
@@ -5961,7 +6023,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
         const toastElement = document.createElement("div");
         toastElement.className = `toast toast-${type}`;
         toastElement.setAttribute("role", type === "error" ? "alert" : "status");
-        const icon = type === "error" ? "alert-triangle" : "sparkles";
+        const icon = type === "error" ? "alert-triangle" : type === "achievement" ? "trophy" : "sparkles";
         toastElement.innerHTML = `<span class="toast-icon"><i data-lucide="${icon}"></i></span><div class="toast-body"><strong>${escapeHtml(title)}</strong>${message ? `<p class="toast-message">${escapeHtml(message)}</p>` : ""}</div><span class="toast-progress" aria-hidden="true"></span>`;
         element("toastStack").appendChild(toastElement);
         iconsIn(toastElement);
