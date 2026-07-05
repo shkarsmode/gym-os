@@ -296,6 +296,18 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             return this.request("/users/me/preferences", { method: "POST", body: JSON.stringify({ preferences }) });
         }
 
+        fetchMyTemplates() {
+            return this.request("/workout-templates/mine", { method: "GET" });
+        }
+
+        createTemplate(payload) {
+            return this.request("/workout-templates", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        deleteTemplate(id) {
+            return this.request(`/workout-templates/${id}/delete`, { method: "POST" });
+        }
+
         setUserApproval(userId, approved) {
             return this.request(`/users/${userId}/approval`, { method: "POST", body: JSON.stringify({ approved }) });
         }
@@ -947,6 +959,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         // Toast achievements unlocked since the last visit (e.g. an idea marked
         // "done" while away); the very first run seeds silently.
         setTimeout(checkAchievementUnlocks, 1200);
+        loadPersonalTemplates().then(() => {
+            if (state.section === "workout") {
+                renderSection();
+            }
+        });
     }
 
     // Warm the browser cache with member avatars so they paint instantly (no flash)
@@ -1567,7 +1584,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function workoutStarter() {
-        return `<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>`;
+        return `<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
     }
 
     function workoutEditor(workoutItem) {
@@ -1593,7 +1610,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 </div>
                 ${contextBanner}
                 ${readonly ? "" : `<div class="field-grid three" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div><div class="field"><label>Тип</label><gym-select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></div></div>`}
-                ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;"><button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
+                ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
             ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item, exerciseIndex) => workoutExerciseEditor(workoutItem, item, readonly, exerciseIndex === 0)).join("") : emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}
@@ -2525,6 +2542,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "open-muscle-grid": () => openSheet(pickerMuscleContent(), { fullscreen: true }),
             "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; closeSheet(); element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
             "muscle-grid-back": closeSheet,
+            "open-save-template": () => openSaveTemplateModal(actionElement.dataset.workoutId),
+            "save-workout-template": () => saveWorkoutTemplate(actionElement.dataset.workoutId),
+            "start-template-workout": () => startTemplateWorkout(actionElement.dataset.templateId),
+            "delete-template": () => deletePersonalTemplate(actionElement.dataset.templateId),
             "admin-frame-test": () => { if (isAdmin()) { openModal(frameGallery(), { fullscreen: true }); } },
             "apply-frame-override": () => { state.frameOverride = Number(actionElement.dataset.tier); renderSection(); element("modalLayer").innerHTML = frameGallery(); iconsIn(element("modalLayer")); },
             "reset-frame-override": () => { state.frameOverride = null; renderSection(); element("modalLayer").innerHTML = frameGallery(); iconsIn(element("modalLayer")); },
@@ -3389,6 +3410,155 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         closeOverlay();
         goToWorkoutEditor(workoutItem.id);
         toast(isToday ? "Тренування почато" : "Тренування додано", "Додай вправи, підходи або кардіо.");
+    }
+
+    // ---- Personal workout templates (save a workout as a reusable template) ----
+    async function loadPersonalTemplates() {
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+            try {
+                state.personalTemplates = await storage.apiClient.fetchMyTemplates() || [];
+            } catch (error) {
+                state.personalTemplates = state.personalTemplates || [];
+            }
+        } else {
+            state.personalTemplates = state.database.personalTemplates || [];
+        }
+    }
+
+    function templatePreviewRow(item) {
+        const exercise = exerciseById(item.exerciseId);
+        const url = exerciseMedia(exercise);
+        const thumb = url
+            ? `<img class="tpl-thumb" src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">`
+            : `<span class="tpl-thumb tpl-thumb-empty"><i data-lucide="dumbbell"></i></span>`;
+        return `<div class="tpl-exercise">${thumb}<div class="tpl-exercise-text"><strong>${escapeHtml(exercise.name)}</strong><span>${item.targetSets || 3} × ${item.targetReps || 8} · відпочинок ${item.restSeconds || 90}с</span></div></div>`;
+    }
+
+    function openSaveTemplateModal(workoutId) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem || !workoutItem.exercises.length) {
+            toast("Немає вправ", "Додай хоча б одну вправу, щоб зберегти шаблон.");
+            return;
+        }
+        const items = workoutItem.exercises.map((workoutExercise, index) => ({
+            exerciseId: workoutExercise.exerciseId,
+            order: index + 1,
+            targetSets: workoutExercise.sets.filter((set) => set.type !== "warmup").length || workoutExercise.sets.length || 3,
+            targetReps: (workoutExercise.sets.find((set) => set.type !== "warmup") || workoutExercise.sets[0])?.repetitions || 8,
+            restSeconds: workoutExercise.sets[0]?.restSeconds || 90
+        }));
+        openSheet(`<div class="modal-header"><div><h2>Зберегти як шаблон</h2><p class="card-caption">Назви шаблон — вправи й підходи збережуться для швидкого старту.</p></div><button class="icon-button" type="button" data-action="close-sheet"><i data-lucide="x"></i></button></div>
+            <div class="field"><label>Назва шаблону</label><input type="text" id="templateName" maxlength="120" value="${escapeHtml(workoutItem.title === "Тренування" ? `Мій ${workoutTypeLabel(workoutItem.workoutType)}` : workoutItem.title)}"></div>
+            <div class="tpl-preview">${items.map(templatePreviewRow).join("")}</div>
+            <div class="action-row" style="justify-content:flex-end;margin-top:14px;"><button class="button button-primary" type="button" data-action="save-workout-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти шаблон</button></div>`);
+    }
+
+    async function saveWorkoutTemplate(workoutId) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem) {
+            return;
+        }
+        const title = (inputValue("templateName") || "").trim() || "Мій шаблон";
+        const payload = {
+            title,
+            type: workoutItem.workoutType || "custom",
+            exercises: workoutItem.exercises.map((workoutExercise, index) => ({
+                exerciseId: workoutExercise.exerciseId,
+                order: index + 1,
+                targetSets: workoutExercise.sets.filter((set) => set.type !== "warmup").length || workoutExercise.sets.length || 3,
+                targetReps: (workoutExercise.sets.find((set) => set.type !== "warmup") || workoutExercise.sets[0])?.repetitions || 8,
+                restSeconds: Math.round(workoutExercise.sets[0]?.restSeconds || 90)
+            }))
+        };
+        try {
+            if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+                const created = await storage.apiClient.createTemplate(payload);
+                state.personalTemplates = [created, ...(state.personalTemplates || [])];
+            } else {
+                const local = { id: createId("template"), ...payload, createdAt: new Date().toISOString() };
+                state.database.personalTemplates = [local, ...(state.database.personalTemplates || [])];
+                state.personalTemplates = state.database.personalTemplates;
+                await persist({ silent: true });
+            }
+            closeSheet();
+            toast("Шаблон збережено", `«${title}» — знайдеш його на вкладці тренування.`);
+        } catch (error) {
+            toast("Не вдалося зберегти", friendlyError(error), "error");
+        }
+    }
+
+    async function deletePersonalTemplate(templateId) {
+        const confirmed = await confirmDialog("Шаблон зникне назавжди, тренування не постраждають.", { title: "Видалити шаблон?", confirmLabel: "Видалити" });
+        if (!confirmed) {
+            return;
+        }
+        try {
+            if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+                await storage.apiClient.deleteTemplate(templateId);
+            } else {
+                state.database.personalTemplates = (state.database.personalTemplates || []).filter((item) => item.id !== templateId);
+                await persist({ silent: true });
+            }
+            state.personalTemplates = (state.personalTemplates || []).filter((item) => item.id !== templateId);
+            renderSection();
+            toast("Шаблон видалено");
+        } catch (error) {
+            toast("Не вдалося видалити", friendlyError(error), "error");
+        }
+    }
+
+    async function startTemplateWorkout(templateId) {
+        const template = (state.personalTemplates || []).find((item) => item.id === templateId);
+        if (!template) {
+            return;
+        }
+        const limit = workoutLimitState(currentUser().id);
+        if (!limit.allowed) {
+            toast("Ліміт тренувань", limit.message);
+            return;
+        }
+        const canStart = await ensureSingleActiveWorkout();
+        if (!canStart) {
+            return;
+        }
+        const now = new Date();
+        const defaultDur = getPref("defaultDuration");
+        const workoutItem = {
+            id: createId("workout"),
+            userId: currentUser().id,
+            date: dateInput(now),
+            title: template.title,
+            status: "active",
+            workoutType: template.type || "custom",
+            durationOverride: (defaultDur === "auto" || defaultDur === "" || defaultDur == null) ? null : (Math.max(0, Math.round(Number(defaultDur))) || null),
+            startedAt: now.toISOString(),
+            finishedAt: null,
+            notes: "",
+            exercises: (template.exercises || []).map((item, index) => ({
+                id: createId("workout-exercise"),
+                exerciseId: item.exerciseId,
+                order: index + 1,
+                notes: item.notes || "",
+                sets: Array.from({ length: item.targetSets || 3 }, () => ({ id: createId("set"), type: "working", weight: 0, repetitions: item.targetReps || 8, rpe: undefined, restSeconds: item.restSeconds || 90, isCompleted: false, notes: "" }))
+            })),
+            cardioSessions: [],
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+        };
+        state.database.workouts.push(workoutItem);
+        state.editingWorkoutId = workoutItem.id;
+        await persistWorkout(workoutItem);
+        goToWorkoutEditor(workoutItem.id);
+        toast("Шаблон запущено", `«${template.title}» — вправи вже на місці.`);
+    }
+
+    function personalTemplatesSection() {
+        const list = state.personalTemplates || [];
+        if (!list.length) {
+            return "";
+        }
+        const cards = list.map((template) => `<article class="tpl-card"><div class="tpl-card-head"><div><strong>${escapeHtml(template.title)}</strong><span class="chip">${workoutTypeLabel(template.type)}</span></div><button class="icon-button" type="button" title="Видалити шаблон" data-action="delete-template" data-template-id="${template.id}"><i data-lucide="trash-2"></i></button></div><div class="tpl-preview compact">${(template.exercises || []).map(templatePreviewRow).join("") || `<p class="card-caption">Порожній шаблон</p>`}</div><button class="button button-primary compact" type="button" data-action="start-template-workout" data-template-id="${template.id}"><i data-lucide="play"></i>Почати за шаблоном</button></article>`).join("");
+        return `<section class="card"><div class="card-header"><div><h2>Мої шаблони</h2><p class="card-caption">Збережені тренування — старт в один дотик.</p></div></div><div class="tpl-grid">${cards}</div></section>`;
     }
 
     function openWorkoutEditor(workoutId) {

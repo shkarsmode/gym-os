@@ -6392,6 +6392,98 @@ html.compact-ui .chip {
     color: var(--color-warning);
 }
 
+/* ---- Personal workout templates ---- */
+.tpl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.tpl-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+}
+
+.tpl-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.tpl-card-head > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.tpl-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.tpl-preview.compact {
+    margin-top: 0;
+    flex: 1;
+}
+
+.tpl-exercise {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.tpl-thumb {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    flex: 0 0 auto;
+    background: var(--color-elevated);
+}
+
+.tpl-thumb-empty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-faint);
+}
+
+.tpl-thumb-empty i {
+    width: 18px;
+    height: 18px;
+}
+
+.tpl-exercise-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.tpl-exercise-text strong {
+    font-size: 13.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tpl-exercise-text span {
+    font-size: 12px;
+    color: var(--color-muted);
+}
+
 .rankings-header {
     display: flex;
     align-items: flex-start;
