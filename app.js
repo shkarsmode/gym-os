@@ -3546,7 +3546,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 exerciseId: item.exerciseId,
                 order: index + 1,
                 notes: item.notes || "",
-                sets: Array.from({ length: item.targetSets || 3 }, () => ({ id: createId("set"), type: "working", weight: 0, repetitions: item.targetReps || 8, rpe: undefined, restSeconds: item.restSeconds || 90, isCompleted: false, notes: "" }))
+                // Same behaviour as adding the exercise by hand: carry over the sets
+                // (count + weight + reps) from the last time this exercise was done.
+                sets: suggestedSets(exerciseById(item.exerciseId))
             })),
             cardioSessions: [],
             createdAt: now.toISOString(),
