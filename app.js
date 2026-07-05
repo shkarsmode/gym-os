@@ -3432,13 +3432,26 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
     }
 
-    function templatePreviewRow(item) {
+    function templatePreviewRow(item, live = false) {
         const exercise = exerciseById(item.exerciseId);
         const url = exerciseMedia(exercise);
         const thumb = url
             ? `<img class="tpl-thumb" src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">`
             : `<span class="tpl-thumb tpl-thumb-empty"><i data-lucide="dumbbell"></i></span>`;
-        return `<div class="tpl-exercise">${thumb}<div class="tpl-exercise-text"><strong>${escapeHtml(exercise.name)}</strong><span>${item.targetSets || 3} × ${item.targetReps || 8} · відпочинок ${item.restSeconds || 90}с</span></div></div>`;
+        let caption = `${item.targetSets || 3} × ${item.targetReps || 8} · відпочинок ${item.restSeconds || 90}с`;
+        if (live) {
+            // The gallery shows what will ACTUALLY be prefilled on start — the user's
+            // last session of this exercise (same source as suggestedSets).
+            const last = lastExerciseSets(currentUser().id, item.exerciseId);
+            if (last && last.sets.length) {
+                const working = last.sets.filter((set) => set.type !== "warmup");
+                const list = working.length ? working : last.sets;
+                const reps = Number(list[0]?.repetitions) || item.targetReps || 8;
+                const weight = Math.max(...list.map((set) => Number(set.weight) || 0));
+                caption = `${last.sets.length} × ${reps}${weight > 0 ? ` · ${number(weight)} кг` : ""} · останнє`;
+            }
+        }
+        return `<div class="tpl-exercise">${thumb}<div class="tpl-exercise-text"><strong>${escapeHtml(exercise.name)}</strong><span>${caption}</span></div></div>`;
     }
 
     function openSaveTemplateModal(workoutId) {
@@ -3566,7 +3579,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         if (!list.length) {
             return "";
         }
-        const cards = list.map((template) => `<article class="tpl-card"><div class="tpl-card-head"><div><strong>${escapeHtml(template.title)}</strong><span class="chip">${workoutTypeLabel(template.type)}</span></div><button class="icon-button" type="button" title="Видалити шаблон" data-action="delete-template" data-template-id="${template.id}"><i data-lucide="trash-2"></i></button></div><div class="tpl-preview compact">${(template.exercises || []).map(templatePreviewRow).join("") || `<p class="card-caption">Порожній шаблон</p>`}</div><button class="button button-primary compact" type="button" data-action="start-template-workout" data-template-id="${template.id}"><i data-lucide="play"></i>Почати за шаблоном</button></article>`).join("");
+        const cards = list.map((template) => `<article class="tpl-card"><div class="tpl-card-head"><div><strong>${escapeHtml(template.title)}</strong><span class="chip">${workoutTypeLabel(template.type)}</span></div><button class="icon-button" type="button" title="Видалити шаблон" data-action="delete-template" data-template-id="${template.id}"><i data-lucide="trash-2"></i></button></div><div class="tpl-preview compact">${(template.exercises || []).map((item) => templatePreviewRow(item, true)).join("") || `<p class="card-caption">Порожній шаблон</p>`}</div><button class="button button-primary compact" type="button" data-action="start-template-workout" data-template-id="${template.id}"><i data-lucide="play"></i>Почати за шаблоном</button></article>`).join("");
         return `<section class="card"><div class="card-header"><div><h2>Мої шаблони</h2><p class="card-caption">Збережені тренування — старт в один дотик.</p></div></div><div class="tpl-grid">${cards}</div></section>`;
     }
 
