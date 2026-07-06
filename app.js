@@ -47,11 +47,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         timer: {
             id: null,
             duration: 90,
-            remaining: 90,
+            remaining: 90, // goes negative in overtime (counting past zero)
             startedAt: 0,
             running: false,
-            paused: false
-        }
+            paused: false,
+            overtime: false, // true once the countdown crossed zero (signal fired)
+            collapsed: false // minimized to the side circle FAB
+        },
+        focus: null // { exerciseId, setId, view: "set" | "rest" } — focus-mode session
     };
 
     class LocalStorageProvider {
@@ -1607,7 +1610,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             : isOtherThanActive ? `<div class="readonly-layer info">У вас є активне тренування. <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Відкрити активне</button></div>` : "";
         const actionBar = readonly ? "" : `<div class="workout-actionbar">
                 <div class="workout-actionbar-info"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong></div>
-                <div class="workout-actionbar-actions"><button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
+                <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
             </div>`;
         return `
             ${actionBar}
@@ -1641,7 +1644,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             ? `<div class="previous-note"><span class="previous-note-label"><i data-lucide="sticky-note"></i>Остання нотатка · ${formatDate(lastNote.date)}</span><p>${escapeHtml(lastNote.notes)}</p></div>`
             : "";
         const showSetHint = !readonly && isFirstExercise;
-        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div><div class="inline-actions"><button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div>${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div><div class="inline-actions">${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}<button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div>${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly, index, showSetHint) {
@@ -2210,7 +2213,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 armed = false;
                 return;
             }
-            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
+            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .focus-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
                 armed = false;
                 return;
             }
@@ -2523,6 +2526,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             if (event.key === "Escape") {
                 hide();
                 closeSheet();
+                // Focus mode exits on Escape, but only when nothing is stacked above it.
+                if (state.focus && element("modalBackdrop").classList.contains("hidden")) {
+                    closeFocusMode();
+                }
             }
         });
         window.addEventListener("scroll", hide, true);
@@ -2586,6 +2593,20 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "timer-add": () => addTimerTime(Number(actionElement.dataset.delta)),
             "timer-toggle": toggleTimerPause,
             "timer-stop": stopTimer,
+            "timer-collapse": () => setTimerCollapsed(true),
+            "timer-expand": () => setTimerCollapsed(false),
+            "open-focus": () => openFocusMode(actionElement.dataset.workoutExerciseId || null),
+            "focus-close": closeFocusMode,
+            "focus-complete-set": focusCompleteSet,
+            "focus-uncomplete-set": focusUncompleteSet,
+            "focus-add-set": focusAddSet,
+            "focus-next-exercise": () => focusShiftExercise(Number(actionElement.dataset.dir) || 1),
+            "focus-jump-set": () => focusJumpSet(actionElement.dataset.setId),
+            "focus-start-set": focusStartSet,
+            "focus-show-rest": focusShowRest,
+            "focus-apply-hint": () => focusApplyHint(actionElement.dataset.weight, actionElement.dataset.reps),
+            "focus-step": () => focusStepField(actionElement.dataset.field, Number(actionElement.dataset.delta)),
+            "focus-finish-workout": focusFinishWorkout,
             "open-profile-editor": openProfileEditor,
             "save-profile": saveProfile,
             "save-bodyweight": saveBodyweight,
@@ -2734,6 +2755,16 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "timer-add",
             "timer-toggle",
             "timer-stop",
+            "timer-collapse",
+            "timer-expand",
+            "open-focus",
+            "focus-close",
+            "focus-start-set",
+            "focus-jump-set",
+            "focus-apply-hint",
+            "focus-step",
+            "focus-next-exercise",
+            "focus-show-rest",
             "close-overlay"
         ]).has(action);
     }
@@ -3350,7 +3381,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
         closeOverlay();
         renderSection();
-        toast("Профіль збережено", user.displayName);
     }
 
     async function saveBodyweight(shouldRender = true) {
@@ -3416,7 +3446,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         await persistWorkout(workoutItem);
         closeOverlay();
         goToWorkoutEditor(workoutItem.id);
-        toast(isToday ? "Тренування почато" : "Тренування додано", "Додай вправи, підходи або кардіо.");
     }
 
     // ---- Personal workout templates (save a workout as a reusable template) ----
@@ -3501,7 +3530,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 await persist({ silent: true });
             }
             closeSheet();
-            toast("Шаблон збережено", `«${title}» — знайдеш його на вкладці тренування.`);
         } catch (error) {
             toast("Не вдалося зберегти", friendlyError(error), "error");
         }
@@ -3571,7 +3599,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.editingWorkoutId = workoutItem.id;
         await persistWorkout(workoutItem);
         goToWorkoutEditor(workoutItem.id);
-        toast("Шаблон запущено", `«${template.title}» — вправи вже на місці.`);
     }
 
     function personalTemplatesSection() {
@@ -3614,7 +3641,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.editingWorkoutId = workoutItem.id;
         await persistWorkout(workoutItem);
         goToWorkoutEditor(workoutItem.id);
-        toast("Тренування відновлено", workoutLabel(workoutItem));
     }
 
     async function startExistingWorkout(workoutId) {
@@ -3690,7 +3716,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         } else {
             goToWorkoutEditor(workoutItem.id);
         }
-        toast("Вправу додано", exercise.name);
     }
 
     async function removeWorkoutExercise(workoutExerciseId) {
@@ -3724,13 +3749,8 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             return;
         }
         set.isCompleted = !set.isCompleted;
-        if (set.isCompleted && editWorkout()?.status === "active") {
-            if (getPref("autoStartRest") === "1") {
-                startTimer(set.restSeconds || 90);
-                toast("Підхід завершено", `Таймер відпочинку: ${seconds(set.restSeconds || 90)}`);
-            } else {
-                toast("Підхід завершено", "");
-            }
+        if (set.isCompleted && editWorkout()?.status === "active" && getPref("autoStartRest") === "1") {
+            startTimer(set.restSeconds || 90);
         }
         await persistWorkout(editWorkout());
         renderSection();
@@ -3826,7 +3846,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         await persistWorkout(workoutItem);
         closeOverlay();
         renderSection();
-        toast(existing ? "Кардіо оновлено" : "Кардіо додано", `${cardioTypeLabel(data.type)} · ${data.durationMinutes} хв`);
     }
 
     async function deleteCardio(workoutId, cardioId) {
@@ -4025,7 +4044,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
         try {
             await storage.logout();
-            toast("Вихід виконано", "Сесію завершено.");
         } catch (error) {
             toast("Бекенд недоступний", "Локальний деморежим продовжує працювати.");
         }
@@ -5234,25 +5252,41 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.timer.startedAt = Date.now();
         state.timer.running = true;
         state.timer.paused = false;
+        state.timer.overtime = false;
         state.timer.id = setInterval(timerTick, 250);
         renderFloatingTimer();
     }
 
+    // The countdown does NOT stop at zero: it signals once (sound/vibration/push)
+    // and flips into overtime, counting how long past the planned rest we are —
+    // the athlete sees the overshoot instead of the timer silently vanishing.
     function timerTick() {
         if (state.timer.paused) {
             return;
         }
         const elapsed = Math.floor((Date.now() - state.timer.startedAt) / 1000);
-        state.timer.remaining = Math.max(0, state.timer.duration - elapsed);
+        state.timer.remaining = state.timer.duration - elapsed;
+        syncTimerOvertime(true);
         updateFloatingTimer();
-        if (state.timer.remaining <= 0) {
-            stopTimer();
-            timerDone();
-        }
+        updateFocusTimer();
     }
 
-    function timerDone() {
-        toast("Відпочинок завершено", "Можна переходити до наступного підходу.");
+    // Keep the overtime flag in line with the (possibly negative) remaining value.
+    // +15 during overtime can push the timer back into a normal countdown.
+    function syncTimerOvertime(signalOnCross) {
+        const over = state.timer.remaining <= 0;
+        if (over === state.timer.overtime) {
+            return;
+        }
+        state.timer.overtime = over;
+        if (over && signalOnCross) {
+            timerSignal();
+        }
+        renderFloatingTimer();
+        renderFocusTimerPhase();
+    }
+
+    function timerSignal() {
         try {
             const audioContext = window.AudioContext || window.webkitAudioContext;
             if (audioContext) {
@@ -5284,7 +5318,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.timer.id = null;
         state.timer.running = false;
         state.timer.paused = false;
+        state.timer.overtime = false;
         renderFloatingTimer();
+        renderFocusTimerPhase();
     }
 
     function pauseTimer() {
@@ -5316,14 +5352,23 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             return;
         }
         state.timer.duration = Math.max(5, state.timer.duration + delta);
-        state.timer.remaining = Math.max(1, state.timer.remaining + delta);
+        state.timer.remaining = state.timer.remaining + delta;
         state.timer.startedAt = Date.now() - (state.timer.duration - state.timer.remaining) * 1000;
+        syncTimerOvertime(false); // -15 into / +15 out of overtime — no extra signal
         updateFloatingTimer();
+        updateFocusTimer();
+    }
+
+    // Countdown shows M:SS; overtime shows how far past zero we are as +M:SS.
+    function timerDisplayValue() {
+        const remaining = Math.round(state.timer.remaining);
+        return remaining >= 0 ? seconds(remaining) : `+${seconds(-remaining)}`;
     }
 
     function renderFloatingTimer() {
         let node = document.getElementById("floatingTimer");
-        if (!state.timer.running) {
+        // Focus mode renders the timer inside its own layer — hide the floating one.
+        if (!state.timer.running || state.focus) {
             if (node) {
                 node.classList.remove("visible");
             }
@@ -5335,39 +5380,434 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             node.className = "floating-timer";
             document.body.appendChild(node);
         }
-        node.innerHTML = `
+        const timer = state.timer;
+        node.classList.toggle("collapsed", timer.collapsed);
+        node.classList.toggle("overtime", timer.overtime);
+        if (timer.collapsed) {
+            // Side circle FAB: keeps the workout action bar visible; tap to expand.
+            node.innerHTML = `
+            <button class="floating-timer-circle" type="button" data-action="timer-expand" title="Розгорнути таймер" aria-label="Розгорнути таймер відпочинку">
+                <span class="floating-timer-circle-ring" aria-hidden="true"></span>
+                <span class="floating-timer-circle-value" id="floatingTimerValue">${timerDisplayValue()}</span>
+            </button>`;
+        } else {
+            node.innerHTML = `
             <div class="floating-timer-bar"><span id="floatingTimerProgress"></span></div>
             <div class="floating-timer-body">
-                <div class="floating-timer-label"><i data-lucide="timer"></i><span>Відпочинок</span></div>
-                <div class="floating-timer-value" id="floatingTimerValue">${seconds(state.timer.remaining)}</div>
+                <div class="floating-timer-label"><i data-lucide="timer"></i><span>${timer.overtime ? "Час вийшов" : "Відпочинок"}</span></div>
+                <div class="floating-timer-value" id="floatingTimerValue">${timerDisplayValue()}</div>
                 <div class="floating-timer-actions">
-                    <button class="icon-button" type="button" data-action="timer-add" data-delta="-15" title="-15 с"><i data-lucide="minus"></i></button>
-                    <button class="icon-button" type="button" data-action="timer-toggle" title="Пауза / продовжити"><i data-lucide="${state.timer.paused ? "play" : "pause"}"></i></button>
-                    <button class="icon-button" type="button" data-action="timer-add" data-delta="15" title="+15 с"><i data-lucide="plus"></i></button>
+                    ${timer.overtime ? "" : `<button class="icon-button" type="button" data-action="timer-add" data-delta="-15" title="-15 с"><i data-lucide="minus"></i></button>
+                    <button class="icon-button" type="button" data-action="timer-toggle" title="Пауза / продовжити"><i data-lucide="${timer.paused ? "play" : "pause"}"></i></button>
+                    <button class="icon-button" type="button" data-action="timer-add" data-delta="15" title="+15 с"><i data-lucide="plus"></i></button>`}
+                    <button class="icon-button" type="button" data-action="timer-collapse" title="Згорнути в кружок"><i data-lucide="chevron-down"></i></button>
                     <button class="icon-button" type="button" data-action="timer-stop" title="Зупинити"><i data-lucide="x"></i></button>
                 </div>
             </div>`;
+        }
         node.classList.add("visible");
-        node.classList.toggle("paused", state.timer.paused);
+        node.classList.toggle("paused", timer.paused);
         updateFloatingTimer();
         iconsIn(node);
     }
 
     function updateFloatingTimer() {
         const node = document.getElementById("floatingTimer");
-        if (!node) {
+        if (!node || !node.classList.contains("visible")) {
             return;
         }
         const value = node.querySelector("#floatingTimerValue");
-        const progress = node.querySelector("#floatingTimerProgress");
         if (value) {
-            value.textContent = seconds(state.timer.remaining);
+            value.textContent = timerDisplayValue();
         }
+        const ratio = state.timer.overtime ? 1 : (state.timer.duration > 0 ? Math.max(0, Math.min(1, state.timer.remaining / state.timer.duration)) : 0);
+        const progress = node.querySelector("#floatingTimerProgress");
         if (progress) {
-            const percent = state.timer.duration ? Math.max(0, Math.min(100, (state.timer.remaining / state.timer.duration) * 100)) : 0;
-            progress.style.width = `${percent}%`;
+            progress.style.width = `${ratio * 100}%`;
         }
+        node.style.setProperty("--timer-ratio", String(ratio));
         node.classList.toggle("paused", state.timer.paused);
+    }
+
+    function setTimerCollapsed(collapsed) {
+        state.timer.collapsed = collapsed;
+        renderFloatingTimer();
+    }
+
+    // ===== Focus mode =====
+    // A separate full-screen flow for the active workout: one exercise, one set at
+    // a time — big inputs with steppers, prev-session hints, and the rest timer as
+    // a first-class screen (with overtime) instead of a floating card. All edits go
+    // through the same workout data + persist path as the normal editor, so leaving
+    // focus mode always lands on an up-to-date page.
+
+    // Resolve the focused workout/exercise/set, self-healing stale ids (an exercise
+    // or set removed elsewhere) by falling back to the first incomplete one.
+    function focusContext() {
+        if (!state.focus) {
+            return null;
+        }
+        const workoutItem = editWorkout();
+        if (!workoutItem || workoutItem.status !== "active" || !canManage(workoutItem)) {
+            return null;
+        }
+        const list = [...workoutItem.exercises].sort((left, right) => left.order - right.order);
+        if (!list.length) {
+            return null;
+        }
+        let index = list.findIndex((item) => item.id === state.focus.exerciseId);
+        if (index === -1) {
+            index = 0;
+        }
+        const exercise = list[index];
+        let set = exercise.sets.find((item) => item.id === state.focus.setId) || null;
+        if (!set) {
+            set = exercise.sets.find((item) => !item.isCompleted) || exercise.sets.at(-1) || null;
+        }
+        state.focus.exerciseId = exercise.id;
+        state.focus.setId = set ? set.id : null;
+        return { workout: workoutItem, list, index, exercise, set };
+    }
+
+    function openFocusMode(workoutExerciseId = null) {
+        const workoutItem = editWorkout();
+        if (!workoutItem || workoutItem.status !== "active" || !canManage(workoutItem) || !workoutItem.exercises.length) {
+            return;
+        }
+        const list = [...workoutItem.exercises].sort((left, right) => left.order - right.order);
+        const exercise = list.find((item) => item.id === workoutExerciseId)
+            || list.find((item) => item.sets.some((set) => !set.isCompleted))
+            || list[0];
+        const set = exercise.sets.find((item) => !item.isCompleted) || exercise.sets.at(-1) || null;
+        state.focus = { exerciseId: exercise.id, setId: set ? set.id : null, view: "set" };
+        renderFocus();
+        lockBackgroundScroll();
+        renderFloatingTimer(); // focus owns the timer UI now — hide the floating card
+    }
+
+    function closeFocusMode() {
+        if (!state.focus) {
+            return;
+        }
+        state.focus = null;
+        const node = document.getElementById("focusLayer");
+        if (node) {
+            node.classList.remove("visible");
+        }
+        unlockBackgroundScroll();
+        renderFloatingTimer(); // bring the floating timer back if rest is still running
+        renderSection(); // the page underneath may be stale after focus edits
+    }
+
+    function renderFocus() {
+        let node = document.getElementById("focusLayer");
+        if (!state.focus) {
+            if (node) {
+                node.classList.remove("visible");
+            }
+            return;
+        }
+        const context = focusContext();
+        if (!context) {
+            closeFocusMode();
+            return;
+        }
+        if (!node) {
+            node = document.createElement("div");
+            node.id = "focusLayer";
+            node.className = "focus-layer";
+            document.body.appendChild(node);
+        }
+        node.innerHTML = focusMarkup(context);
+        if (!node.classList.contains("visible")) {
+            void node.offsetWidth; // commit the enter-from state so the transition plays
+        }
+        node.classList.add("visible");
+        iconsIn(node);
+        updateFocusTimer();
+    }
+
+    function focusMarkup(context) {
+        const { list, index } = context;
+        const chipVisible = state.timer.running && state.focus.view !== "rest";
+        return `<div class="focus-shell">
+            <header class="focus-topbar">
+                <button class="icon-button" type="button" data-action="focus-close" title="Вийти з фокус-режиму"><i data-lucide="x"></i></button>
+                <div class="focus-topbar-text">
+                    <span class="focus-eyebrow">Фокус-режим</span>
+                    <strong>Вправа ${index + 1} з ${list.length}</strong>
+                </div>
+                <button class="focus-timer-chip${chipVisible ? " visible" : ""}${state.timer.overtime ? " overtime" : ""}" type="button" data-action="focus-show-rest" id="focusTimerChip" title="Відкрити таймер відпочинку">
+                    <i data-lucide="timer"></i><span id="focusTimerChipValue">${timerDisplayValue()}</span>
+                </button>
+            </header>
+            <div class="focus-scroll">${state.focus.view === "rest" ? focusRestView(context) : focusSetView(context)}</div>
+        </div>`;
+    }
+
+    function focusHintChip(icon, label, set) {
+        return `<button class="focus-hint" type="button" data-action="focus-apply-hint" data-weight="${set.weight}" data-reps="${set.repetitions}" title="Підставити ці значення">
+            <i data-lucide="${icon}"></i><span>${label}</span><strong>${number(set.weight)} × ${set.repetitions}</strong>
+        </button>`;
+    }
+
+    function focusSetView(context) {
+        const { workout: workoutItem, list, index, exercise, set } = context;
+        const meta = exerciseById(exercise.exerciseId);
+        const sets = exercise.sets;
+        const setIndex = set ? sets.findIndex((item) => item.id === set.id) : -1;
+        const target = set ? `data-workout-exercise-id="${exercise.id}" data-set-id="${set.id}"` : "";
+        const exerciseNav = `<div class="focus-exercise-nav">
+            <button class="icon-button" type="button" data-action="focus-next-exercise" data-dir="-1" title="Попередня вправа" ${index === 0 ? "disabled" : ""}><i data-lucide="chevron-left"></i></button>
+            <div class="focus-exercise-name"><h2>${escapeHtml(meta.name)}</h2><span class="chip">${escapeHtml(meta.primaryMuscleGroup)}</span></div>
+            <button class="icon-button" type="button" data-action="focus-next-exercise" data-dir="1" title="Наступна вправа" ${index >= list.length - 1 ? "disabled" : ""}><i data-lucide="chevron-right"></i></button>
+        </div>`;
+        const dots = sets.length ? `<div class="focus-set-dots">${sets.map((item, position) => `<button class="focus-dot${item.isCompleted ? " done" : ""}${set && item.id === set.id ? " current" : ""}" type="button" data-action="focus-jump-set" data-set-id="${item.id}" title="Підхід ${position + 1}">${item.isCompleted ? `<i data-lucide="check"></i>` : position + 1}</button>`).join("")}</div>` : "";
+        if (!set) {
+            return `${exerciseNav}<div class="focus-set-card"><p class="card-caption" style="text-align:center;">Підходів ще немає — додай перший.</p>
+                <button class="button button-primary focus-cta" type="button" data-action="focus-add-set"><i data-lucide="plus"></i>Додати підхід</button></div>`;
+        }
+        const last = lastExerciseSets(workoutItem.userId, exercise.exerciseId, workoutItem.id);
+        const lastSet = last ? (last.sets[setIndex] || last.sets.at(-1)) : null;
+        const previousSet = setIndex > 0 ? sets[setIndex - 1] : null;
+        const hints = !set.isCompleted && (lastSet || previousSet)
+            ? `<div class="focus-hints">${lastSet ? focusHintChip("history", `Минулого разу`, lastSet) : ""}${previousSet ? focusHintChip("corner-left-up", "Попередній підхід", previousSet) : ""}</div>`
+            : "";
+        const nextExercise = list[index + 1] || null;
+        return `${exerciseNav}${dots}
+        <div class="focus-set-card">
+            <div class="focus-set-heading">
+                <span class="focus-set-label">Підхід ${setIndex + 1} з ${sets.length}</span>
+                ${set.isCompleted ? `<span class="status-badge completed">Виконано</span>` : ""}
+            </div>
+            ${hints}
+            <div class="focus-fields">
+                <div class="focus-field">
+                    <span class="focus-field-label">Вага, кг</span>
+                    <div class="focus-stepper">
+                        <button class="focus-step" type="button" data-action="focus-step" data-field="weight" data-delta="-2.5" title="−2.5 кг"><i data-lucide="minus"></i></button>
+                        <input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight">
+                        <button class="focus-step" type="button" data-action="focus-step" data-field="weight" data-delta="2.5" title="+2.5 кг"><i data-lucide="plus"></i></button>
+                    </div>
+                </div>
+                <div class="focus-field">
+                    <span class="focus-field-label">Повтори</span>
+                    <div class="focus-stepper">
+                        <button class="focus-step" type="button" data-action="focus-step" data-field="repetitions" data-delta="-1" title="−1"><i data-lucide="minus"></i></button>
+                        <input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions">
+                        <button class="focus-step" type="button" data-action="focus-step" data-field="repetitions" data-delta="1" title="+1"><i data-lucide="plus"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="focus-set-meta">
+                <gym-select class="set-type-select" data-action="set-field" ${target} data-field="type">${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
+                <label class="focus-rest-input"><i data-lucide="timer"></i><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds"><span>с</span></label>
+            </div>
+            ${set.isCompleted
+                ? `<button class="button button-secondary focus-cta" type="button" data-action="focus-uncomplete-set"><i data-lucide="rotate-ccw"></i>Зняти позначку «виконано»</button>`
+                : `<button class="button button-primary focus-cta" type="button" data-action="focus-complete-set"><i data-lucide="check"></i>Підхід виконано</button>`}
+        </div>
+        <div class="focus-secondary-row">
+            <button class="button button-secondary compact" type="button" data-action="focus-add-set"><i data-lucide="plus"></i>Підхід</button>
+            ${nextExercise
+                ? `<button class="button button-secondary compact" type="button" data-action="focus-next-exercise" data-dir="1">Наступна вправа<i data-lucide="arrow-right"></i></button>`
+                : `<button class="button button-secondary compact" type="button" data-action="focus-finish-workout"><i data-lucide="flag"></i>Завершити тренування</button>`}
+        </div>`;
+    }
+
+    function focusRestView(context) {
+        const { list, index, exercise } = context;
+        const meta = exerciseById(exercise.exerciseId);
+        const nextSet = exercise.sets.find((item) => !item.isCompleted);
+        const nextSetIndex = nextSet ? exercise.sets.findIndex((item) => item.id === nextSet.id) : -1;
+        const nextExercise = list[index + 1] || null;
+        const nextExerciseMeta = nextExercise ? exerciseById(nextExercise.exerciseId) : null;
+        const doneCount = exercise.sets.filter((item) => item.isCompleted).length;
+        const running = state.timer.running;
+        const overtime = state.timer.overtime;
+        const label = running ? (overtime ? "Час вийшов — рахуємо далі" : "Відпочинок") : "Перерва без таймера";
+        const bottom = nextSet
+            ? `<div class="focus-next-preview"><span>Далі</span><strong>Підхід ${nextSetIndex + 1} · ${number(nextSet.weight)} кг × ${nextSet.repetitions}</strong></div>
+               <button class="button button-primary focus-cta" type="button" data-action="focus-start-set">Почати підхід</button>`
+            : `<div class="focus-done-panel">
+                <p class="focus-done-title">Вправу завершено</p>
+                ${nextExercise ? `<button class="button button-primary focus-cta" type="button" data-action="focus-next-exercise" data-dir="1">Наступна вправа: ${escapeHtml(nextExerciseMeta.name)}<i data-lucide="arrow-right"></i></button>` : ""}
+                <button class="button button-secondary focus-cta" type="button" data-action="focus-add-set"><i data-lucide="plus"></i>Додати підхід</button>
+                <button class="button ${nextExercise ? "button-secondary" : "button-primary"} focus-cta" type="button" data-action="focus-finish-workout"><i data-lucide="flag"></i>Завершити тренування</button>
+            </div>`;
+        return `<div class="focus-rest${overtime ? " overtime" : ""}" id="focusRest">
+            <p class="focus-rest-exercise">${escapeHtml(meta.name)} · ${doneCount}/${exercise.sets.length} підходів</p>
+            <p class="focus-rest-label" id="focusRestLabel">${label}</p>
+            <div class="focus-ring">
+                <span class="focus-ring-fill" aria-hidden="true"></span>
+                <strong class="focus-ring-value" id="focusTimerValue">${running ? timerDisplayValue() : "—"}</strong>
+            </div>
+            ${running ? `<div class="focus-rest-controls">
+                <button class="chip chip-button" type="button" data-action="timer-add" data-delta="-15">−15 с</button>
+                <button class="chip chip-button" type="button" data-action="timer-stop">Стоп</button>
+                <button class="chip chip-button" type="button" data-action="timer-add" data-delta="15">+15 с</button>
+            </div>` : ""}
+            ${bottom}
+        </div>`;
+    }
+
+    // Per-tick DOM update inside the focus layer (no re-render: inputs keep focus).
+    function updateFocusTimer() {
+        if (!state.focus) {
+            return;
+        }
+        const chip = document.getElementById("focusTimerChip");
+        if (chip) {
+            chip.classList.toggle("visible", state.timer.running && state.focus.view !== "rest");
+            chip.classList.toggle("overtime", state.timer.overtime);
+            const chipValue = document.getElementById("focusTimerChipValue");
+            if (chipValue) {
+                chipValue.textContent = timerDisplayValue();
+            }
+        }
+        const value = document.getElementById("focusTimerValue");
+        if (value && state.timer.running) {
+            value.textContent = timerDisplayValue();
+        }
+        const rest = document.getElementById("focusRest");
+        if (rest) {
+            const ratio = state.timer.overtime ? 1 : (state.timer.duration > 0 ? Math.max(0, Math.min(1, state.timer.remaining / state.timer.duration)) : 0);
+            rest.style.setProperty("--timer-ratio", String(ratio));
+        }
+    }
+
+    // Countdown crossed zero (or the timer stopped): the rest screen swaps its
+    // layout, the set screen only re-tints its chip — never re-render inputs mid-typing.
+    function renderFocusTimerPhase() {
+        if (!state.focus) {
+            return;
+        }
+        if (state.focus.view === "rest") {
+            renderFocus();
+        } else {
+            updateFocusTimer();
+        }
+    }
+
+    async function focusCompleteSet() {
+        const context = focusContext();
+        if (!context || !context.set || context.set.isCompleted) {
+            return;
+        }
+        context.set.isCompleted = true;
+        startTimer(context.set.restSeconds || Number(getPref("defaultRest")) || 90);
+        const next = context.exercise.sets.find((item) => !item.isCompleted);
+        state.focus.setId = next ? next.id : context.set.id;
+        state.focus.view = "rest";
+        context.workout.updatedAt = new Date().toISOString();
+        await persistWorkout(context.workout);
+        renderFocus();
+    }
+
+    async function focusUncompleteSet() {
+        const context = focusContext();
+        if (!context || !context.set) {
+            return;
+        }
+        context.set.isCompleted = false;
+        context.workout.updatedAt = new Date().toISOString();
+        await persistWorkout(context.workout);
+        renderFocus();
+    }
+
+    async function focusAddSet() {
+        const context = focusContext();
+        if (!context) {
+            return;
+        }
+        const previousSet = context.exercise.sets.at(-1);
+        const newSet = previousSet
+            ? { ...previousSet, id: createId("set"), isCompleted: false }
+            : createSet(getPref("defaultSetType"), 0, 8, 8, Number(getPref("defaultRest")) || 90, false);
+        context.exercise.sets.push(newSet);
+        state.focus.setId = newSet.id;
+        state.focus.view = "set";
+        context.workout.updatedAt = new Date().toISOString();
+        await persistWorkout(context.workout);
+        renderFocus();
+    }
+
+    function focusShiftExercise(direction) {
+        const context = focusContext();
+        if (!context) {
+            return;
+        }
+        const target = context.list[context.index + direction];
+        if (!target) {
+            return;
+        }
+        state.focus.exerciseId = target.id;
+        state.focus.setId = (target.sets.find((item) => !item.isCompleted) || target.sets[0] || null)?.id || null;
+        state.focus.view = "set";
+        renderFocus();
+    }
+
+    function focusJumpSet(setId) {
+        if (!state.focus) {
+            return;
+        }
+        state.focus.setId = setId;
+        state.focus.view = "set";
+        renderFocus();
+    }
+
+    // Leave the rest screen for the next set ("skip rest" / "start set").
+    function focusStartSet() {
+        if (!state.focus) {
+            return;
+        }
+        state.focus.view = "set";
+        stopTimer();
+        renderFocus();
+    }
+
+    function focusShowRest() {
+        if (!state.focus) {
+            return;
+        }
+        state.focus.view = "rest";
+        renderFocus();
+    }
+
+    function focusApplyHint(weight, reps) {
+        const context = focusContext();
+        if (!context || !context.set) {
+            return;
+        }
+        context.set.weight = Number(weight) || 0;
+        context.set.repetitions = Number(reps) || 0;
+        schedulePersistWorkout(context.workout);
+        renderFocus();
+    }
+
+    function focusStepField(field, delta) {
+        const context = focusContext();
+        if (!context || !context.set) {
+            return;
+        }
+        const value = Math.max(0, round((Number(context.set[field]) || 0) + delta, 2));
+        context.set[field] = value;
+        schedulePersistWorkout(context.workout);
+        const input = document.querySelector(`#focusLayer input[data-field="${field}"]`);
+        if (input) {
+            input.value = value;
+        }
+    }
+
+    async function focusFinishWorkout() {
+        const context = focusContext();
+        if (!context) {
+            closeFocusMode();
+            return;
+        }
+        const workoutId = context.workout.id;
+        closeFocusMode();
+        await finishWorkout(workoutId);
     }
 
     function userById(id) {
@@ -6017,7 +6457,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             // Include the portaled dropdown panels (.gselect-panel / .gdate-panel are
             // appended to <body>, OUTSIDE .modal-layer) so their own list can scroll on
             // touch while a modal is open — otherwise the guard would block them.
-            const overlay = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer, .gselect-panel, .gdate-panel") : null;
+            const overlay = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer, .gselect-panel, .gdate-panel, .focus-layer") : null;
             if (!overlay) {
                 event.preventDefault(); // outside any overlay → never let the page behind scroll
                 return;
@@ -6045,6 +6485,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function unlockBackgroundScroll() {
+        // Focus mode holds the lock for its whole session: an overlay stacked above
+        // it (confirm / paywall) must not release it on close. Focus releases it
+        // itself by clearing state.focus before calling this.
+        if (state.focus) {
+            return;
+        }
         // Idempotent — even if the flag ever desyncs, the listener must never survive
         // and keep swallowing touch-scroll.
         scrollLocked = false;
@@ -6085,7 +6531,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     function ensureScrollUnlockedIfNoOverlay() {
         const modalHidden = element("modalLayer").classList.contains("hidden");
         const drawerHidden = element("drawerLayer").classList.contains("hidden");
-        if (modalHidden && drawerHidden && (scrollLocked || lockTouchMove)) {
+        if (modalHidden && drawerHidden && !state.focus && (scrollLocked || lockTouchMove)) {
             unlockBackgroundScroll();
         }
     }

@@ -2632,6 +2632,99 @@ tr:last-child td {
     height: 36px;
 }
 
+/* Overtime: the countdown crossed zero — keep the timer on screen counting UP
+   (+M:SS) in warning colors instead of silently disappearing. */
+.floating-timer.overtime {
+    border-color: var(--color-warning);
+}
+
+.floating-timer.overtime .floating-timer-bar span {
+    background: var(--color-warning);
+}
+
+.floating-timer.overtime .floating-timer-label svg,
+.floating-timer.overtime .floating-timer-value {
+    color: var(--color-warning);
+}
+
+/* Collapsed: a small side circle FAB so the timer stops covering the workout
+   action bar. Tap to expand back to the full card. */
+.floating-timer.collapsed {
+    left: auto;
+    right: 14px;
+    width: auto;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+    transform: translateY(140%);
+}
+
+.floating-timer.collapsed.visible {
+    transform: translateY(0);
+}
+
+.floating-timer-circle {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 60px;
+    height: 60px;
+    padding: 0;
+    border: 1px solid var(--color-accent-border);
+    border-radius: 50%;
+    background: var(--color-elevated);
+    color: var(--color-text);
+    cursor: pointer;
+    box-shadow: var(--shadow-card), 0 0 18px -6px color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+.floating-timer-circle-ring {
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+    background: conic-gradient(var(--color-accent) calc(var(--timer-ratio, 0) * 360deg), rgba(255, 255, 255, 0.08) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+    pointer-events: none;
+}
+
+.floating-timer-circle-value {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.floating-timer.paused .floating-timer-circle-ring {
+    background: conic-gradient(var(--color-warning) calc(var(--timer-ratio, 0) * 360deg), rgba(255, 255, 255, 0.08) 0);
+}
+
+.floating-timer.overtime .floating-timer-circle {
+    border-color: var(--color-warning);
+    box-shadow: var(--shadow-card), 0 0 18px -6px color-mix(in srgb, var(--color-warning) 60%, transparent);
+    animation: timerCirclePulse 1.6s ease-in-out infinite;
+}
+
+.floating-timer.overtime .floating-timer-circle-ring {
+    background: conic-gradient(var(--color-warning) 360deg, transparent 0);
+}
+
+.floating-timer.overtime .floating-timer-circle-value {
+    color: var(--color-warning);
+    font-size: 13px;
+}
+
+@keyframes timerCirclePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .floating-timer.overtime .floating-timer-circle { animation: none; }
+}
+
 /* ---------- Busy overlay / sync ---------- */
 .busy-overlay {
     position: fixed;
@@ -3156,6 +3249,13 @@ ul {
 
     .floating-timer.visible {
         transform: translateY(0);
+    }
+
+    /* Collapsed circle hugs the right edge above the bottom nav. */
+    .floating-timer.collapsed {
+        left: auto;
+        right: calc(12px + env(safe-area-inset-right));
+        bottom: calc(var(--mobile-nav-height) + 12px);
     }
 
     /* On mobile the save-status chip is icon-only to stay out of the way. */
@@ -6648,4 +6748,463 @@ html.compact-ui .chip {
     height: 15px;
     color: var(--color-accent);
     flex: 0 0 auto;
+}
+
+/* ===== Focus mode — full-screen one-exercise / one-set flow ===== */
+.focus-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 80; /* above page + mobile nav (60); below modals (90+) so confirms stack */
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(700px circle at 50% -10%, color-mix(in srgb, var(--color-accent) 8%, transparent), transparent 62%),
+        var(--color-page);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(26px);
+    transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.focus-layer.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+}
+
+.focus-shell {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 620px;
+    height: 100%;
+    margin: 0 auto;
+}
+
+.focus-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+}
+
+.focus-topbar-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.focus-eyebrow {
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.focus-topbar-text strong {
+    font-family: var(--font-display);
+    font-size: 15px;
+}
+
+/* Compact live rest chip in the top bar while you're back on the set screen. */
+.focus-timer-chip {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-dim);
+    color: var(--color-accent-strong);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+
+.focus-timer-chip.visible {
+    display: inline-flex;
+}
+
+.focus-timer-chip.overtime {
+    border-color: rgba(251, 191, 36, 0.4);
+    background: var(--color-warning-dim);
+    color: var(--color-warning);
+}
+
+.focus-timer-chip svg {
+    width: 15px;
+    height: 15px;
+}
+
+.focus-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 6px 16px calc(26px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.focus-exercise-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.focus-exercise-name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.focus-exercise-name h2 {
+    margin: 0;
+    font-size: 21px;
+    line-height: 1.2;
+}
+
+.focus-set-dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.focus-dot {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 50%;
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.focus-dot.done {
+    border-color: var(--color-accent-border);
+    background: var(--color-accent-dim);
+    color: var(--color-accent-strong);
+}
+
+.focus-dot.done svg {
+    width: 15px;
+    height: 15px;
+}
+
+.focus-dot.current {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+.focus-set-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
+}
+
+.focus-set-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.focus-set-label {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.focus-hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.focus-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.focus-hint:hover {
+    border-color: var(--color-accent-border);
+    color: var(--color-text);
+}
+
+.focus-hint svg {
+    width: 14px;
+    height: 14px;
+    color: var(--color-accent);
+}
+
+.focus-hint strong {
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.focus-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.focus-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.focus-field-label {
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.focus-stepper {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    overflow: hidden;
+}
+
+.focus-stepper input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--color-text);
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    padding: 12px 2px;
+    -moz-appearance: textfield;
+}
+
+.focus-stepper input::-webkit-outer-spin-button,
+.focus-stepper input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.focus-stepper input:focus-visible {
+    outline: none;
+}
+
+.focus-stepper:focus-within {
+    border-color: var(--color-accent);
+}
+
+.focus-step {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    border: none;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-muted);
+    cursor: pointer;
+}
+
+.focus-step:active {
+    background: var(--color-accent-dim);
+    color: var(--color-accent-strong);
+}
+
+.focus-step svg {
+    width: 18px;
+    height: 18px;
+}
+
+.focus-set-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.focus-set-meta gym-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.focus-rest-input {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-size: 12.5px;
+}
+
+.focus-rest-input svg {
+    width: 15px;
+    height: 15px;
+    color: var(--color-accent);
+}
+
+.focus-rest-input input {
+    width: 52px;
+    border: none;
+    background: transparent;
+    color: var(--color-text);
+    font-weight: 700;
+    text-align: center;
+    padding: 10px 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.focus-rest-input input:focus-visible {
+    outline: none;
+}
+
+.focus-cta {
+    width: 100%;
+    justify-content: center;
+    padding: 15px 18px;
+    font-size: 16px;
+    border-radius: var(--radius-md);
+}
+
+.focus-secondary-row {
+    display: flex;
+    gap: 10px;
+}
+
+.focus-secondary-row .button {
+    flex: 1;
+    justify-content: center;
+}
+
+/* --- Rest screen --- */
+.focus-rest {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 0 0;
+    text-align: center;
+}
+
+.focus-rest-exercise {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+.focus-rest-label {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.focus-rest.overtime .focus-rest-label {
+    color: var(--color-warning);
+}
+
+.focus-ring {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 210px;
+    height: 210px;
+}
+
+.focus-ring-fill {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(var(--color-accent) calc(var(--timer-ratio, 0) * 360deg), rgba(255, 255, 255, 0.08) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 9px), #000 calc(100% - 8px));
+    pointer-events: none;
+}
+
+.focus-rest.overtime .focus-ring-fill {
+    background: conic-gradient(var(--color-warning) 360deg, transparent 0);
+    animation: timerCirclePulse 1.6s ease-in-out infinite;
+}
+
+.focus-ring-value {
+    font-family: var(--font-display);
+    font-size: 52px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+}
+
+.focus-rest.overtime .focus-ring-value {
+    color: var(--color-warning);
+}
+
+.focus-rest-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.focus-next-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--color-muted);
+    font-size: 12.5px;
+}
+
+.focus-next-preview strong {
+    color: var(--color-text);
+    font-size: 15px;
+}
+
+.focus-done-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 380px;
+}
+
+.focus-done-title {
+    margin: 0 0 4px;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .focus-rest.overtime .focus-ring-fill { animation: none; }
+    .focus-layer { transition: opacity 0.24s ease; transform: none; }
 }
