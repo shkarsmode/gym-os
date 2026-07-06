@@ -1776,11 +1776,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function users() {
-        const pending = isAdmin() ? state.database.users.filter((item) => item.approved === false && item.id !== currentUser().id) : [];
-        const adminSection = isAdmin()
-            ? `<section class="card span-12"><div class="card-header"><div><h2>Заявки на підтвердження</h2><p class="card-caption">Нові користувачі чекають на доступ адміністратора.</p></div><span class="badge accent">${pending.length}</span></div>${pending.length ? `<div class="approval-list">${pending.map((item) => `<div class="day-row"><div class="list-row" style="min-width:0;">${avatar(item, "tiny")}<div style="min-width:0;"><strong>${escapeHtml(item.displayName)}</strong><p class="card-caption">${escapeHtml(item.email || item.name || "")}</p></div></div><div class="day-row-actions"><button class="button button-primary compact" type="button" data-action="approve-user" data-user-id="${item.id}"><i data-lucide="check"></i>Підтвердити</button></div></div>`).join("")}</div>` : `<p class="card-caption">Немає нових заявок.</p>`}</section>`
-            : "";
-        content(`<div class="grid dashboard-grid">${adminSection}</div><section class="user-grid"${adminSection ? ` style="margin-top:16px;"` : ""}>${state.database.users.map(userCard).join("")}</section>`);
+        // Approval requests live only in the admin panel now — the team page is just
+        // the member grid.
+        content(`<section class="user-grid">${state.database.users.map(userCard).join("")}</section>`);
     }
 
     function profile() {
@@ -4566,7 +4564,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         };
         const pendingEx = pendingExercises();
         content(`<div class="grid dashboard-grid">
-            <section class="card span-12"><div class="card-header admin-panel-head"><div><h2>Адмін-панель</h2><p class="card-caption">Доступи, ролі та модерація GymOS в одному місці.</p></div><span class="role-badge admin admin-head-badge"><i data-lucide="shield"></i>Адмін</span></div>${kpi([{ label: "Користувачі", value: counts.total }, { label: "PRO", value: counts.premium }, { label: "Адміни", value: counts.admin }, { label: "На апруві", value: counts.pending }, { label: "Вправи", value: state.database.exercises.length }, { label: "На модерації", value: pendingEx.length }])}</section>
+            <section class="card span-12"><div class="card-header"><div><h2>Адмін-панель</h2><p class="card-caption">Доступи, ролі та модерація GymOS в одному місці.</p></div></div>${workoutStatStrip([{ icon: "users", value: counts.total, label: "користувачі" }, { icon: "crown", value: counts.premium, label: "PRO" }, { icon: "shield", value: counts.admin, label: "адміни" }, { icon: "user-check", value: counts.pending, label: "на апруві" }, { icon: "dumbbell", value: state.database.exercises.length, label: "вправи" }, { icon: "shield-check", value: pendingEx.length, label: "на модерації" }])}</section>
             ${pendingUsers.length ? `<section class="card span-12 approval-card"><div class="card-header"><div><h2>Нові користувачі <span class="badge pending">${pendingUsers.length}</span></h2><p class="card-caption">Підтверди доступ до застосунку.</p></div></div><div class="admin-user-list">${pendingUsers.map(adminUserRow).join("")}</div></section>` : ""}
             <section class="card span-12"><div class="card-header"><div><h2>Користувачі та ролі</h2><p class="card-caption">Free · PRO (безліміт) · Адмін. Зміни застосовуються одразу.</p></div></div><div class="admin-user-list">${users.map(adminUserRow).join("")}</div></section>
             ${pendingEx.length ? approvalQueueCard() : ""}
@@ -4596,7 +4594,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const summary = userStats(user.id);
         const info = userLevel(user.id);
         const isCurrent = user.id === currentUser().id;
-        return `<article class="user-card" data-action="open-user" data-user-id="${user.id}"><div class="list-row">${framedAvatar(user, "xl", info.level)}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal || "")}</p></div></div><div style="margin-top:14px;">${kpi([{ label: "Тренування", value: summary.completedWorkouts }, { label: "Обсяг", value: number(summary.totalVolume) }, { label: "Кардіо", value: summary.cardioMinutes }])}</div><div class="tag-row" style="margin-top:12px;">${levelBadge(info)}<span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Це ви" : "Учасник"}</span>${roleStatusBadge(user)}</div></article>`;
+        return `<article class="user-card" data-action="open-user" data-user-id="${user.id}"><div class="list-row">${framedAvatar(user, "xl", info.level)}<div><h3>${escapeHtml(user.displayName)}</h3><p class="card-caption">${escapeHtml(user.trainingGoal || "")}</p></div></div><div style="margin-top:14px;">${workoutStatStrip([{ icon: "calendar-check", value: summary.completedWorkouts, label: "трен." }, { icon: "boxes", value: `${number(summary.totalVolume)} кг` }, { icon: "heart-pulse", value: `${summary.cardioMinutes} хв`, label: "кардіо" }])}</div><div class="tag-row" style="margin-top:12px;">${levelBadge(info)}<span class="badge ${isCurrent ? "unlocked" : "locked"}">${isCurrent ? "Це ви" : "Учасник"}</span>${roleStatusBadge(user)}</div></article>`;
     }
 
     function userDetail(userId) {
