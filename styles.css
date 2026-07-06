@@ -1782,7 +1782,7 @@ select option {
    stable and nothing shifts visually. */
 .exercise-card-grid > .exercise-card {
     content-visibility: auto;
-    contain-intrinsic-size: auto 340px;
+    contain-intrinsic-size: auto 420px;
 }
 
 .picker-filter-block {
@@ -1958,7 +1958,11 @@ select option {
 .exercise-thumb {
     position: relative;
     margin: -15px -15px 12px;
-    min-height: 150px;
+    /* `contain` guarantees the WHOLE gif is shown (no cropping) for any aspect ratio
+       — the fix for gifs being cut off on phones, where the card is wide and the old
+       fixed-height `cover` chopped the top/bottom of the (square) demo gifs. A tall
+       box keeps square gifs large; the phone override below makes it near-square. */
+    height: 200px;
     overflow: hidden;
     border-radius: var(--radius-md) var(--radius-md) 0 0;
     background: var(--color-elevated);
@@ -1970,8 +1974,8 @@ select option {
     z-index: 1;
     display: block;
     width: 100%;
-    height: 150px;
-    object-fit: cover;
+    height: 100%;
+    object-fit: contain;
 }
 
 /* Muscle-silhouette placeholder shown behind the gif — visible when an exercise has
@@ -3375,6 +3379,12 @@ ul {
 
     .span-3, .span-4, .span-5, .span-6, .span-7, .span-8, .span-12 {
         grid-column: 1 / -1;
+    }
+
+    /* Phone: the catalog is one wide column, so give the thumb a near-square box —
+       the square demo gif then shows large and complete (contain, no crop). */
+    .exercise-thumb {
+        height: 320px;
     }
 
     /* every grid child must be allowed to shrink below its content width */
