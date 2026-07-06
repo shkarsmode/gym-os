@@ -1308,8 +1308,28 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return { id: createId("cardio"), type: index % 2 ? "bike" : "treadmill", durationMinutes: 18 + index % 5 * 4, distance: round(2 + index % 4 * 0.7, 1), calories: 140 + index % 5 * 28, averageHeartRate: 125 + index % 4 * 8, intensity: ["low", "medium", "high"][index % 3], notes: "Контрольований кардіо-блок" };
     }
 
+    // Desktop sidebar: a curated, ordered subset (exercises / stats / changelog /
+    // settings intentionally live only in the Панель «Розділи» hub or the profile
+    // buttons, to keep the rail short). Order mirrors the «Розділи» hub.
+    const SIDEBAR_ORDER = ["dashboard", "workout", "calendar", "levels", "users", "rankings", "feedback", "subscription", "moderation", "admin", "profile"];
+
+    function sidebarNavItems() {
+        return SIDEBAR_ORDER
+            .map((id) => sectionItems.find((item) => item.id === id))
+            .filter(Boolean)
+            .filter((item) => {
+                if (item.id === "admin" || item.id === "moderation") {
+                    return isAdmin();
+                }
+                if (item.id === "subscription") {
+                    return !hasUnlimited();
+                }
+                return true;
+            });
+    }
+
     function renderShell() {
-        renderNavigation("sidebarNavigation", sectionItems.filter((item) => (item.id !== "admin" && item.id !== "moderation") || isAdmin()));
+        renderNavigation("sidebarNavigation", sidebarNavItems());
         renderMobileNavigation();
         renderCurrentUserButton();
         renderSidebarProfile();
@@ -1560,7 +1580,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     </div>
                 </section>
                 ${navHub()}
-                <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">${state.filters.activityScope === "all" ? "Спільна стрічка команди — чужі лише для перегляду." : "Твої завершені тренування."}</p></div><div class="activity-toolbar"><div class="segmented">${[["mine", "Мої"], ["all", "Усі"]].map(([value, label]) => `<button class="segment-button ${(state.filters.activityScope === "all" ? "all" : "mine") === value ? "active" : ""}" type="button" data-action="activity-scope" data-scope="${value}">${label}</button>`).join("")}</div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i>Рейтинги</button></div></div><div class="activity-feed">${activityFeed()}</div></section>
+                <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">${state.filters.activityScope === "all" ? "Спільна стрічка команди — чужі лише для перегляду." : "Твої завершені тренування."}</p></div><div class="activity-toolbar"><div class="segmented">${[["mine", "Мої"], ["all", "Усі"]].map(([value, label]) => `<button class="segment-button ${(state.filters.activityScope === "all" ? "all" : "mine") === value ? "active" : ""}" type="button" data-action="activity-scope" data-scope="${value}">${label}</button>`).join("")}</div></div></div><div class="activity-feed">${activityFeed()}</div></section>
             </div>
         `);
     }
@@ -1570,20 +1590,19 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     function navHub() {
         const newFb = newFeedbackCount();
         const links = [
-            { id: "exercises", title: "Вправи", caption: "Каталог і власні вправи", icon: "list-filter" },
             { id: "levels", title: "Прокачка", caption: "Рівні, XP та досягнення", icon: "medal" },
-            { id: "stats", title: "Статистика", caption: "Графіки та прогрес", icon: "bar-chart-3" },
-            { id: "rankings", title: "Рейтинги", caption: "Командний лідерборд", icon: "trophy" },
             { id: "users", title: "Команда", caption: "Учасники та активність", icon: "users" },
-            { id: "feedback", title: "Ідеї", caption: "Запити та фікси спільноти", icon: "lightbulb", badge: isAdmin() && newFb > 0 ? newFb : 0 },
-            { id: "calendar", title: "Календар", caption: "Історія тренувань", icon: "calendar-days" }
+            { id: "exercises", title: "Вправи", caption: "Каталог і власні вправи", icon: "list-filter" },
+            { id: "rankings", title: "Рейтинги", caption: "Командний лідерборд", icon: "trophy" },
+            { id: "feedback", title: "Ідеї", caption: "Запити та фікси спільноти", icon: "lightbulb", badge: isAdmin() && newFb > 0 ? newFb : 0 }
         ];
+        if (!hasUnlimited()) {
+            links.push({ id: "subscription", title: "GymOS PRO", caption: "Безліміт за $2/міс", icon: "gem", accent: true });
+        }
         if (isAdmin()) {
             const pendingEx = pendingExercises().length;
             links.push({ id: "moderation", title: "Модерація", caption: "Нові вправи на апрув", icon: "shield-check", badge: pendingEx > 0 ? pendingEx : 0 });
             links.push({ id: "admin", title: "Адмін", caption: "Ролі й доступи", icon: "shield" });
-        } else if (!hasUnlimited()) {
-            links.push({ id: "subscription", title: "GymOS PRO", caption: "Безліміт за $2/міс", icon: "gem", accent: true });
         }
         return `<section class="card span-12 nav-hub-card"><div class="card-header"><div><h2>Розділи</h2><p class="card-caption">Швидкий доступ до всіх інструментів GymOS.</p></div></div><div class="nav-hub">${links.map((link) => `<button class="nav-hub-item${link.accent ? " accent" : ""}" type="button" data-action="navigate" data-section="${link.id}"><span class="nav-hub-icon"><i data-lucide="${link.icon}"></i></span><span class="nav-hub-text"><strong>${escapeHtml(link.title)}</strong><span>${escapeHtml(link.caption)}</span></span>${link.badge ? `<span class="nav-hub-badge">${link.badge}</span>` : `<i class="nav-hub-arrow" data-lucide="chevron-right"></i>`}</button>`).join("")}</div></section>`;
     }
@@ -1680,7 +1699,22 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function exercises() {
-        content(`<section class="card"><div class="card-header"><div><h2>Каталог вправ</h2><p class="card-caption">Пошук працює за назвою, alias, м'язовою групою, патерном руху та обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div class="filter-row"><input type="search" placeholder="Пошук за назвою, alias, м'язом, патерном або обладнанням" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search"></div></section><section class="exercise-card-grid" id="exerciseCatalogGrid" style="margin-top:16px;">${exerciseCatalogCards()}</section>`);
+        content(`<section class="card"><div class="card-header"><div><h2>Каталог вправ</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням + фільтри за групою м'язів і обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div id="exerciseCatalogFilters">${catalogFilterRow()}</div></section><section class="exercise-card-grid" id="exerciseCatalogGrid" style="margin-top:16px;">${exerciseCatalogCards()}</section>`);
+    }
+
+    // Same filter row as the add-exercise modal: search + visual muscle-grid trigger
+    // + equipment select. Reuses the picker's shared filter state (pickerMuscle /
+    // pickerEquipment / exerciseSearch) so both surfaces filter identically.
+    function catalogFilterRow() {
+        const equipmentList = unique(state.database.exercises.map((exercise) => exercise.equipment).filter(Boolean));
+        const option = (value, label) => `<option value="${escapeHtml(value)}" ${state.filters.pickerEquipment === value ? "selected" : ""}>${escapeHtml(label)}</option>`;
+        const equipmentOptions = option("all", "Все обладнання") + equipmentList.map((value) => option(value, value)).join("");
+        const muscle = state.filters.pickerMuscle;
+        return `<input type="search" class="picker-search" placeholder="Пошук за назвою, alias, м'язом, патерном або обладнанням" value="${escapeHtml(state.filters.exerciseSearch)}" data-action="exercise-search">
+            <div class="picker-filter-row">
+                <button type="button" class="picker-muscle-trigger" data-action="open-muscle-grid"><span class="picker-muscle-ic">${muscleIcon(muscle)}</span><span class="picker-muscle-label">${escapeHtml(muscleLabel(muscle))}</span><i data-lucide="chevron-down" class="gselect-caret"></i></button>
+                <gym-select data-action="picker-filter-select" data-key="pickerEquipment">${equipmentOptions}</gym-select>
+            </div>`;
     }
 
     function exerciseCatalogCards() {
@@ -1750,7 +1784,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const summary = userStats(user.id);
         const info = userLevel(user.id);
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: true })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal)}</span></div><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="levels"><i data-lucide="medal"></i>Прокачка</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="changelog"><i data-lucide="sparkles"></i>Що нового</button></div></div></section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: true })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal)}</span></div><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="levels"><i data-lucide="medal"></i>Прокачка</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="changelog"><i data-lucide="sparkles"></i>Що нового</button></div>${achievementBadges(user.id)}</section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
@@ -1774,9 +1808,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             ["award", "Відкрите досягнення", "+50–400"]
         ];
         const heroCard = `<section class="card span-12 level-hero">
-            <div class="level-hero-main">${framedAvatar(user, "large", info.level)}<div class="level-hero-info">
-                <div class="tag-row">${levelBadge(info)}<span class="frame-name-badge">${escapeHtml(tier.name)}</span>${roleStatusBadge(user)}<span class="badge locked">Силовий клас: ${escapeHtml(mainRank(user.id))}</span></div>
+            <div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline">
                 <h2>Рівень ${info.level}${infoTip("Рівні та XP", XP_HOWTO)}</h2>
+                <div class="profile-badges">${levelBadge(info)}<span class="frame-name-badge">${escapeHtml(tier.name)}</span>${roleStatusBadge(user)}<span class="badge locked">Силовий клас: ${escapeHtml(mainRank(user.id))}</span></div>
                 <p class="card-caption">${info.isMax ? "Максимальний рівень досягнуто" : `${number(info.xpToNext)} XP до рівня ${info.level + 1}`} · Загалом ${number(info.xp)} XP</p>
                 <div class="level-progress"><div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div><span class="level-progress-label">${info.isMax ? "MAX" : `${number(info.xpIntoLevel)} / ${number(info.xpForLevel)} XP`}</span></div>
             </div></div>
@@ -2569,7 +2603,26 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": openAddExerciseModal,
             "open-muscle-grid": () => openSheet(pickerMuscleContent(), { fullscreen: true }),
-            "pick-muscle": () => { state.filters.pickerMuscle = actionElement.dataset.value; closeSheet(); element("exercisePickerBody").innerHTML = pickerBody(); iconsIn(element("modalLayer")); },
+            "pick-muscle": () => {
+                state.filters.pickerMuscle = actionElement.dataset.value;
+                closeSheet();
+                const pickerBodyEl = document.getElementById("exercisePickerBody");
+                if (pickerBodyEl) {
+                    pickerBodyEl.innerHTML = pickerBody();
+                    iconsIn(element("modalLayer"));
+                }
+                // Catalog uses the same visual muscle grid — refresh its filter row + grid.
+                const catalogFilters = document.getElementById("exerciseCatalogFilters");
+                if (catalogFilters) {
+                    catalogFilters.innerHTML = catalogFilterRow();
+                    iconsIn(catalogFilters);
+                }
+                const catalogGrid = document.getElementById("exerciseCatalogGrid");
+                if (catalogGrid) {
+                    catalogGrid.innerHTML = exerciseCatalogCards();
+                    iconsIn(catalogGrid);
+                }
+            },
             "muscle-grid-back": closeSheet,
             "open-save-template": () => openSaveTemplateModal(actionElement.dataset.workoutId),
             "save-workout-template": () => saveWorkoutTemplate(actionElement.dataset.workoutId),
@@ -3074,6 +3127,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         if (grid) {
             grid.innerHTML = exercisePickerCards();
             icons();
+        }
+        // The catalog shares the same filter state — refresh its grid too when open.
+        const catalogGrid = element("exerciseCatalogGrid");
+        if (catalogGrid) {
+            catalogGrid.innerHTML = exerciseCatalogCards();
+            iconsIn(catalogGrid);
         }
     }
 
@@ -3981,7 +4040,21 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const readonly = !canManage(workoutItem);
         const totalSets = workoutSetCount(workoutItem);
         const cardioMinutes = workoutCardioMinutes(workoutItem);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: totalSets }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${cardioMinutes} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="workout-stack" style="margin-top:14px;">${workoutItem.exercises.length ? workoutItem.exercises.map((workoutExercise) => `<article class="panel"><h3>${escapeHtml(exerciseById(workoutExercise.exerciseId).name)}</h3><p class="card-caption">${workoutExercise.sets.length} підходів · ${number(exerciseVolume(workoutExercise))} кг</p><div class="tag-row">${workoutExercise.sets.map((set) => `<span class="chip">${setTypeLabel(set.type)} · ${set.weight}кг × ${set.repetitions}</span>`).join("")}</div></article>`).join("") : emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.")}</div>`, { fullscreen: true });
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: totalSets }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${cardioMinutes} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" style="margin-top:14px;">${workoutItem.exercises.length ? workoutItem.exercises.map(workoutDetailExercise).join("") : emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.")}</div>`, { fullscreen: true });
+    }
+
+    // Compact, scannable exercise block for the workout-detail drawer: a small
+    // thumbnail + name/summary, then a clean numbered set list (index · type ·
+    // weight × reps) instead of a wall of chips.
+    function workoutDetailExercise(workoutExercise) {
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const media = exerciseMedia(exercise);
+        const thumb = media
+            ? `<div class="wd-thumb"><img src="${escapeHtml(media)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.wd-thumb')?.remove()"></div>`
+            : `<div class="wd-thumb wd-thumb-fallback"><i data-lucide="dumbbell"></i></div>`;
+        const orm = exerciseOneRepMax(workoutExercise);
+        const setRows = workoutExercise.sets.map((set, index) => `<div class="wd-set${set.isCompleted ? "" : " pending"}"><span class="wd-set-idx">${index + 1}</span><span class="wd-set-type type-${set.type}">${setTypeLabel(set.type)}</span><span class="wd-set-val"><strong>${number(set.weight)}</strong> кг × <strong>${set.repetitions}</strong></span></div>`).join("");
+        return `<article class="wd-exercise"><div class="wd-exercise-head">${thumb}<div class="wd-exercise-meta"><h3>${escapeHtml(exercise.name)}</h3><span class="card-caption">${workoutExercise.sets.length} підходів · ${number(exerciseVolume(workoutExercise))} кг${orm ? ` · 1ПМ ${number(orm)} кг` : ""}</span></div></div><div class="wd-set-list">${setRows}</div></article>`;
     }
 
     function requestNotifications() {
@@ -4274,6 +4347,17 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return `<div class="section-heading"><h2>${escapeHtml(title)}</h2>${tip ? infoTip(title, tip) : ""}</div>`;
     }
 
+    // A row of gold achievement icons (unlocked only, no captions) so anyone opening
+    // a profile can see what the person earned. Each icon is a tooltip trigger
+    // (title + caption) via the shared [data-tip-body] engine.
+    function achievementBadges(userId) {
+        const unlocked = userAchievements(userId).filter((achievement) => achievement.unlockedAt);
+        if (!unlocked.length) {
+            return "";
+        }
+        return `<div class="ach-badge-row" role="list" aria-label="Досягнення">${unlocked.map((achievement) => `<button class="ach-badge" type="button" role="listitem" tabindex="0" data-tip-title="${escapeHtml(achievement.title)}" data-tip-body="${escapeHtml(achievement.caption)}" aria-label="${escapeHtml(achievement.title)}"><i data-lucide="${achievement.icon}"></i></button>`).join("")}</div>`;
+    }
+
     function metric(title, value, icon, caption, span = "span-3", tip = "") {
         // Compact stat tile: icon + value + label. caption kept in the signature
         // for callers but rendered as a title attr only (minimalist, less height).
@@ -4452,12 +4536,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const isSuper = adminEmails.has(String(user.email || "").toLowerCase());
         const role = isSuper ? "admin" : String(user.role || "free").toLowerCase();
         const roleControl = isSuper
-            ? `<span class="role-badge admin"><i data-lucide="shield"></i>Власник</span>`
-            : `<gym-select class="admin-role-select" data-action="set-role" data-user-id="${user.id}">${[["free", "Free"], ["premium", "PRO"], ["admin", "Адмін"]].map(([value, label]) => `<option value="${value}" ${role === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select>`;
+            ? `<span class="role-badge admin admin-owner-badge"><i data-lucide="shield"></i>Власник</span>`
+            : `<label class="admin-role-field"><span class="admin-role-label">Роль</span><gym-select class="admin-role-select" data-action="set-role" data-user-id="${user.id}">${[["free", "Free"], ["premium", "PRO"], ["admin", "Адмін"]].map(([value, label]) => `<option value="${value}" ${role === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></label>`;
         const approveControl = user.approved === false
             ? `<button class="button button-primary compact" type="button" data-action="approve-user" data-user-id="${user.id}"><i data-lucide="check"></i>Дозволити</button>`
             : (isSuper ? "" : `<button class="button button-secondary compact" type="button" data-action="revoke-user" data-user-id="${user.id}"><i data-lucide="user-x"></i>Відкликати</button>`);
-        return `<div class="admin-user-row"><div class="admin-user-main">${avatar(user)}<div class="admin-user-info"><strong>${escapeHtml(user.displayName || "—")}${user.approved === false ? ` <span class="badge pending">очікує</span>` : ""}</strong><p class="card-caption">${escapeHtml(user.email || "—")}</p><p class="card-caption">${summary.completedWorkouts} трен · ${exCount} вправ</p></div></div><div class="admin-user-controls">${roleControl}${approveControl}</div></div>`;
+        return `<div class="admin-user-row"><div class="admin-user-main">${avatar(user)}<div class="admin-user-info"><strong>${escapeHtml(user.displayName || "—")}${user.approved === false ? ` <span class="badge pending">очікує</span>` : ""}</strong><p class="card-caption admin-user-email">${escapeHtml(user.email || "—")}</p><p class="card-caption">${summary.completedWorkouts} трен · ${exCount} вправ</p></div></div><div class="admin-user-controls">${roleControl}${approveControl}</div></div>`;
     }
 
     function adminPanel() {
@@ -4472,7 +4556,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         };
         const pendingEx = pendingExercises();
         content(`<div class="grid dashboard-grid">
-            <section class="card span-12"><div class="card-header"><div><h2>Адмін-панель</h2><p class="card-caption">Доступи, ролі та модерація GymOS в одному місці.</p></div><span class="role-badge admin"><i data-lucide="shield"></i>Адмін</span></div>${kpi([{ label: "Користувачі", value: counts.total }, { label: "PRO", value: counts.premium }, { label: "Адміни", value: counts.admin }, { label: "На апруві", value: counts.pending }, { label: "Вправи", value: state.database.exercises.length }, { label: "На модерації", value: pendingEx.length }])}</section>
+            <section class="card span-12"><div class="card-header admin-panel-head"><div><h2>Адмін-панель</h2><p class="card-caption">Доступи, ролі та модерація GymOS в одному місці.</p></div><span class="role-badge admin admin-head-badge"><i data-lucide="shield"></i>Адмін</span></div>${kpi([{ label: "Користувачі", value: counts.total }, { label: "PRO", value: counts.premium }, { label: "Адміни", value: counts.admin }, { label: "На апруві", value: counts.pending }, { label: "Вправи", value: state.database.exercises.length }, { label: "На модерації", value: pendingEx.length }])}</section>
             ${pendingUsers.length ? `<section class="card span-12 approval-card"><div class="card-header"><div><h2>Нові користувачі <span class="badge pending">${pendingUsers.length}</span></h2><p class="card-caption">Підтверди доступ до застосунку.</p></div></div><div class="admin-user-list">${pendingUsers.map(adminUserRow).join("")}</div></section>` : ""}
             <section class="card span-12"><div class="card-header"><div><h2>Користувачі та ролі</h2><p class="card-caption">Free · PRO (безліміт) · Адмін. Зміни застосовуються одразу.</p></div></div><div class="admin-user-list">${users.map(adminUserRow).join("")}</div></section>
             ${pendingEx.length ? approvalQueueCard() : ""}
@@ -4515,7 +4599,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const info = userLevel(user.id);
         const isCurrent = user.id === currentUser().id;
         const history = workoutsFor(user.id).sort(byDateDesc);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row">${framedAvatar(user, "large", info.level)}<div><div class="tag-row" style="margin-bottom:8px;">${levelBadge(info, { link: isCurrent })}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${roleStatusBadge(user)}${isCurrent ? `<span class="status-badge completed">Це ви</span>` : ""}</div><h2>${escapeHtml(user.displayName)}</h2><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}<section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: isCurrent })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="badge unlocked">Це ви</span>` : ""}</div><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div>${achievementBadges(user.id)}</section><section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}</div>`);
     }
 
     function exerciseMedia(exercise) {
@@ -4928,10 +5012,20 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
     function filteredExercises() {
         const search = state.filters.exerciseSearch.trim().toLowerCase();
-        let items = state.database.exercises;
-        if (search) {
-            items = items.filter((exercise) => [exercise.name, exercise.aliases.join(" "), exercise.primaryMuscleGroup, exercise.secondaryMuscleGroups.join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search));
-        }
+        const muscle = state.filters.pickerMuscle;
+        const equip = state.filters.pickerEquipment;
+        const items = state.database.exercises.filter((exercise) => {
+            if (muscle !== "all" && exercise.primaryMuscleGroup !== muscle) {
+                return false;
+            }
+            if (equip !== "all" && exercise.equipment !== equip) {
+                return false;
+            }
+            if (!search) {
+                return true;
+            }
+            return [exercise.name, exercise.aliases.join(" "), exercise.primaryMuscleGroup, exercise.secondaryMuscleGroups.join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search);
+        });
         return sortExercisesByReaction(items);
     }
 
@@ -4952,6 +5046,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             const byReaction = reactionRank(left) - reactionRank(right);
             if (byReaction) {
                 return byReaction;
+            }
+            // Surface the current user's own exercises first within a reaction tier
+            // (same as the add-exercise picker).
+            const byMine = (isMyExercise(right) ? 1 : 0) - (isMyExercise(left) ? 1 : 0);
+            if (byMine) {
+                return byMine;
             }
             return String(left.name || "").localeCompare(String(right.name || ""), "uk");
         });

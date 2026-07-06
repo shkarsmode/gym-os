@@ -3025,6 +3025,59 @@ tr:last-child td {
     gap: 8px;
 }
 
+/* Gold achievement icons — a compact row of what the person earned, shown on any
+   profile (own + others'). Icon only; the shared tooltip engine shows the name. */
+.ach-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border);
+}
+
+.ach-badge {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    color: #7a5a12;
+    background:
+        radial-gradient(circle at 32% 28%, #fff7dc 0%, #ffe08a 34%, #f5b301 64%, #b9770a 100%);
+    border: 1px solid #ffd766;
+    box-shadow: 0 2px 8px rgba(180, 120, 10, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.7);
+    transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.ach-badge:hover,
+.ach-badge:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(214, 150, 20, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.8);
+    outline: none;
+}
+
+.ach-badge svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2.4;
+}
+
+@media (max-width: 560px) {
+    .ach-badge {
+        width: 36px;
+        height: 36px;
+    }
+
+    .ach-badge svg {
+        width: 18px;
+        height: 18px;
+    }
+}
+
 @media (max-width: 560px) {
     .profile-identity {
         align-items: flex-start;
@@ -3879,6 +3932,26 @@ ul {
     margin-top: 14px;
 }
 
+/* Admin panel header: keep the «Адмін» badge top-aligned with breathing room so
+   it never overlaps the title/caption (it used to stretch on mobile). */
+.admin-panel-head {
+    align-items: flex-start;
+}
+
+.admin-head-badge {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    margin-left: 12px;
+    white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+    .admin-head-badge {
+        margin-left: 0;
+        margin-top: 10px;
+    }
+}
+
 .admin-user-row {
     display: flex;
     align-items: center;
@@ -3913,11 +3986,38 @@ ul {
     white-space: nowrap;
 }
 
+.admin-user-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .admin-user-controls {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: flex-end;
+    gap: 10px;
     flex-shrink: 0;
+}
+
+/* Labelled role picker so the select never collapses to an empty box in the flex
+   row (it had no min-width before). */
+.admin-role-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 0 0 auto;
+    width: 132px;
+}
+
+.admin-role-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-muted);
+}
+
+.admin-owner-badge {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .admin-role-select {
@@ -3937,10 +4037,22 @@ ul {
 
     .admin-user-controls {
         justify-content: space-between;
+        align-items: flex-end;
     }
 
-    .admin-role-select {
+    .admin-role-field {
         flex: 1;
+        width: auto;
+        min-width: 0;
+    }
+
+    .admin-user-controls .button {
+        flex: 1;
+    }
+
+    .admin-owner-badge {
+        flex: 1;
+        justify-content: center;
     }
 }
 
@@ -6949,6 +7061,136 @@ html.compact-ui .chip {
     height: 15px;
     color: var(--color-accent);
     flex: 0 0 auto;
+}
+
+/* ===== Workout-detail drawer — compact exercise/set list ===== */
+.wd-exercise-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.wd-exercise {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    overflow: hidden;
+}
+
+.wd-exercise-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+}
+
+.wd-thumb {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--color-elevated);
+    display: grid;
+    place-items: center;
+}
+
+.wd-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.wd-thumb-fallback {
+    color: var(--color-faint);
+}
+
+.wd-thumb-fallback svg {
+    width: 22px;
+    height: 22px;
+}
+
+.wd-exercise-meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.wd-exercise-meta h3 {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wd-set-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.wd-set {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    border-top: 1px solid var(--color-border);
+    font-size: 14px;
+}
+
+.wd-set:first-child {
+    border-top: none;
+}
+
+.wd-set.pending {
+    opacity: 0.5;
+}
+
+.wd-set-idx {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--color-surface-2);
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.wd-set-type {
+    flex: 1;
+    min-width: 0;
+    color: var(--color-muted);
+    font-size: 12.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wd-set-type.type-working {
+    color: var(--color-accent-strong);
+}
+
+.wd-set-type.type-failure {
+    color: var(--color-danger);
+}
+
+.wd-set-val {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+}
+
+.wd-set-val strong {
+    font-family: var(--font-display);
+    font-weight: 700;
 }
 
 /* ===== Focus mode — full-screen one-exercise / one-set flow ===== */
