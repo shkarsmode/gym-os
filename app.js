@@ -42,6 +42,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             statsWorkoutType: "all",
             pickerMuscle: "all",
             pickerEquipment: "all",
+            rankingsMuscle: "Груди", // default best-lift category in Рейтинги
             feedbackType: "feature"
         },
         timer: {
@@ -1748,7 +1749,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function rankings() {
-        const muscle = state.filters.rankingsMuscle || "all";
+        const groups = orderedMuscleGroups();
+        const requested = state.filters.rankingsMuscle || "Груди";
+        // Fall back gracefully if the preferred default group isn't in the catalog.
+        const muscle = requested === "all" || groups.includes(requested) ? requested : (groups.includes("Груди") ? "Груди" : "all");
         const muscleOptions = [`<option value="all"${muscle === "all" ? " selected" : ""}>Найкращий загалом</option>`]
             .concat(orderedMuscleGroups().map((group) => `<option value="${escapeHtml(group)}"${muscle === group ? " selected" : ""}>${escapeHtml(group)}</option>`))
             .join("");
@@ -4040,7 +4044,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const readonly = !canManage(workoutItem);
         const totalSets = workoutSetCount(workoutItem);
         const cardioMinutes = workoutCardioMinutes(workoutItem);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: totalSets }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${cardioMinutes} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" style="margin-top:14px;">${workoutItem.exercises.length ? workoutItem.exercises.map(workoutDetailExercise).join("") : emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.")}</div>`, { fullscreen: true });
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutItem.exercises.length, label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolume(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" style="margin-top:14px;">${workoutItem.exercises.length ? workoutItem.exercises.map(workoutDetailExercise).join("") : emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.")}</div>`, { fullscreen: true });
     }
 
     // Compact, scannable exercise block for the workout-detail drawer: a small
@@ -4372,6 +4376,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return `<div class="kpi-strip">${items.map((item) => `<div class="kpi-item"><div class="kpi-value">${escapeHtml(String(item.value))}</div><div class="kpi-label">${escapeHtml(item.label)}</div></div>`).join("")}</div>`;
     }
 
+    // Compact inline stat strip (small icon + value + muted label) for workout cards
+    // and the detail drawer — replaces the oversized KPI blocks there.
+    function workoutStatStrip(items) {
+        return `<div class="wstat-strip">${items.map((item) => `<span class="wstat"><i data-lucide="${item.icon}"></i><strong>${escapeHtml(String(item.value))}</strong>${item.label ? `<span class="wstat-lbl">${escapeHtml(item.label)}</span>` : ""}</span>`).join("")}</div>`;
+    }
+
     function insightCard(item) {
         return `<article class="insight-card"><strong>${escapeHtml(item.title)}</strong><p class="card-caption">${escapeHtml(item.caption)}</p></article>`;
     }
@@ -4674,7 +4684,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return workouts.map((workoutItem) => {
             const owner = userById(workoutItem.userId);
             const readonly = !canManage(workoutItem);
-            return `<article class="history-card" data-action="open-workout" data-workout-id="${workoutItem.id}"><div class="card-header"><div><div class="tag-row" style="margin-bottom:8px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}</div><h3>${escapeHtml(workoutLabel(workoutItem))}</h3><p class="card-caption">${formatDate(workoutItem.date)} · ${escapeHtml(owner.displayName)}</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button></div>${kpi([{ label: "Вправи", value: workoutItem.exercises.length }, { label: "Підходи", value: workoutSetCount(workoutItem) }, { label: "Обсяг", value: `${number(workoutVolume(workoutItem))} кг` }, { label: "Кардіо", value: `${workoutCardioMinutes(workoutItem)} хв` }, { label: "Тривалість", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption history-notes">${escapeHtml(workoutItem.notes).slice(0, 140)}</p>` : ""}</article>`;
+            return `<article class="history-card" data-action="open-workout" data-workout-id="${workoutItem.id}"><div class="card-header"><div><div class="tag-row" style="margin-bottom:8px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}</div><h3>${escapeHtml(workoutLabel(workoutItem))}</h3><p class="card-caption">${formatDate(workoutItem.date)} · ${escapeHtml(owner.displayName)}</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button></div>${workoutStatStrip([{ icon: "dumbbell", value: workoutItem.exercises.length, label: "вправ" }, { icon: "list-checks", value: workoutSetCount(workoutItem), label: "підходів" }, { icon: "boxes", value: `${number(workoutVolume(workoutItem))} кг` }, { icon: "heart-pulse", value: `${workoutCardioMinutes(workoutItem)} хв`, label: "кардіо" }, { icon: "timer", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption history-notes">${escapeHtml(workoutItem.notes).slice(0, 140)}</p>` : ""}</article>`;
         }).join("");
     }
 

@@ -1479,13 +1479,9 @@ select option {
     }
 
     /* Title is redundant on phones (it's in the head card) and was making the bar
-       overflow — drop it so the two action buttons share the row and shrink. */
+       overflow. Hide the whole info wrapper — an empty flex child still consumed a
+       gap on the left, giving the bar uneven padding around the action buttons. */
     .workout-actionbar-info {
-        flex: 0 1 auto;
-        min-width: 0;
-    }
-
-    .workout-actionbar-title {
         display: none;
     }
 
@@ -2106,34 +2102,68 @@ tr:last-child td {
     text-decoration: none;
 }
 
+/* Calendar events — a subtle tinted pill with a colored left accent, NOT a solid
+   saturated bar (the old fully-filled yellow/green rows were eye-searing). */
 .fc-event {
     border: 0 !important;
+    border-left: 3px solid var(--color-accent) !important;
     border-radius: 6px !important;
-    padding: 1px 5px !important;
+    padding: 2px 7px !important;
     font-size: 11.5px !important;
     font-weight: 600 !important;
     cursor: pointer;
-    background: var(--color-accent) !important;
-    color: #06140d !important;
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-2)) !important;
+    color: var(--color-text) !important;
 }
 
 .fc-event.workout-status-planned {
-    background: var(--color-info) !important;
-    color: #06121f !important;
+    border-left-color: var(--color-info) !important;
+    background: color-mix(in srgb, var(--color-info) 16%, var(--color-surface-2)) !important;
 }
 
 .fc-event.workout-status-active {
-    background: var(--color-warning) !important;
-    color: #1c1402 !important;
+    border-left-color: var(--color-warning) !important;
+    background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface-2)) !important;
 }
 
 .fc-event.workout-status-completed {
-    background: var(--color-accent) !important;
-    color: #06140d !important;
+    border-left-color: var(--color-accent) !important;
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-2)) !important;
+}
+
+/* List view (mobile): transparent rows with just a colored status dot — no more
+   full-width solid color bars. */
+.fc-list-event {
+    background: transparent !important;
+    border-left: 0 !important;
+}
+
+.fc-list-event td {
+    border-color: var(--color-border) !important;
 }
 
 .fc .fc-list-event:hover td {
-    background: var(--color-elevated);
+    background: var(--color-elevated) !important;
+}
+
+.fc-list-event .fc-list-event-dot {
+    border-color: var(--color-accent) !important;
+}
+
+.fc-list-event.workout-status-planned .fc-list-event-dot {
+    border-color: var(--color-info) !important;
+}
+
+.fc-list-event.workout-status-active .fc-list-event-dot {
+    border-color: var(--color-warning) !important;
+}
+
+.fc-list-event.workout-status-completed .fc-list-event-dot {
+    border-color: var(--color-accent) !important;
+}
+
+.fc-list-event .fc-list-event-title {
+    color: var(--color-text) !important;
 }
 
 /* Calendar event: member name on the left, workout number (#N) on the right. */
@@ -2949,6 +2979,7 @@ tr:last-child td {
 .activity-feed {
     display: grid;
     gap: 10px;
+    margin-top: 14px;
 }
 
 .activity-item {
@@ -2992,6 +3023,45 @@ tr:last-child td {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+}
+
+/* Compact workout stat strip — small icon + value + muted label, wrapping inline
+   (replaces the oversized KPI blocks in the detail drawer & history cards). */
+.wstat-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wstat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-2);
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.wstat svg {
+    width: 15px;
+    height: 15px;
+    color: var(--color-accent);
+    flex: 0 0 auto;
+}
+
+.wstat strong {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.wstat-lbl {
+    color: var(--color-muted);
+    font-size: 12px;
 }
 
 .profile-header {
@@ -3045,25 +3115,25 @@ tr:last-child td {
     padding: 0;
     border-radius: 50%;
     cursor: pointer;
-    color: #7a5a12;
-    background:
-        radial-gradient(circle at 32% 28%, #fff7dc 0%, #ffe08a 34%, #f5b301 64%, #b9770a 100%);
-    border: 1px solid #ffd766;
-    box-shadow: 0 2px 8px rgba(180, 120, 10, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.7);
-    transition: transform 0.14s ease, box-shadow 0.14s ease;
+    color: #f5c451;
+    background: color-mix(in srgb, #f5b301 15%, var(--color-surface-2));
+    border: 1px solid color-mix(in srgb, #f5b301 40%, transparent);
+    box-shadow: none;
+    transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 
 .ach-badge:hover,
 .ach-badge:focus-visible {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(214, 150, 20, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.8);
+    background: color-mix(in srgb, #f5b301 24%, var(--color-surface-2));
+    border-color: color-mix(in srgb, #f5b301 60%, transparent);
     outline: none;
 }
 
 .ach-badge svg {
-    width: 20px;
-    height: 20px;
-    stroke-width: 2.4;
+    width: 19px;
+    height: 19px;
+    stroke-width: 2;
 }
 
 @media (max-width: 560px) {
@@ -3073,8 +3143,8 @@ tr:last-child td {
     }
 
     .ach-badge svg {
-        width: 18px;
-        height: 18px;
+        width: 17px;
+        height: 17px;
     }
 }
 
@@ -4233,6 +4303,11 @@ ul {
     width: 100%;
     padding: 8px 12px;
     font-size: 13px;
+}
+
+/* Catalog filter block sits below the card header («Власна вправа») — give it room. */
+#exerciseCatalogFilters {
+    margin-top: 14px;
 }
 
 .picker-filter-row {
