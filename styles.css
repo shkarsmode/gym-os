@@ -1956,7 +1956,9 @@ select option {
 
 /* Exercise media thumbnail (catalog cards + "Додати вправу" picker) */
 .exercise-thumb {
+    position: relative;
     margin: -15px -15px 12px;
+    min-height: 150px;
     overflow: hidden;
     border-radius: var(--radius-md) var(--radius-md) 0 0;
     background: var(--color-elevated);
@@ -1964,10 +1966,32 @@ select option {
 }
 
 .exercise-thumb img {
+    position: relative;
+    z-index: 1;
     display: block;
     width: 100%;
     height: 150px;
     object-fit: cover;
+}
+
+/* Muscle-silhouette placeholder shown behind the gif — visible when an exercise has
+   no media or its gif fails to load, so every card has a consistent preview. */
+.exercise-thumb-ph {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 50% 40%, var(--color-elevated), var(--color-surface-2));
+}
+
+.exercise-thumb-ph svg {
+    width: 74px;
+    height: 74px;
+    opacity: 0.85;
+}
+
+.exercise-thumb.is-placeholder {
+    background: var(--color-surface-2);
 }
 
 .media-placeholder-label {
@@ -6671,16 +6695,46 @@ html.compact-ui .chip {
 }
 
 .ach-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    padding: 16px 12px;
+    padding: 18px 12px 14px;
     text-align: center;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     background: var(--color-surface-2);
     opacity: 0.55;
+}
+
+/* XP as its own pill in the corner, so it no longer blends into the unlock date. */
+.ach-xp-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 2px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-faint);
+    font-size: 10.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+}
+
+.ach-card.unlocked .ach-xp-badge {
+    background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+    color: var(--color-warning);
+}
+
+.ach-date {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .ach-card.unlocked {

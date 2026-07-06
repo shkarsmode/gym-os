@@ -1836,9 +1836,19 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         </section>`;
         const achievements = userAchievements(user.id);
         const unlockedCount = achievements.filter((achievement) => achievement.unlockedAt).length;
+        // Show unlocked first (most recent leading), locked after — sorted by relevance.
+        const sortedAchievements = [...achievements].sort((left, right) => {
+            if (Boolean(left.unlockedAt) !== Boolean(right.unlockedAt)) {
+                return left.unlockedAt ? -1 : 1;
+            }
+            if (left.unlockedAt && right.unlockedAt) {
+                return new Date(right.unlockedAt) - new Date(left.unlockedAt);
+            }
+            return left.xp - right.xp;
+        });
         const achievementsCard = `<section class="card span-12">
             <div class="card-header"><div><h2>Досягнення</h2><p class="card-caption">Відкрито ${unlockedCount} з ${achievements.length} — кожне дає XP</p></div></div>
-            <div class="ach-grid">${achievements.map((achievement) => `<div class="ach-card${achievement.unlockedAt ? " unlocked" : ""}"><span class="ach-ico"><i data-lucide="${achievement.unlockedAt ? achievement.icon : "lock"}"></i></span><strong class="ach-title">${escapeHtml(achievement.title)}</strong><span class="ach-cap">${escapeHtml(achievement.caption)}</span><span class="ach-meta">${achievement.unlockedAt ? `${formatDate(achievement.unlockedAt)} · +${achievement.xp} XP` : `+${achievement.xp} XP`}</span></div>`).join("")}</div>
+            <div class="ach-grid">${sortedAchievements.map((achievement) => `<div class="ach-card${achievement.unlockedAt ? " unlocked" : ""}"><span class="ach-xp-badge">+${achievement.xp} XP</span><span class="ach-ico"><i data-lucide="${achievement.unlockedAt ? achievement.icon : "lock"}"></i></span><strong class="ach-title">${escapeHtml(achievement.title)}</strong><span class="ach-cap">${escapeHtml(achievement.caption)}</span>${achievement.unlockedAt ? `<span class="ach-date">${formatDate(achievement.unlockedAt)}</span>` : ""}</div>`).join("")}</div>
         </section>`;
         const historyCard = `<section class="card span-12">
             <h2>Останні нарахування XP</h2>
@@ -3180,11 +3190,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             ? `<p class="card-caption picker-count">Показано ${limit} з ${items.length} — уточни пошук або фільтри.</p>`
             : `<p class="card-caption picker-count">Знайдено: ${items.length}</p>`;
         return note + shown.map((exercise) => {
-            const media = exerciseMedia(exercise);
             const mineBadge = isMyExercise(exercise) ? `<span class="pill-badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : "";
-            const overlay = media && mineBadge ? `<div class="exercise-card-tags">${mineBadge}</div>` : "";
-            const inlineBadge = !media && mineBadge ? `<div class="exercise-card-tags inline">${mineBadge}</div>` : "";
-            return `<article class="exercise-card${media ? " has-thumb" : ""}">${exerciseThumb(exercise)}${overlay}${inlineBadge}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`;
+            const overlay = mineBadge ? `<div class="exercise-card-tags">${mineBadge}</div>` : "";
+            return `<article class="exercise-card has-thumb">${exerciseThumb(exercise)}${overlay}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`;
         }).join("");
     }
 
@@ -4353,11 +4361,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     // a profile can see what the person earned. Each icon is a tooltip trigger
     // (title + caption) via the shared [data-tip-body] engine.
     function achievementBadges(userId) {
-        const unlocked = userAchievements(userId).filter((achievement) => achievement.unlockedAt);
+        // Most recently unlocked first, so the freshest achievements lead the row.
+        const unlocked = userAchievements(userId)
+            .filter((achievement) => achievement.unlockedAt)
+            .sort((left, right) => new Date(right.unlockedAt) - new Date(left.unlockedAt));
         if (!unlocked.length) {
             return "";
         }
-        return `<div class="ach-badge-row" role="list" aria-label="Досягнення">${unlocked.map((achievement) => `<button class="ach-badge" type="button" role="listitem" tabindex="0" data-tip-title="${escapeHtml(achievement.title)}" data-tip-body="${escapeHtml(achievement.caption)}" aria-label="${escapeHtml(achievement.title)}"><i data-lucide="${achievement.icon}"></i></button>`).join("")}</div>`;
+        return `<div class="ach-badge-row" role="list" aria-label="Досягнення">${unlocked.map((achievement) => `<button class="ach-badge" type="button" role="listitem" tabindex="0" data-tip-title="${escapeHtml(achievement.title)}" data-tip-body="${escapeHtml(achievement.caption)} · +${achievement.xp} XP" aria-label="${escapeHtml(achievement.title)}"><i data-lucide="${achievement.icon}"></i></button>`).join("")}</div>`;
     }
 
     function metric(title, value, icon, caption, span = "span-3", tip = "") {
@@ -4392,17 +4403,16 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const pending = exercise.status === "pending";
         const canEdit = canEditExercise(exercise);
         const added = exercise.createdAt ? formatDate(exercise.createdAt) : "";
-        const media = exerciseMedia(exercise);
         const owner = exercise.createdByUserId ? userById(exercise.createdByUserId) : null;
         const ownerName = exerciseOwnerName(exercise);
         const badges = `${isMyExercise(exercise) ? `<span class="pill-badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : ""}${pending ? `<span class="pill-badge pending"><i data-lucide="clock"></i>На модерації</span>` : ""}`;
-        const overlay = media && badges ? `<div class="exercise-card-tags">${badges}</div>` : "";
-        const inlineBadges = !media && badges ? `<div class="exercise-card-tags inline">${badges}</div>` : "";
+        // Thumb is always present now (gif or muscle placeholder), so badges overlay it.
+        const overlay = badges ? `<div class="exercise-card-tags">${badges}</div>` : "";
         const actions = canEdit
             ? `<div class="exercise-card-actions">${pending && isAdmin() ? `<button class="icon-button success" type="button" title="Схвалити" data-action="approve-exercise" data-exercise-id="${exercise.id}"><i data-lucide="check"></i></button>` : ""}<button class="icon-button" type="button" title="Редагувати" data-action="edit-exercise" data-exercise-id="${exercise.id}"><i data-lucide="pen-line"></i></button><button class="icon-button danger" type="button" title="Видалити" data-action="delete-exercise" data-exercise-id="${exercise.id}"><i data-lucide="trash-2"></i></button></div>`
             : "";
         const meta = `<div class="exercise-meta" title="${escapeHtml(ownerName)}${added ? ` · ${added}` : ""}">${owner ? avatar(owner, "tiny") : `<span class="exercise-meta-fallback"><i data-lucide="user-round"></i></span>`}<div class="exercise-meta-text"><span class="exercise-meta-name">${escapeHtml(ownerName)}</span>${added ? `<span class="exercise-meta-date">${added}</span>` : ""}</div></div>`;
-        return `<article class="exercise-card${media ? " has-thumb" : ""}${pending ? " is-pending" : ""}${exercise.myReaction === "dislike" ? " is-disliked" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}${overlay}<div class="exercise-card-body">${inlineBadges}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption exercise-card-desc">${escapeHtml(exercise.description)}</p><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></div><div class="exercise-card-footer">${meta}${actions}</div>${reactionBar(exercise)}</article>`;
+        return `<article class="exercise-card has-thumb${pending ? " is-pending" : ""}${exercise.myReaction === "dislike" ? " is-disliked" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}${overlay}<div class="exercise-card-body"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption exercise-card-desc">${escapeHtml(exercise.description)}</p><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></div><div class="exercise-card-footer">${meta}${actions}</div>${reactionBar(exercise)}</article>`;
     }
 
     // Like / dislike controls + shared counts. Lives in its own bottom row so it
@@ -4628,10 +4638,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
     function exerciseThumb(exercise) {
         const url = exerciseMedia(exercise);
+        // Always render a thumb: a muscle-group silhouette placeholder sits behind the
+        // gif, so an exercise with no media (or a gif that fails to load) still shows a
+        // consistent preview instead of collapsing to a text-only card.
+        const placeholder = `<span class="exercise-thumb-ph" aria-hidden="true">${muscleIcon(exercise.primaryMuscleGroup)}</span>`;
         if (!url) {
-            return "";
+            return `<div class="exercise-thumb is-placeholder">${placeholder}</div>`;
         }
-        return `<div class="exercise-thumb"><img src="${escapeHtml(url)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.exercise-thumb')?.remove()"></div>`;
+        return `<div class="exercise-thumb">${placeholder}<img src="${escapeHtml(url)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.exercise-thumb')?.classList.add('is-placeholder'); this.remove();"></div>`;
     }
 
     function media(exercise) {
@@ -5273,8 +5287,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     // the level (see lib/levels.js) and the events power the Levels-page history.
     // Everything an achievement check can look at, pre-filtered to the user.
     function achievementData(userId, records = null) {
+        const workouts = workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc);
+        // Tenure ("years of service") counts from the account creation date, falling
+        // back to the first-ever workout if the profile has no createdAt.
+        const user = userById(userId);
+        const joinedAt = user?.createdAt || workouts[0]?.date || null;
         return {
-            workouts: workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc),
+            workouts,
+            joinedAt,
             records: records || recordsFor(userId),
             ideas: (state.database.featureRequests || []).filter((item) => item.userId === userId),
             customExercises: state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt)),
