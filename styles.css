@@ -2591,6 +2591,12 @@ tr:last-child td {
     align-items: center;
     gap: 12px;
     padding: 11px 13px;
+    animation: timerMorphIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes timerMorphIn {
+    from { transform: scale(0.68); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
 }
 
 .floating-timer-label {
@@ -2651,13 +2657,14 @@ tr:last-child td {
    action bar. Tap to expand back to the full card. */
 .floating-timer.collapsed {
     left: auto;
-    right: 14px;
+    right: 16px;
+    bottom: 28px;
     width: auto;
     border: none;
     background: transparent;
     box-shadow: none;
     overflow: visible;
-    transform: translateY(140%);
+    transform: translateY(160%);
 }
 
 .floating-timer.collapsed.visible {
@@ -2668,15 +2675,16 @@ tr:last-child td {
     position: relative;
     display: grid;
     place-items: center;
-    width: 60px;
-    height: 60px;
+    width: 74px;
+    height: 74px;
     padding: 0;
     border: 1px solid var(--color-accent-border);
     border-radius: 50%;
     background: var(--color-elevated);
     color: var(--color-text);
     cursor: pointer;
-    box-shadow: var(--shadow-card), 0 0 18px -6px color-mix(in srgb, var(--color-accent) 55%, transparent);
+    box-shadow: var(--shadow-card), 0 0 20px -6px color-mix(in srgb, var(--color-accent) 58%, transparent);
+    animation: timerMorphIn 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .floating-timer-circle-ring {
@@ -2691,7 +2699,7 @@ tr:last-child td {
 
 .floating-timer-circle-value {
     font-family: var(--font-display);
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 800;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
@@ -2722,7 +2730,9 @@ tr:last-child td {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .floating-timer.overtime .floating-timer-circle { animation: none; }
+    .floating-timer.overtime .floating-timer-circle,
+    .floating-timer-circle,
+    .floating-timer-body { animation: none; }
 }
 
 /* ---------- Busy overlay / sync ---------- */
@@ -2986,6 +2996,40 @@ tr:last-child td {
 
 .profile-header {
     flex-wrap: wrap;
+}
+
+/* Profile identity: avatar + name/badges/meta stacked cleanly (badges below the
+   name, not crammed above it). */
+.profile-identity {
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+}
+
+.profile-headline {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-headline h2 {
+    margin: 0;
+    line-height: 1.15;
+}
+
+.profile-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 560px) {
+    .profile-identity {
+        align-items: flex-start;
+        gap: 12px;
+    }
 }
 
 ol,
@@ -3254,8 +3298,8 @@ ul {
     /* Collapsed circle hugs the right edge above the bottom nav. */
     .floating-timer.collapsed {
         left: auto;
-        right: calc(12px + env(safe-area-inset-right));
-        bottom: calc(var(--mobile-nav-height) + 12px);
+        right: calc(14px + env(safe-area-inset-right));
+        bottom: calc(var(--mobile-nav-height) + 22px);
     }
 
     /* On mobile the save-status chip is icon-only to stay out of the way. */
@@ -5546,6 +5590,16 @@ ul {
 }
 
 /* ===== Settings preference controls ===== */
+.settings-logout {
+    display: flex;
+    justify-content: center;
+}
+
+.settings-logout .button {
+    min-width: 220px;
+    justify-content: center;
+}
+
 .pref-row {
     display: flex;
     flex-direction: column;
@@ -6612,6 +6666,153 @@ html.compact-ui .chip {
     font-size: 12px;
     font-weight: 600;
     color: var(--color-muted);
+}
+
+/* Leaderboard as a responsive card-list (replaces the cramped mobile table):
+   rank number is its own column on the left, metrics wrap below on phones. */
+.rank-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.rank-row {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    text-align: left;
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    color: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.rank-row:hover {
+    border-color: var(--color-border-strong);
+    background: var(--color-elevated);
+}
+
+.rank-num {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 800;
+    text-align: center;
+    color: var(--color-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.rank-row.podium .rank-num {
+    color: var(--color-text);
+}
+
+.rank-top-1 .rank-num {
+    color: #fbbf24;
+}
+
+.rank-top-2 .rank-num {
+    color: #cbd5e1;
+}
+
+.rank-top-3 .rank-num {
+    color: #e0955c;
+}
+
+.rank-user {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.rank-user-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.rank-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rank-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.rank-metrics {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.rank-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    min-width: 0;
+}
+
+.rank-metric-val {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.rank-metric-lbl {
+    color: var(--color-muted);
+    font-size: 11px;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rank-metric-best .rank-metric-val {
+    color: var(--color-accent-strong);
+}
+
+@media (max-width: 640px) {
+    .rank-row {
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: 10px 12px;
+    }
+
+    .rank-num {
+        font-size: 17px;
+    }
+
+    .rank-metrics {
+        grid-column: 1 / -1;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 2px;
+        padding-top: 10px;
+        border-top: 1px solid var(--color-border);
+    }
+
+    .rank-metric {
+        align-items: flex-start;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .rank-metric-best {
+        align-items: flex-end;
+        text-align: right;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
