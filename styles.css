@@ -7539,8 +7539,8 @@ html.compact-ui .chip {
 }
 
 .focus-hints {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 8px;
 }
 
@@ -7548,6 +7548,7 @@ html.compact-ui .chip {
     display: flex;
     align-items: center;
     gap: 10px;
+    width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -7583,6 +7584,7 @@ html.compact-ui .chip {
 
 .focus-hint-value {
     margin-left: auto;
+    white-space: nowrap;
     font-family: var(--font-display);
     font-size: 16px;
     font-weight: 800;
