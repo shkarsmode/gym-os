@@ -4814,7 +4814,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
     function bodyweightChart(id, userId = currentUser().id) {
         const entries = state.database.bodyweightEntries.filter((item) => item.userId === userId).sort(byDateAsc);
-        lineChart(id, entries.map((item) => shortDate(item.date)), entries.map((item) => item.bodyweight), "Вага тіла, кг");
+        // Bodyweight barely moves relative to zero, so a 0-based axis flattens the line.
+        // Frame the axis around the actual data (±10 кг) to make fluctuations visible.
+        const values = entries.map((item) => Number(item.bodyweight) || 0).filter((value) => value > 0);
+        const yScale = values.length
+            ? { beginAtZero: false, suggestedMin: Math.max(0, Math.floor(Math.min(...values) - 10)), suggestedMax: Math.ceil(Math.max(...values) + 10) }
+            : null;
+        lineChart(id, entries.map((item) => shortDate(item.date)), entries.map((item) => item.bodyweight), "Вага тіла, кг", yScale);
     }
 
     function cardioChart(id, userId = currentUser().id) {
@@ -4845,8 +4851,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         createChart(id, { type: "bar", data: { labels, datasets: [{ label, data, backgroundColor: colors.map((color) => `${color}cc`), borderColor: colors, borderWidth: 1, borderRadius: 8 }] }, options: chartOptions() });
     }
 
-    function lineChart(id, labels, data, label) {
-        createChart(id, { type: "line", data: { labels, datasets: [{ label, data, tension: 0.35, fill: true, backgroundColor: "rgba(52, 211, 153, 0.12)", borderColor: "#34d399", pointBackgroundColor: "#6ee7b7", pointRadius: 3, borderWidth: 2 }] }, options: chartOptions() });
+    function lineChart(id, labels, data, label, yScale = null) {
+        const options = chartOptions();
+        if (yScale) {
+            options.scales.y = { ...options.scales.y, ...yScale };
+        }
+        createChart(id, { type: "line", data: { labels, datasets: [{ label, data, tension: 0.35, fill: true, backgroundColor: "rgba(52, 211, 153, 0.12)", borderColor: "#34d399", pointBackgroundColor: "#6ee7b7", pointRadius: 3, borderWidth: 2 }] }, options });
     }
 
     function doughnutChart(id, labels, data) {
@@ -5713,7 +5723,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
     function focusHintChip(icon, label, set) {
         return `<button class="focus-hint" type="button" data-action="focus-apply-hint" data-weight="${set.weight}" data-reps="${set.repetitions}" title="Підставити ці значення">
-            <i data-lucide="${icon}"></i><span>${label}</span><strong>${number(set.weight)} × ${set.repetitions}</strong>
+            <span class="focus-hint-label"><i data-lucide="${icon}"></i>${label}</span>
+            <strong class="focus-hint-value">${number(set.weight)} × ${set.repetitions}</strong>
+            <span class="focus-hint-use"><i data-lucide="corner-down-left"></i></span>
         </button>`;
     }
 
@@ -5737,7 +5749,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const lastSet = last ? (last.sets[setIndex] || last.sets.at(-1)) : null;
         const previousSet = setIndex > 0 ? sets[setIndex - 1] : null;
         const hints = !set.isCompleted && (lastSet || previousSet)
-            ? `<div class="focus-hints">${lastSet ? focusHintChip("history", `Минулого разу`, lastSet) : ""}${previousSet ? focusHintChip("corner-left-up", "Попередній підхід", previousSet) : ""}</div>`
+            ? `<div class="focus-hints-wrap"><span class="focus-hints-caption"><i data-lucide="wand-2"></i>Натисни, щоб підставити значення</span><div class="focus-hints">${lastSet ? focusHintChip("history", "Минулого разу", lastSet) : ""}${previousSet ? focusHintChip("corner-left-up", "Попередній підхід", previousSet) : ""}</div></div>`
             : "";
         const nextExercise = list[index + 1] || null;
         return `${exerciseNav}${dots}
@@ -5747,6 +5759,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 ${set.isCompleted ? `<span class="status-badge completed">Виконано</span>` : ""}
             </div>
             ${hints}
+            <label class="focus-type-field">
+                <span class="focus-field-label">Тип підходу</span>
+                <gym-select class="set-type-select" data-action="set-field" ${target} data-field="type">${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
+            </label>
             <div class="focus-fields">
                 <div class="focus-field">
                     <span class="focus-field-label">Вага, кг</span>
@@ -5765,9 +5781,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     </div>
                 </div>
             </div>
-            <div class="focus-set-meta">
-                <gym-select class="set-type-select" data-action="set-field" ${target} data-field="type">${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
-                <label class="focus-rest-input"><i data-lucide="timer"></i><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds"><span>с</span></label>
+            <div class="focus-rest-field">
+                <span class="focus-field-label">Відпочинок</span>
+                <div class="focus-stepper focus-stepper-rest">
+                    <button class="focus-step" type="button" data-action="focus-step" data-field="restSeconds" data-delta="-15" title="−15 с"><i data-lucide="minus"></i></button>
+                    <input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds">
+                    <span class="focus-rest-unit">с</span>
+                    <button class="focus-step" type="button" data-action="focus-step" data-field="restSeconds" data-delta="15" title="+15 с"><i data-lucide="plus"></i></button>
+                </div>
             </div>
             ${set.isCompleted
                 ? `<button class="button button-secondary focus-cta" type="button" data-action="focus-uncomplete-set"><i data-lucide="rotate-ccw"></i>Зняти позначку «виконано»</button>`

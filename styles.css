@@ -7517,39 +7517,107 @@ html.compact-ui .chip {
     font-weight: 700;
 }
 
-.focus-hints {
+.focus-hints-wrap {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.focus-hints-caption {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--color-faint);
+}
+
+.focus-hints-caption svg {
+    width: 13px;
+    height: 13px;
+    color: var(--color-accent);
+}
+
+.focus-hints {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 8px;
 }
 
 .focus-hint {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 8px 12px;
-    border: 1px dashed var(--color-border-strong);
-    border-radius: var(--radius-pill);
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
     background: var(--color-surface-2);
-    color: var(--color-muted);
-    font-size: 12.5px;
     cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 
 .focus-hint:hover {
     border-color: var(--color-accent-border);
-    color: var(--color-text);
+    background: var(--color-accent-dim);
 }
 
-.focus-hint svg {
-    width: 14px;
-    height: 14px;
+.focus-hint:active {
+    transform: scale(0.98);
+}
+
+.focus-hint-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.focus-hint-label svg {
+    width: 13px;
+    height: 13px;
     color: var(--color-accent);
 }
 
-.focus-hint strong {
+.focus-hint-value {
+    margin-left: auto;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 800;
     color: var(--color-text);
     font-variant-numeric: tabular-nums;
+}
+
+.focus-hint-use {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 auto;
+    border-radius: var(--radius-sm);
+    background: var(--color-elevated);
+    color: var(--color-muted);
+}
+
+.focus-hint:hover .focus-hint-use {
+    color: var(--color-accent-strong);
+}
+
+.focus-hint-use svg {
+    width: 14px;
+    height: 14px;
+}
+
+.focus-type-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.focus-type-field gym-select {
+    width: 100%;
 }
 
 .focus-fields {
@@ -7629,48 +7697,29 @@ html.compact-ui .chip {
     height: 18px;
 }
 
-.focus-set-meta {
+.focus-rest-field {
     display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.focus-set-meta gym-select {
-    flex: 1;
-    min-width: 0;
-}
-
-.focus-rest-input {
-    display: inline-flex;
+    flex-direction: column;
     align-items: center;
     gap: 7px;
-    padding: 0 12px;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    background: var(--color-surface-2);
+}
+
+.focus-stepper-rest {
+    align-items: center;
+    width: min(240px, 100%);
+}
+
+.focus-stepper-rest input {
+    font-size: 19px;
+    padding: 10px 2px;
+}
+
+.focus-rest-unit {
+    align-self: center;
+    padding-right: 4px;
     color: var(--color-muted);
-    font-size: 12.5px;
-}
-
-.focus-rest-input svg {
-    width: 15px;
-    height: 15px;
-    color: var(--color-accent);
-}
-
-.focus-rest-input input {
-    width: 52px;
-    border: none;
-    background: transparent;
-    color: var(--color-text);
-    font-weight: 700;
-    text-align: center;
-    padding: 10px 0;
-    font-variant-numeric: tabular-nums;
-}
-
-.focus-rest-input input:focus-visible {
-    outline: none;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .focus-cta {
