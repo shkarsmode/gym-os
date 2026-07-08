@@ -3795,6 +3795,17 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         pendingExerciseScrollId = workoutExerciseId;
         await persistWorkout(workoutItem);
         closeOverlay();
+        // If added from focus mode, jump the session straight into the new exercise
+        // (finished one set, wanted the next lift — not to leave focus).
+        if (state.focus) {
+            const added = workoutItem.exercises.find((item) => item.id === workoutExerciseId);
+            state.focus.exerciseId = workoutExerciseId;
+            state.focus.setId = (added && added.sets[0]) ? added.sets[0].id : null;
+            state.focus.view = "set";
+            pendingExerciseScrollId = null;
+            renderFocus();
+            return;
+        }
         if (state.section === "workout") {
             renderSection();
         } else {
@@ -5786,9 +5797,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                <button class="button button-primary focus-cta" type="button" data-action="focus-start-set">Почати підхід</button>`
             : `<div class="focus-done-panel">
                 <p class="focus-done-title">Вправу завершено</p>
-                ${nextExercise ? `<button class="button button-primary focus-cta" type="button" data-action="focus-next-exercise" data-dir="1">Наступна вправа: ${escapeHtml(nextExerciseMeta.name)}<i data-lucide="arrow-right"></i></button>` : ""}
+                ${nextExercise ? `<button class="button button-secondary focus-cta" type="button" data-action="focus-next-exercise" data-dir="1">Наступна: ${escapeHtml(nextExerciseMeta.name)}<i data-lucide="arrow-right"></i></button>` : ""}
+                <button class="button button-primary focus-cta" type="button" data-action="open-add-exercise-modal"><i data-lucide="list-plus"></i>Додати вправу</button>
                 <button class="button button-secondary focus-cta" type="button" data-action="focus-add-set"><i data-lucide="plus"></i>Додати підхід</button>
-                <button class="button ${nextExercise ? "button-secondary" : "button-primary"} focus-cta" type="button" data-action="focus-finish-workout"><i data-lucide="flag"></i>Завершити тренування</button>
+                <button class="button button-secondary focus-cta" type="button" data-action="focus-finish-workout"><i data-lucide="flag"></i>Завершити тренування</button>
             </div>`;
         return `<div class="focus-rest${overtime ? " overtime" : ""}" id="focusRest">
             <p class="focus-rest-exercise">${escapeHtml(meta.name)} · ${doneCount}/${exercise.sets.length} підходів</p>
