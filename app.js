@@ -327,6 +327,15 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         finishWorkout(id) {
             return this.request(`/workouts/${id}/finish`, { method: "POST" });
         }
+
+        parseAiWorkout(payload) {
+            return this.request("/ai/workouts/parse", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        fetchAiStatistics(kind, query = {}) {
+            const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== "")).toString();
+            return this.request(`/ai/statistics/${kind}${params ? `?${params}` : ""}`, { method: "GET" });
+        }
     }
 
     class ApiProvider {
@@ -1301,8 +1310,8 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return standards;
     }
 
-    function createSet(type, weight, repetitions, rpe, restSeconds, isCompleted) {
-        return { id: createId("set"), type, weight, repetitions, rpe, restSeconds, isCompleted, notes: "" };
+    function createSet(type, weight, repetitions, rpe, restSeconds, isCompleted, durationSeconds = null) {
+        return { id: createId("set"), type, weight, repetitions, durationSeconds, rpe, restSeconds, isCompleted, notes: "" };
     }
 
     function createCardio(index) {
@@ -1312,14 +1321,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     // Desktop sidebar: a curated, ordered subset (exercises / stats / changelog /
     // settings intentionally live only in the Панель «Розділи» hub or the profile
     // buttons, to keep the rail short). Order mirrors the «Розділи» hub.
-    const SIDEBAR_ORDER = ["dashboard", "workout", "calendar", "levels", "users", "rankings", "feedback", "subscription", "moderation", "admin", "profile"];
+    const SIDEBAR_ORDER = ["dashboard", "workout", "calendar", "levels", "users", "rankings", "feedback", "subscription", "moderation", "admin", "aistats", "profile"];
 
     function sidebarNavItems() {
         return SIDEBAR_ORDER
             .map((id) => sectionItems.find((item) => item.id === id))
             .filter(Boolean)
             .filter((item) => {
-                if (item.id === "admin" || item.id === "moderation") {
+                if (item.id === "admin" || item.id === "moderation" || item.id === "aistats") {
                     return isAdmin();
                 }
                 if (item.id === "subscription") {
@@ -1501,7 +1510,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
     function renderSection() {
         destroyCharts();
-        if ((state.section === "admin" || state.section === "moderation") && !isAdmin()) {
+        if ((state.section === "admin" || state.section === "moderation" || state.section === "aistats") && !isAdmin()) {
             state.section = "dashboard";
         }
         renderShell();
@@ -1513,7 +1522,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         } else {
             element("sectionTitle").textContent = item.title;
         }
-        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, levels, users, feedback, moderation, admin: adminPanel, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
+        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         iconsIn(element("pageContent")); // shell icons already converted in renderShell()
         // Subtle enter animation only when the section actually changes (not on
@@ -1604,6 +1613,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             const pendingEx = pendingExercises().length;
             links.push({ id: "moderation", title: "Модерація", caption: "Нові вправи на апрув", icon: "shield-check", badge: pendingEx > 0 ? pendingEx : 0 });
             links.push({ id: "admin", title: "Адмін", caption: "Ролі й доступи", icon: "shield" });
+            links.push({ id: "aistats", title: "AI статистика", caption: "Витрати токенів і ліміти", icon: "brain-circuit" });
         }
         return `<section class="card span-12 nav-hub-card"><div class="card-header"><div><h2>Розділи</h2><p class="card-caption">Швидкий доступ до всіх інструментів GymOS.</p></div></div><div class="nav-hub">${links.map((link) => `<button class="nav-hub-item${link.accent ? " accent" : ""}" type="button" data-action="navigate" data-section="${link.id}"><span class="nav-hub-icon"><i data-lucide="${link.icon}"></i></span><span class="nav-hub-text"><strong>${escapeHtml(link.title)}</strong><span>${escapeHtml(link.caption)}</span></span>${link.badge ? `<span class="nav-hub-badge">${link.badge}</span>` : `<i class="nav-hub-arrow" data-lucide="chevron-right"></i>`}</button>`).join("")}</div></section>`;
     }
@@ -1614,8 +1624,853 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function workoutStarter() {
-        return `<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
+        // Admin-only AI block sits directly above the manual "Почати тренування" card.
+        const aiBlock = isAdmin() ? `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>` : "";
+        return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
     }
+
+    // ===== AI-тренування (admin-only) ===========================================
+    // A single compact block on the workout-prep screen: one textarea + a mic
+    // (Web Speech API) feeding the same field, example chips, and a "Створити за
+    // допомогою AI" button. The parsed structured workout is shown as an editable
+    // preview; "Застосувати тренування" seeds a NEW planned workout and opens it in
+    // the normal editor. Nothing is started or saved automatically.
+    const aiState = {
+        text: "",
+        baseText: "",
+        interim: "",
+        status: "idle", // idle | recording | processing | result | error
+        recognizing: false,
+        recognition: null,
+        result: null,
+        error: null,
+        cooldownUntil: 0
+    };
+    let aiCooldownTimer = null;
+
+    const aiExamples = [
+        "Жим лежачи 4×10 по 80 кг, відпочинок 90 секунд, потім розводка 3×15 і доріжка 20 хвилин",
+        "Сьогодні спина: тяга верхнього блока 4 по 12, тяга штанги в нахилі 3×10 рабочий вес 70, планка 3 по хвилині",
+        "Груди й трицепс: жим гантелей під кутом чотири по десять, розгинання на блоці 3×15 RPE 8, велотренажер 10 км"
+    ];
+
+    function aiSpeechSupported() {
+        return typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+    }
+
+    function aiJoinText(base, addition) {
+        const left = String(base || "").replace(/\s+$/, "");
+        const right = String(addition || "").replace(/^\s+/, "");
+        if (!left) {
+            return right;
+        }
+        if (!right) {
+            return left;
+        }
+        return `${left} ${right}`;
+    }
+
+    function aiWorkoutBlock() {
+        return `${aiInputCard()}${aiState.result ? aiPreviewCard(aiState.result) : ""}`;
+    }
+
+    function renderAiBlock() {
+        const host = element("aiWorkoutBlock");
+        if (host) {
+            host.innerHTML = aiWorkoutBlock();
+            iconsIn(host);
+        }
+    }
+
+    function aiInputCard() {
+        const supportsSpeech = aiSpeechSupported();
+        const recording = aiState.recognizing;
+        const processing = aiState.status === "processing";
+        const cooldownLeft = aiState.cooldownUntil ? Math.max(0, aiState.cooldownUntil - Date.now()) : 0;
+        const onCooldown = cooldownLeft > 0;
+        const disabled = processing || onCooldown;
+        const mic = supportsSpeech
+            ? `<button class="ai-mic ${recording ? "is-recording" : ""}" type="button" data-action="ai-toggle-mic" title="${recording ? "Зупинити запис" : "Диктувати голосом"}" aria-label="${recording ? "Зупинити запис" : "Диктувати голосом"}">${recording ? aiWaveform() : `<i data-lucide="mic"></i>`}</button>`
+            : "";
+        const micHint = supportsSpeech ? "" : `<p class="input-hint ai-nospeech"><i data-lucide="mic-off"></i> Голосовий ввід не підтримується в цьому браузері — введи текст.</p>`;
+        const primaryLabel = processing
+            ? "Аналізую…"
+            : onCooldown
+                ? `Зачекай ${Math.ceil(cooldownLeft / 1000)} с`
+                : aiState.result ? "Обробити ще раз" : "Створити за допомогою AI";
+        return `<section class="card ai-card">
+            <div class="ai-head">
+                <span class="ai-badge"><i data-lucide="sparkles"></i></span>
+                <div>
+                    <p class="eyebrow">AI</p>
+                    <h2 class="ai-title">AI-тренування</h2>
+                    <p class="card-caption">Опиши тренування текстом або голосом — AI зробить структурований чернетку. Тільки для адміністраторів.</p>
+                </div>
+            </div>
+            <div class="ai-input-wrap ${recording ? "is-recording" : ""}">
+                <textarea id="aiTextarea" class="ai-textarea" data-action="ai-input" rows="3" maxlength="6000" placeholder="Наприклад: жим лежачи 4×10 по 80 кг, відпочинок 90 секунд, потім розводка 3×15 і доріжка 20 хвилин"${processing ? " disabled" : ""}>${escapeHtml(aiState.text)}</textarea>
+                ${mic}
+            </div>
+            ${recording ? `<div class="ai-record-status" role="status"><span class="ai-rec-dot"></span>Записую… <span id="aiInterim" class="ai-interim">${escapeHtml(aiState.interim)}</span></div>` : ""}
+            ${micHint}
+            <div class="ai-examples">${aiExamples.map((example) => `<button class="ai-example" type="button" data-action="ai-example" data-index="${aiExamples.indexOf(example)}">${escapeHtml(example.length > 68 ? example.slice(0, 66) + "…" : example)}</button>`).join("")}</div>
+            <div class="ai-actions">
+                <button class="button ai-primary large-workout-button" type="button" data-action="ai-parse"${disabled ? " disabled" : ""}>${processing ? `<span class="pixel-loader ai-loader">${Array.from({ length: 5 }, (_, i) => `<span style="--cell:${i}"></span>`).join("")}</span>` : `<i data-lucide="sparkles"></i>`}${primaryLabel}</button>
+                ${aiState.result || aiState.text ? `<button class="button button-ghost compact" type="button" data-action="ai-reset"><i data-lucide="eraser"></i>Очистити</button>` : ""}
+            </div>
+            ${aiState.status === "error" && aiState.error ? `<div class="ai-banner ai-banner-error" role="alert"><i data-lucide="alert-triangle"></i><span>${escapeHtml(aiState.error.message)}</span></div>` : ""}
+            ${processing ? `<div class="ai-banner ai-banner-info"><i data-lucide="loader"></i><span>Аналізую опис тренування…</span></div>` : ""}
+        </section>`;
+    }
+
+    function aiWaveform() {
+        return `<span class="ai-wave" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => `<span style="--bar:${i}"></span>`).join("")}</span>`;
+    }
+
+    function aiPreviewCard(result) {
+        const blocked = !aiCanApply(result);
+        const typeOptions = Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${result.workoutType === value ? "selected" : ""}>${label}</option>`).join("");
+        const warningsBlock = (result.warnings || []).length
+            ? `<div class="ai-banner ai-banner-warn"><i data-lucide="info"></i><div>${result.warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div></div>`
+            : "";
+        const exercisesBlock = (result.exercises || []).length
+            ? result.exercises.map((exercise, index) => aiExerciseCard(exercise, index)).join("")
+            : `<div class="ai-empty">Вправ не розпізнано. Додаси вручну після застосування або уточни опис.</div>`;
+        const cardioBlockHtml = (result.cardioSessions || []).length
+            ? `<div class="ai-section-label"><i data-lucide="heart-pulse"></i>Кардіо</div>${result.cardioSessions.map((cardio, index) => aiCardioCard(cardio, index)).join("")}`
+            : "";
+        return `<section class="card ai-preview">
+            <div class="ai-preview-head">
+                <div><p class="eyebrow">Preview</p><h3>Перевір і відредагуй</h3></div>
+                <span class="chip">${result.meta && result.meta.model ? escapeHtml(result.meta.model) : "AI"}</span>
+            </div>
+            <div class="field-grid ai-meta-grid">
+                <div class="field"><label>Назва</label><input type="text" value="${escapeHtml(result.title || "")}" placeholder="Тренування" data-action="ai-workout-field" data-field="title"></div>
+                <div class="field"><label>Тип</label><gym-select data-action="ai-workout-field" data-field="workoutType">${typeOptions}</gym-select></div>
+                <div class="field"><label>Дата</label><input type="date" value="${escapeHtml(result.date || "")}" data-action="ai-workout-field" data-field="date"></div>
+            </div>
+            ${warningsBlock}
+            <div class="ai-exercises">${exercisesBlock}</div>
+            ${cardioBlockHtml}
+            <div class="ai-apply-row">
+                ${blocked ? `<p class="input-hint ai-blocked"><i data-lucide="alert-circle"></i>Признач усі нерозпізнані вправи, щоб застосувати.</p>` : ""}
+                <button class="button ai-primary large-workout-button" type="button" data-action="ai-apply"${blocked ? " disabled" : ""}><i data-lucide="check-circle-2"></i>Застосувати тренування</button>
+            </div>
+        </section>`;
+    }
+
+    function aiExerciseCard(exercise, index) {
+        const resolvedExercise = exercise.exerciseId ? exerciseById(exercise.exerciseId) : null;
+        const thumb = resolvedExercise
+            ? exerciseThumb(resolvedExercise)
+            : `<div class="exercise-thumb is-placeholder"><span class="exercise-thumb-ph" aria-hidden="true">${muscleIcon(exercise.primaryMuscleGroup || "all")}</span></div>`;
+        const statusBadge = exercise.exerciseId
+            ? `<span class="status-badge completed">${escapeHtml((resolvedExercise && resolvedExercise.name) || exercise.matchedName || "Розпізнано")}</span>`
+            : exercise.status === "ambiguous"
+                ? `<span class="status-badge active">Уточни вправу</span>`
+                : `<span class="status-badge readonly">Не знайдено</span>`;
+        const resolver = exercise.exerciseId ? "" : aiExerciseResolver(exercise, index);
+        const setsHtml = (exercise.sets || []).map((set, setIndex) => aiSetRow(exercise, index, set, setIndex)).join("");
+        return `<div class="ai-exercise ${exercise.exerciseId ? "" : "is-unresolved"}">
+            <div class="ai-exercise-head">
+                ${thumb}
+                <div class="ai-exercise-title">
+                    <strong>${escapeHtml(exercise.recognizedName)}</strong>
+                    <div class="ai-exercise-meta">${statusBadge}${exercise.primaryMuscleGroup ? `<span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span>` : ""}</div>
+                </div>
+                <button class="icon-button" type="button" title="Прибрати вправу" data-action="ai-remove-exercise" data-ex-index="${index}"><i data-lucide="trash-2"></i></button>
+            </div>
+            ${resolver}
+            <div class="ai-sets">${setsHtml}</div>
+            <button class="button button-ghost compact ai-add-set" type="button" data-action="ai-add-set" data-ex-index="${index}"><i data-lucide="plus"></i>Підхід</button>
+        </div>`;
+    }
+
+    function aiExerciseResolver(exercise, index) {
+        const options = (exercise.options || []).map((option) => `<button class="ai-option" type="button" data-action="ai-pick-option" data-ex-index="${index}" data-option-id="${escapeHtml(option.id)}"><span>${escapeHtml(option.name)}</span><span class="ai-option-meta">${escapeHtml(option.primaryMuscleGroup || "")}${option.equipment ? " · " + escapeHtml(option.equipment) : ""}</span></button>`).join("");
+        return `<div class="ai-resolver">
+            <p class="input-hint">${exercise.status === "ambiguous" ? "Обери правильну вправу:" : "Вправу не знайдено в каталозі — обери вручну:"}</p>
+            ${options ? `<div class="ai-options">${options}</div>` : ""}
+            <button class="button button-secondary compact" type="button" data-action="ai-open-catalog" data-ex-index="${index}"><i data-lucide="search"></i>Обрати з каталогу</button>
+        </div>`;
+    }
+
+    function aiSetRow(exercise, exIndex, set, setIndex) {
+        const target = `data-ex-index="${exIndex}" data-set-index="${setIndex}"`;
+        const isTimed = set.durationSeconds !== null && set.durationSeconds !== undefined;
+        return `<div class="ai-set-row">
+            <span class="ai-set-index">${setIndex + 1}</span>
+            <gym-select class="ai-set-type" data-action="ai-set-field" ${target} data-field="type">${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
+            <label class="ai-set-field"><span>кг</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="ai-set-field" ${target} data-field="weight"></label>
+            ${isTimed
+                ? `<label class="ai-set-field"><span>сек</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="ai-set-field" ${target} data-field="durationSeconds"></label>`
+                : `<label class="ai-set-field"><span>повт</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="ai-set-field" ${target} data-field="repetitions"></label>`}
+            <label class="ai-set-field"><span>RPE</span><input type="number" inputmode="decimal" step="0.5" min="0" max="10" value="${set.rpe || ""}" placeholder="—" data-action="ai-set-field" ${target} data-field="rpe"></label>
+            <label class="ai-set-field"><span>відп</span><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="ai-set-field" ${target} data-field="restSeconds"></label>
+            <button class="icon-button ai-set-del" type="button" title="Видалити підхід" data-action="ai-remove-set" ${target}><i data-lucide="x"></i></button>
+        </div>`;
+    }
+
+    function aiCardioCard(cardio, index) {
+        const typeOptions = Object.entries(aiCardioTypeLabels).map(([value, label]) => `<option value="${value}" ${cardio.type === value ? "selected" : ""}>${label}</option>`).join("");
+        const intensityOptions = Object.entries(aiIntensityLabels).map(([value, label]) => `<option value="${value}" ${cardio.intensity === value ? "selected" : ""}>${label}</option>`).join("");
+        return `<div class="ai-cardio">
+            <div class="ai-cardio-head">
+                <gym-select data-action="ai-cardio-field" data-cardio-index="${index}" data-field="type">${typeOptions}</gym-select>
+                <button class="icon-button" type="button" title="Прибрати кардіо" data-action="ai-remove-cardio" data-cardio-index="${index}"><i data-lucide="trash-2"></i></button>
+            </div>
+            <div class="ai-cardio-fields">
+                <label class="ai-set-field"><span>хв</span><input type="number" inputmode="numeric" step="1" min="0" value="${cardio.durationMinutes}" data-action="ai-cardio-field" data-cardio-index="${index}" data-field="durationMinutes"></label>
+                <label class="ai-set-field"><span>км</span><input type="number" inputmode="decimal" step="0.1" min="0" value="${cardio.distance || ""}" placeholder="—" data-action="ai-cardio-field" data-cardio-index="${index}" data-field="distance"></label>
+                <label class="ai-set-field"><span>ккал</span><input type="number" inputmode="numeric" step="1" min="0" value="${cardio.calories || ""}" placeholder="—" data-action="ai-cardio-field" data-cardio-index="${index}" data-field="calories"></label>
+                <label class="ai-set-field"><span>пульс</span><input type="number" inputmode="numeric" step="1" min="0" value="${cardio.averageHeartRate || ""}" placeholder="—" data-action="ai-cardio-field" data-cardio-index="${index}" data-field="averageHeartRate"></label>
+                <label class="ai-set-field ai-cardio-intensity"><span>інт.</span><gym-select data-action="ai-cardio-field" data-cardio-index="${index}" data-field="intensity">${intensityOptions}</gym-select></label>
+            </div>
+        </div>`;
+    }
+
+    const aiCardioTypeLabels = { treadmill: "Доріжка", bike: "Велотренажер", running: "Біг", walking: "Ходьба", rower: "Гребля", elliptical: "Еліпс", other: "Інше" };
+    const aiIntensityLabels = { low: "Низька", medium: "Середня", high: "Висока" };
+
+    function aiCanApply(result) {
+        if (!result) {
+            return false;
+        }
+        const hasContent = (result.exercises || []).length > 0 || (result.cardioSessions || []).length > 0;
+        const allResolved = (result.exercises || []).every((exercise) => Boolean(exercise.exerciseId));
+        return hasContent && allResolved;
+    }
+
+    // ---- AI actions -----------------------------------------------------------
+    function aiSetExample(index) {
+        const example = aiExamples[Number(index)];
+        if (example) {
+            aiState.text = example;
+            renderAiBlock();
+            const textarea = element("aiTextarea");
+            if (textarea) {
+                textarea.focus();
+            }
+        }
+    }
+
+    function aiToggleMic() {
+        if (aiState.recognizing) {
+            aiStopRecognition();
+        } else {
+            aiStartRecognition();
+        }
+    }
+
+    function aiStartRecognition() {
+        const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!RecognitionCtor) {
+            toast("Голос недоступний", "Браузер не підтримує розпізнавання мовлення. Введи текст вручну.");
+            return;
+        }
+        if (aiState.recognizing) {
+            return;
+        }
+        let recognition;
+        try {
+            recognition = new RecognitionCtor();
+        } catch (error) {
+            toast("Мікрофон", "Не вдалося запустити розпізнавання.");
+            return;
+        }
+        recognition.lang = "uk-UA";
+        recognition.interimResults = true;
+        recognition.continuous = true;
+        aiState.baseText = aiState.text;
+        aiState.interim = "";
+        recognition.onresult = (event) => {
+            let finalText = "";
+            let interimText = "";
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalText += transcript;
+                } else {
+                    interimText += transcript;
+                }
+            }
+            if (finalText) {
+                aiState.baseText = aiJoinText(aiState.baseText, finalText);
+            }
+            aiState.interim = interimText;
+            aiState.text = aiJoinText(aiState.baseText, interimText);
+            const textarea = element("aiTextarea");
+            if (textarea) {
+                textarea.value = aiState.text;
+            }
+            const interimEl = element("aiInterim");
+            if (interimEl) {
+                interimEl.textContent = interimText;
+            }
+        };
+        recognition.onerror = (event) => {
+            aiState.recognizing = false;
+            aiState.recognition = null;
+            if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+                aiState.status = "error";
+                aiState.error = { code: "MIC_DENIED", message: "Доступ до мікрофона заборонено. Дозволь його в налаштуваннях браузера або введи текст вручну." };
+            } else if (event.error !== "no-speech" && event.error !== "aborted") {
+                aiState.status = "error";
+                aiState.error = { code: "SPEECH_ERROR", message: "Помилка розпізнавання мовлення. Спробуй ще раз або введи текст." };
+            }
+            renderAiBlock();
+        };
+        recognition.onend = () => {
+            aiState.recognizing = false;
+            aiState.recognition = null;
+            aiState.text = aiJoinText(aiState.baseText, "");
+            aiState.interim = "";
+            if (aiState.status === "recording") {
+                aiState.status = "idle";
+            }
+            renderAiBlock();
+        };
+        try {
+            recognition.start();
+            aiState.recognition = recognition;
+            aiState.recognizing = true;
+            aiState.status = "recording";
+            aiState.error = null;
+            renderAiBlock();
+        } catch (error) {
+            aiState.recognizing = false;
+            aiState.recognition = null;
+        }
+    }
+
+    function aiStopRecognition() {
+        if (aiState.recognition) {
+            try {
+                aiState.recognition.stop();
+            } catch (error) {
+                // ignore — onend will still fire
+            }
+        }
+        aiState.recognizing = false;
+        if (aiState.status === "recording") {
+            aiState.status = "idle";
+        }
+    }
+
+    async function aiParse() {
+        const text = String(aiState.text || "").trim();
+        if (text.length < 3) {
+            toast("Замало тексту", "Опиши тренування трохи детальніше.");
+            return;
+        }
+        if (aiState.recognizing) {
+            aiStopRecognition();
+        }
+        if (aiState.status === "processing") {
+            return;
+        }
+        if (aiState.cooldownUntil && Date.now() < aiState.cooldownUntil) {
+            return;
+        }
+        aiState.status = "processing";
+        aiState.error = null;
+        renderAiBlock();
+        try {
+            const result = await storage.apiClient.parseAiWorkout({ text });
+            aiState.result = aiNormalizeResult(result);
+            aiState.status = "result";
+            aiState.error = null;
+            renderAiBlock();
+        } catch (error) {
+            aiState.status = "error";
+            const status = Number(error && error.status ? error.status : 0);
+            const payload = (error && error.payload) || {};
+            if (status === 429 && payload.retryAfterMs) {
+                aiState.cooldownUntil = Date.now() + Number(payload.retryAfterMs);
+                aiStartCooldownTick();
+            }
+            aiState.error = { code: payload.code || String(status || "ERROR"), message: aiErrorMessage(error) };
+            renderAiBlock();
+        }
+    }
+
+    function aiStartCooldownTick() {
+        clearInterval(aiCooldownTimer);
+        aiCooldownTimer = setInterval(() => {
+            if (!aiState.cooldownUntil || Date.now() >= aiState.cooldownUntil) {
+                aiState.cooldownUntil = 0;
+                clearInterval(aiCooldownTimer);
+                aiCooldownTimer = null;
+            }
+            renderAiBlock();
+        }, 500);
+    }
+
+    function aiErrorMessage(error) {
+        const code = String((error && error.payload && error.payload.code) || "");
+        const messages = {
+            GEMINI_NOT_CONFIGURED: "AI тимчасово недоступний: ключ Gemini не налаштовано.",
+            TIMEOUT: "AI не встиг відповісти. Спробуй ще раз.",
+            RATE_LIMIT: "Забагато запитів. Зачекай кілька секунд.",
+            AI_RATE_LIMIT: "Забагато AI-запитів. Зачекай трохи.",
+            INVALID_RESPONSE: "AI повернув некоректну відповідь. Спробуй ще раз або переформулюй.",
+            INPUT_TOO_LONG: "Опис задовгий. Скороти текст.",
+            INPUT_TOO_SHORT: "Опис закороткий."
+        };
+        if (messages[code]) {
+            return messages[code];
+        }
+        const status = Number(error && error.status ? error.status : 0);
+        if (status === 403) {
+            return "Немає доступу до AI-функції.";
+        }
+        return (error && error.message) || "Не вдалося обробити запит. Спробуй ще раз.";
+    }
+
+    function aiNormalizeResult(result) {
+        const safe = result && typeof result === "object" ? result : {};
+        return {
+            title: safe.title || "",
+            date: safe.date || "",
+            workoutType: safe.workoutType || "custom",
+            notes: safe.notes || "",
+            exercises: Array.isArray(safe.exercises) ? safe.exercises.map((exercise) => ({
+                exerciseId: exercise.exerciseId || null,
+                recognizedName: exercise.recognizedName || "Вправа",
+                matchedName: exercise.matchedName || null,
+                primaryMuscleGroup: exercise.primaryMuscleGroup || null,
+                mediaUrl: exercise.mediaUrl || "",
+                confidence: exercise.confidence,
+                status: exercise.status || (exercise.exerciseId ? "resolved" : "not_found"),
+                options: Array.isArray(exercise.options) ? exercise.options : [],
+                notes: exercise.notes || "",
+                sets: Array.isArray(exercise.sets) ? exercise.sets.map((set) => ({
+                    type: set.type || "working",
+                    weight: Number(set.weight) || 0,
+                    repetitions: Number(set.repetitions) || 0,
+                    durationSeconds: set.durationSeconds === null || set.durationSeconds === undefined ? null : Number(set.durationSeconds),
+                    rpe: set.rpe === null || set.rpe === undefined ? 0 : Number(set.rpe),
+                    restSeconds: set.restSeconds === null || set.restSeconds === undefined ? 90 : Number(set.restSeconds),
+                    notes: set.notes || ""
+                })) : []
+            })) : [],
+            cardioSessions: Array.isArray(safe.cardioSessions) ? safe.cardioSessions.map((cardio) => ({
+                type: cardio.type || "treadmill",
+                durationMinutes: Number(cardio.durationMinutes) || 0,
+                distance: cardio.distance === null || cardio.distance === undefined ? 0 : Number(cardio.distance),
+                calories: cardio.calories === null || cardio.calories === undefined ? 0 : Number(cardio.calories),
+                averageHeartRate: cardio.averageHeartRate === null || cardio.averageHeartRate === undefined ? 0 : Number(cardio.averageHeartRate),
+                intensity: cardio.intensity || "medium",
+                notes: cardio.notes || ""
+            })) : [],
+            warnings: Array.isArray(safe.warnings) ? safe.warnings : [],
+            unresolvedExercises: Array.isArray(safe.unresolvedExercises) ? safe.unresolvedExercises : [],
+            meta: safe.meta || {}
+        };
+    }
+
+    function aiEditWorkoutField(field, value) {
+        if (!aiState.result) {
+            return;
+        }
+        aiState.result[field] = value;
+    }
+
+    function aiEditSet(exIndex, setIndex, field, value) {
+        const exercise = aiState.result && aiState.result.exercises[Number(exIndex)];
+        const set = exercise && exercise.sets[Number(setIndex)];
+        if (!set) {
+            return;
+        }
+        set[field] = ["weight", "repetitions", "rpe", "restSeconds", "durationSeconds"].includes(field) ? Number(value) || 0 : value;
+    }
+
+    function aiEditCardio(cardioIndex, field, value) {
+        const cardio = aiState.result && aiState.result.cardioSessions[Number(cardioIndex)];
+        if (!cardio) {
+            return;
+        }
+        cardio[field] = ["durationMinutes", "distance", "calories", "averageHeartRate"].includes(field) ? Number(value) || 0 : value;
+    }
+
+    function aiAddSet(exIndex) {
+        const exercise = aiState.result && aiState.result.exercises[Number(exIndex)];
+        if (!exercise) {
+            return;
+        }
+        const previous = exercise.sets[exercise.sets.length - 1];
+        exercise.sets.push(previous
+            ? { ...previous }
+            : { type: "working", weight: 0, repetitions: 0, durationSeconds: null, rpe: 0, restSeconds: 90, notes: "" });
+        renderAiBlock();
+    }
+
+    function aiRemoveSet(exIndex, setIndex) {
+        const exercise = aiState.result && aiState.result.exercises[Number(exIndex)];
+        if (!exercise) {
+            return;
+        }
+        exercise.sets.splice(Number(setIndex), 1);
+        renderAiBlock();
+    }
+
+    function aiRemoveExercise(exIndex) {
+        if (!aiState.result) {
+            return;
+        }
+        aiState.result.exercises.splice(Number(exIndex), 1);
+        renderAiBlock();
+    }
+
+    function aiRemoveCardio(cardioIndex) {
+        if (!aiState.result) {
+            return;
+        }
+        aiState.result.cardioSessions.splice(Number(cardioIndex), 1);
+        renderAiBlock();
+    }
+
+    function aiPickOption(exIndex, optionId) {
+        const exercise = aiState.result && aiState.result.exercises[Number(exIndex)];
+        if (!exercise) {
+            return;
+        }
+        const option = (exercise.options || []).find((item) => item.id === optionId);
+        const catalogExercise = exerciseById(optionId);
+        exercise.exerciseId = optionId;
+        exercise.matchedName = (option && option.name) || (catalogExercise && catalogExercise.name) || exercise.recognizedName;
+        exercise.primaryMuscleGroup = (option && option.primaryMuscleGroup) || (catalogExercise && catalogExercise.primaryMuscleGroup) || exercise.primaryMuscleGroup;
+        exercise.status = "resolved";
+        renderAiBlock();
+    }
+
+    function aiOpenCatalogPicker(exIndex) {
+        aiState.pickerExIndex = Number(exIndex);
+        state.filters.exerciseSearch = "";
+        openModal(aiCatalogPickerContent(), { fullscreen: true });
+    }
+
+    function aiCatalogPickerContent() {
+        return `<div class="modal-header"><div><h2>Обери вправу</h2><p class="card-caption">Заміни нерозпізнану вправу вправою з каталогу.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>
+            <div class="ai-catalog-search"><i data-lucide="search"></i><input type="search" placeholder="Пошук вправи…" data-action="ai-catalog-search" autocomplete="off"></div>
+            <div id="aiCatalogGrid" class="ai-catalog-grid">${aiCatalogCards()}</div>`;
+    }
+
+    function aiCatalogCards() {
+        const search = String(state.filters.exerciseSearch || "").trim().toLowerCase();
+        const list = (state.database.exercises || []).filter((exercise) => {
+            if (!search) {
+                return true;
+            }
+            return [exercise.name, (exercise.aliases || []).join(" "), exercise.primaryMuscleGroup, exercise.equipment].join(" ").toLowerCase().includes(search);
+        }).slice(0, 60);
+        if (!list.length) {
+            return `<div class="ai-empty">Нічого не знайдено.</div>`;
+        }
+        return list.map((exercise) => `<article class="exercise-card has-thumb" data-action="ai-choose-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup || "")}${exercise.equipment ? " · " + escapeHtml(exercise.equipment) : ""}</p></article>`).join("");
+    }
+
+    function aiChooseExercise(exerciseId) {
+        const exIndex = aiState.pickerExIndex;
+        const exercise = aiState.result && aiState.result.exercises[Number(exIndex)];
+        const catalogExercise = exerciseById(exerciseId);
+        if (exercise && catalogExercise) {
+            exercise.exerciseId = catalogExercise.id;
+            exercise.matchedName = catalogExercise.name;
+            exercise.primaryMuscleGroup = catalogExercise.primaryMuscleGroup;
+            exercise.status = "resolved";
+        }
+        closeOverlay();
+        renderAiBlock();
+    }
+
+    function aiReset() {
+        if (aiState.recognizing) {
+            aiStopRecognition();
+        }
+        aiState.text = "";
+        aiState.baseText = "";
+        aiState.interim = "";
+        aiState.result = null;
+        aiState.error = null;
+        aiState.status = "idle";
+        renderAiBlock();
+    }
+
+    async function aiApply() {
+        const result = aiState.result;
+        if (!result) {
+            return;
+        }
+        if (!aiCanApply(result)) {
+            toast("Оберіть вправи", "Спочатку познач усі нерозпізнані вправи.");
+            return;
+        }
+        const now = new Date();
+        const targetDate = result.date || dateInput(now);
+        const limit = workoutLimitState(currentUser().id, targetDate);
+        if (!limit.allowed) {
+            toast("Ліміт тренувань", limit.message);
+            return;
+        }
+        const workoutItem = {
+            id: createId("workout"),
+            userId: currentUser().id,
+            date: targetDate,
+            title: result.title || "Тренування",
+            // Always planned — AI never starts a workout automatically.
+            status: "planned",
+            workoutType: result.workoutType || getPref("defaultWorkoutType"),
+            durationOverride: null,
+            startedAt: null,
+            finishedAt: null,
+            notes: result.notes || "",
+            exercises: result.exercises.filter((exercise) => exercise.exerciseId).map((exercise, index) => ({
+                id: createId("workout-exercise"),
+                exerciseId: exercise.exerciseId,
+                order: index + 1,
+                notes: exercise.notes || "",
+                sets: (exercise.sets || []).map((set) => ({
+                    id: createId("set"),
+                    type: set.type || "working",
+                    weight: Number(set.weight) || 0,
+                    repetitions: Number(set.repetitions) || 0,
+                    durationSeconds: set.durationSeconds === null || set.durationSeconds === undefined ? null : Math.round(Number(set.durationSeconds)) || null,
+                    rpe: Number(set.rpe) || 0,
+                    restSeconds: Number(set.restSeconds) || 90,
+                    isCompleted: false,
+                    notes: set.notes || ""
+                }))
+            })),
+            cardioSessions: (result.cardioSessions || []).map((cardio) => ({
+                id: createId("cardio"),
+                type: cardio.type || "treadmill",
+                durationMinutes: Number(cardio.durationMinutes) || 0,
+                distance: Number(cardio.distance) || 0,
+                calories: Number(cardio.calories) || 0,
+                averageHeartRate: Number(cardio.averageHeartRate) || 0,
+                intensity: cardio.intensity || "medium",
+                notes: cardio.notes || ""
+            })),
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+        };
+        state.database.workouts.push(workoutItem);
+        state.editingWorkoutId = workoutItem.id;
+        aiState.text = "";
+        aiState.baseText = "";
+        aiState.result = null;
+        aiState.status = "idle";
+        await persistWorkout(workoutItem);
+        toast("Чернетку створено", "Перевір і відредагуй перед стартом — тренування у статусі «Заплановано».");
+        goToWorkoutEditor(workoutItem.id);
+    }
+    // ===== end AI-тренування ====================================================
+
+    // ===== AI статистика (admin-only) ===========================================
+    const aiStatsState = {
+        loading: false,
+        error: null,
+        summary: null,
+        usage: null,
+        requests: null,
+        limits: null,
+        filters: { period: "30d", status: "all", model: "", userId: "" }
+    };
+
+    function aiStats() {
+        if (!isAdmin()) {
+            state.section = "dashboard";
+            renderSection();
+            return;
+        }
+        content(`<div class="ai-stats-page">
+            <div class="ai-stats-header">
+                <div><p class="eyebrow">AI</p><h2>AI статистика</h2><p class="card-caption">Використання Gemini у GymOS: запити, токени, помилки й ліміти.</p></div>
+                <button class="button button-secondary compact" type="button" data-action="ai-stats-refresh"><i data-lucide="refresh-cw"></i>Оновити</button>
+            </div>
+            ${aiStatsFilters()}
+            <div id="aiStatsBody">${aiStatsBodyContent()}</div>
+        </div>`);
+        loadAiStats();
+    }
+
+    function aiStatsFilters() {
+        const periods = [["today", "Сьогодні"], ["7d", "7 днів"], ["30d", "30 днів"], ["all", "Весь час"]];
+        const models = (aiStatsState.summary && aiStatsState.summary.models) || [];
+        return `<div class="ai-stats-filters">
+            <div class="ai-stats-periods">${periods.map(([value, label]) => `<button class="segment-button ${aiStatsState.filters.period === value ? "active" : ""}" type="button" data-action="ai-stats-period" data-period="${value}">${label}</button>`).join("")}</div>
+            <div class="ai-stats-selects">
+                <gym-select data-action="ai-stats-filter" data-filter="status"><option value="all" ${aiStatsState.filters.status === "all" ? "selected" : ""}>Усі статуси</option><option value="success" ${aiStatsState.filters.status === "success" ? "selected" : ""}>Успішні</option><option value="error" ${aiStatsState.filters.status === "error" ? "selected" : ""}>Помилки</option></gym-select>
+                ${models.length ? `<gym-select data-action="ai-stats-filter" data-filter="model"><option value="">Усі моделі</option>${models.map((entry) => `<option value="${escapeHtml(entry.model)}" ${aiStatsState.filters.model === entry.model ? "selected" : ""}>${escapeHtml(entry.model)}</option>`).join("")}</gym-select>` : ""}
+            </div>
+        </div>`;
+    }
+
+    function renderAiStatsBody() {
+        const body = element("aiStatsBody");
+        if (body) {
+            body.innerHTML = aiStatsBodyContent();
+            iconsIn(body);
+        }
+        // Refresh the model filter options once summary is available.
+        const filters = document.querySelector(".ai-stats-filters");
+        if (filters) {
+            filters.outerHTML = aiStatsFilters();
+            const refreshed = document.querySelector(".ai-stats-filters");
+            if (refreshed) {
+                iconsIn(refreshed);
+            }
+        }
+    }
+
+    function aiStatsBodyContent() {
+        if (aiStatsState.error) {
+            return `<div class="ai-banner ai-banner-error" role="alert"><i data-lucide="alert-triangle"></i><span>${escapeHtml(aiStatsState.error)}</span></div>`;
+        }
+        if (aiStatsState.loading && !aiStatsState.summary) {
+            return `<div class="ai-stats-loading"><span class="pixel-loader">${Array.from({ length: 5 }, (_, i) => `<span style="--cell:${i}"></span>`).join("")}</span><p class="card-caption">Завантажую статистику…</p></div>`;
+        }
+        if (!aiStatsState.summary) {
+            return emptyInline("Немає даних", "Статистика зʼявиться після перших AI-запитів.");
+        }
+        return `${aiStatsKpis()}${aiStatsChartCard()}${aiStatsLimits()}${aiStatsRequests()}`;
+    }
+
+    function aiStatsKpis() {
+        const summary = aiStatsState.summary;
+        const period = summary.period || {};
+        const counts = summary.counts || {};
+        return `<div class="grid dashboard-grid ai-stats-kpis">
+            ${metric("Сьогодні", counts.today || 0, "calendar", "Запитів сьогодні", "span-3")}
+            ${metric("7 днів", counts.last7Days || 0, "calendar-days", "Запитів за тиждень", "span-3")}
+            ${metric("30 днів", counts.last30Days || 0, "calendar-range", "Запитів за місяць", "span-3")}
+            ${metric("Success rate", `${period.successRate || 0}%`, "check-circle-2", `${period.success || 0} з ${period.requests || 0}`, "span-3")}
+            ${metric("Усього токенів", number(period.totalTokens || 0), "coins", "За обраний період", "span-3")}
+            ${metric("Input / Output", `${number(period.inputTokens || 0)} / ${number(period.outputTokens || 0)}`, "arrow-left-right", "Токени вхід/вихід", "span-3")}
+            ${metric("Сер. затримка", `${number(period.avgLatencyMs || 0)} мс`, "timer", `Макс ${number(period.maxLatencyMs || 0)} мс`, "span-3")}
+            ${metric("Помилки", period.errors || 0, "alert-triangle", "За обраний період", "span-3")}
+        </div>`;
+    }
+
+    function aiStatsChartCard() {
+        return `<section class="card chart-card span-12"><div class="card-header"><div><h3>Витрата токенів по днях</h3><p class="card-caption">Сумарні токени за день у межах періоду.</p></div></div><div class="chart-box"><canvas id="aiTokenChart"></canvas></div></section>`;
+    }
+
+    function renderAiStatsChart() {
+        const usage = aiStatsState.usage;
+        if (!usage || !Array.isArray(usage.days) || !element("aiTokenChart")) {
+            return;
+        }
+        const labels = usage.days.map((day) => shortDate(day.date));
+        const data = usage.days.map((day) => day.totalTokens || 0);
+        lineChart("aiTokenChart", labels, data, "Токени");
+    }
+
+    function aiStatsLimits() {
+        const limits = aiStatsState.limits;
+        if (!limits) {
+            return "";
+        }
+        const official = limits.official;
+        const estimate = limits.estimate;
+        const usage = limits.usage || {};
+        const rows = official
+            ? `<div class="ai-limit-grid">
+                ${aiLimitTile("Запитів/хв", official.rpm)}
+                ${aiLimitTile("Запитів/день", official.rpd)}
+                ${aiLimitTile("Токенів/хв", number(official.tpm))}
+            </div>`
+            : `<p class="input-hint">Офіційні ліміти для моделі «${escapeHtml(limits.model)}» не задокументовані у застосунку. Перевір на сторінці квот.</p>`;
+        const estimateBar = estimate
+            ? `<div class="ai-limit-usage"><div class="ai-limit-usage-head"><span>Використано сьогодні</span><strong>${estimate.requestsToday} / ${estimate.dailyRequestLimit}</strong></div><div class="busy-progress"><span style="width:${Math.min(100, estimate.usagePercent)}%"></span></div><p class="input-hint">${estimate.usagePercent}% денного ліміту (оцінка за фактичними запитами GymOS).</p></div>`
+            : "";
+        return `<section class="card span-12 ai-limits-card">
+            <div class="card-header"><div><h3>Ліміти Gemini</h3><p class="card-caption">Модель: <strong>${escapeHtml(limits.model)}</strong> · ${limits.configured ? "ключ налаштовано" : "ключ не налаштовано"}</p></div></div>
+            ${rows}
+            ${estimateBar}
+            <div class="ai-limit-usage-row">
+                <span class="chip"><i data-lucide="activity"></i> Запитів сьогодні: ${usage.requestsToday || 0}</span>
+                <span class="chip"><i data-lucide="coins"></i> Токенів сьогодні: ${number(usage.totalTokensToday || 0)}</span>
+            </div>
+            <p class="input-hint ai-limit-note">${escapeHtml(limits.note || "")}</p>
+            <div class="ai-limit-links">
+                <a class="link-button" href="${escapeHtml((limits.sources && limits.sources.quotaDashboard) || "https://aistudio.google.com/rate-limit")}" target="_blank" rel="noopener">Квоти проєкту в AI Studio</a>
+                <a class="link-button" href="${escapeHtml((limits.sources && limits.sources.limitsDoc) || "https://ai.google.dev/gemini-api/docs/rate-limits")}" target="_blank" rel="noopener">Офіційна документація лімітів</a>
+            </div>
+        </section>`;
+    }
+
+    function aiLimitTile(label, value) {
+        return `<div class="ai-limit-tile"><div class="ai-limit-value">${escapeHtml(String(value))}</div><div class="ai-limit-label">${escapeHtml(label)}</div></div>`;
+    }
+
+    function aiStatsRequests() {
+        const requests = (aiStatsState.requests && aiStatsState.requests.requests) || [];
+        if (!requests.length) {
+            return `<section class="card span-12"><div class="card-header"><div><h3>Останні запити</h3></div></div>${emptyInline("Порожньо", "Запитів ще не було.")}</section>`;
+        }
+        const rows = requests.map((request) => {
+            const ok = request.status === "success";
+            const when = request.createdAt ? new Date(request.createdAt) : null;
+            const timeLabel = when ? `${formatDate(request.createdAt)} ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}` : "";
+            return `<div class="ai-req-row ${ok ? "" : "is-error"}">
+                <span class="status-badge ${ok ? "completed" : "readonly"}">${ok ? "OK" : escapeHtml(request.errorCode || "Помилка")}</span>
+                <div class="ai-req-main"><strong>${escapeHtml(request.userName || "—")}</strong><span class="ai-req-sub">${escapeHtml(request.model || "")}${request.recognizedExercises != null ? ` · ${request.recognizedExercises} вправ` : ""}</span></div>
+                <div class="ai-req-metrics">
+                    <span title="Токени"><i data-lucide="coins"></i>${number(request.totalTokens || 0)}</span>
+                    <span title="Затримка"><i data-lucide="timer"></i>${number(request.durationMs || 0)} мс</span>
+                    <span class="ai-req-time">${escapeHtml(timeLabel)}</span>
+                </div>
+            </div>`;
+        }).join("");
+        return `<section class="card span-12 ai-requests-card"><div class="card-header"><div><h3>Останні запити</h3><p class="card-caption">Останні ${requests.length} викликів (без промптів і transcript-ів).</p></div></div><div class="ai-req-list">${rows}</div></section>`;
+    }
+
+    async function loadAiStats() {
+        if (aiStatsState.loading) {
+            return;
+        }
+        aiStatsState.loading = true;
+        aiStatsState.error = null;
+        renderAiStatsBody();
+        try {
+            const query = aiStatsState.filters;
+            const [summary, usage, requests, limits] = await Promise.all([
+                storage.apiClient.fetchAiStatistics("summary", query),
+                storage.apiClient.fetchAiStatistics("usage", query),
+                storage.apiClient.fetchAiStatistics("requests", query),
+                storage.apiClient.fetchAiStatistics("limits", {})
+            ]);
+            aiStatsState.summary = summary;
+            aiStatsState.usage = usage;
+            aiStatsState.requests = requests;
+            aiStatsState.limits = limits;
+            aiStatsState.loading = false;
+            if (state.section === "aistats") {
+                renderAiStatsBody();
+                requestAnimationFrame(() => renderAiStatsChart());
+            }
+        } catch (error) {
+            aiStatsState.loading = false;
+            aiStatsState.error = friendlyError(error);
+            if (state.section === "aistats") {
+                renderAiStatsBody();
+            }
+        }
+    }
+
+    function aiStatsSetPeriod(period) {
+        aiStatsState.filters.period = period;
+        loadAiStats();
+        renderAiStatsBody();
+    }
+
+    function aiStatsSetFilter(filter, value) {
+        aiStatsState.filters[filter] = value;
+        loadAiStats();
+    }
+    // ===== end AI статистика ====================================================
 
     function workoutEditor(workoutItem) {
         const owner = userById(workoutItem.userId);
@@ -1691,9 +2546,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     <button class="icon-button" type="button" title="Видалити підхід" data-action="delete-set" ${target} ${lock}><i data-lucide="trash-2"></i></button>
                 </div>
             </div>
-            <div class="set-fields">
+            <div class="set-fields${set.durationSeconds === null || set.durationSeconds === undefined ? "" : " has-duration"}">
                 <label class="set-field"><span class="set-field-label">Вага, кг</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
                 <label class="set-field"><span class="set-field-label">Повтори</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions" ${lock}></label>
+                ${set.durationSeconds === null || set.durationSeconds === undefined ? "" : `<label class="set-field"><span class="set-field-label">Час, с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="set-field" ${target} data-field="durationSeconds" ${lock}></label>`}
                 <label class="set-field"><span class="set-field-label">Відпочинок, с</span><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds" ${lock}></label>
             </div>
         </div>`;
@@ -2901,6 +3757,20 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "revoke-user": () => setUserApproval(actionElement.dataset.userId, false),
             "export-data": exportData,
             "reset-curated-exercises": resetCuratedExercises,
+            "ai-toggle-mic": aiToggleMic,
+            "ai-parse": aiParse,
+            "ai-apply": aiApply,
+            "ai-reset": aiReset,
+            "ai-example": () => aiSetExample(actionElement.dataset.index),
+            "ai-add-set": () => aiAddSet(actionElement.dataset.exIndex),
+            "ai-remove-set": () => aiRemoveSet(actionElement.dataset.exIndex, actionElement.dataset.setIndex),
+            "ai-remove-exercise": () => aiRemoveExercise(actionElement.dataset.exIndex),
+            "ai-remove-cardio": () => aiRemoveCardio(actionElement.dataset.cardioIndex),
+            "ai-pick-option": () => aiPickOption(actionElement.dataset.exIndex, actionElement.dataset.optionId),
+            "ai-open-catalog": () => aiOpenCatalogPicker(actionElement.dataset.exIndex),
+            "ai-choose-exercise": () => aiChooseExercise(actionElement.dataset.exerciseId),
+            "ai-stats-period": () => aiStatsSetPeriod(actionElement.dataset.period),
+            "ai-stats-refresh": () => loadAiStats(),
             reset: resetData,
             "close-overlay": closeOverlay,
             "close-sheet": closeSheet
@@ -2962,6 +3832,22 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
             if (actionElement.dataset.action === "data-mode") {
                 await changeDataMode(actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "ai-workout-field") {
+                aiEditWorkoutField(actionElement.dataset.field, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "ai-set-field") {
+                aiEditSet(actionElement.dataset.exIndex, actionElement.dataset.setIndex, actionElement.dataset.field, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "ai-cardio-field") {
+                aiEditCardio(actionElement.dataset.cardioIndex, actionElement.dataset.field, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "ai-stats-filter") {
+                aiStatsSetFilter(actionElement.dataset.filter, actionElement.value);
             }
         });
     }
@@ -3151,6 +4037,20 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             if (workoutItem) {
                 workoutItem.notes = actionElement.value;
                 schedulePersistWorkout(workoutItem);
+            }
+        }
+
+        if (actionElement.dataset.action === "ai-input") {
+            // Store transcript/typed text without repainting so the caret stays put.
+            aiState.text = actionElement.value;
+        }
+
+        if (actionElement.dataset.action === "ai-catalog-search") {
+            state.filters.exerciseSearch = actionElement.value;
+            const grid = element("aiCatalogGrid");
+            if (grid) {
+                grid.innerHTML = aiCatalogCards();
+                iconsIn(grid);
             }
         }
 
@@ -4070,7 +4970,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         if (!set) {
             return;
         }
-        set[field] = ["weight", "repetitions", "rpe", "restSeconds"].includes(field) ? Number(value) || 0 : value;
+        set[field] = ["weight", "repetitions", "rpe", "restSeconds", "durationSeconds"].includes(field) ? Number(value) || 0 : value;
         schedulePersistWorkout(editWorkout());
     }
 
@@ -7328,6 +8228,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     type: set.type || "working",
                     weight: Number(set.weight) || 0,
                     repetitions: Number(set.repetitions) || 0,
+                    durationSeconds: set.durationSeconds === undefined || set.durationSeconds === null || set.durationSeconds === "" ? null : Math.round(Number(set.durationSeconds)) || null,
                     rpe: Number(set.rpe) || 0,
                     restSeconds: Number(set.restSeconds) || 90,
                     isCompleted: Boolean(set.isCompleted),
