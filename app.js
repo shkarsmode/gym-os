@@ -2202,35 +2202,51 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         if (dragIndex < 0 || cards.length < 2) {
             return;
         }
-        const scroll0 = window.scrollY;
-        // Fixed reference geometry in DOCUMENT coordinates (scroll-independent) so
-        // edge auto-scroll can't invalidate the hit-testing mid-drag.
-        const rects = cards.map((el) => el.getBoundingClientRect());
-        const centersDoc = rects.map((r) => r.top + r.height / 2 + scroll0);
-        const gap = cards.length > 1 ? Math.max(6, rects[1].top - rects[0].bottom) : 10;
-        const shift = rects[dragIndex].height + gap;
-        const startDocY = event.clientY + scroll0;
         const pointerId = event.pointerId;
+        const grabClientY = event.clientY;
         let lastClientY = event.clientY;
         let targetIndex = dragIndex;
         let frame = null;
 
         try { handle.setPointerCapture(pointerId); } catch (_) {}
+        // Collapse every card to just grip + name + muscle group. The whole list
+        // then fits on screen, so the transforms stay tiny and uniform and the
+        // gifs / set-lists / notes stop repainting — the drag is smooth on phones
+        // and you can see every exercise at once. Measure geometry AFTER collapsing
+        // (and after clamping the now-shorter scroll) so hit-testing matches what's
+        // on screen; all coordinates are kept in DOCUMENT space so edge auto-scroll
+        // can't invalidate them mid-drag.
         document.body.classList.add("is-reordering");
+        list.classList.add("reordering");
         dragged.classList.add("we-dragging");
+        void list.offsetHeight; // flush layout with the collapsed heights
+        const maxScroll0 = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        if (window.scrollY > maxScroll0) {
+            window.scrollTo(0, maxScroll0);
+        }
+        const scroll0 = window.scrollY;
+        const rects = cards.map((el) => el.getBoundingClientRect());
+        const centersDoc = rects.map((r) => r.top + r.height / 2 + scroll0);
+        const gap = cards.length > 1 ? Math.max(6, rects[1].top - rects[0].bottom) : 10;
+        const dragH = rects[dragIndex].height;
+        const shift = dragH + gap;
+        const naturalTopDoc = rects[dragIndex].top + scroll0;
+        // Finger's offset from the collapsed card's top, clamped — so if the collapse
+        // scrolled the card out from under the finger, the card re-anchors back to it.
+        const pointerOffset = Math.max(6, Math.min(dragH - 6, grabClientY - rects[dragIndex].top));
+
         dragged.style.transition = "none";
         cards.forEach((el, i) => {
             if (i !== dragIndex) {
-                el.style.transition = "transform 0.19s cubic-bezier(0.22,1,0.36,1)";
+                el.style.transition = "transform 0.18s cubic-bezier(0.22,1,0.36,1)";
             }
         });
 
         const apply = () => {
             frame = null;
-            const pointerDocY = lastClientY + window.scrollY;
-            const deltaDoc = pointerDocY - startDocY;
-            dragged.style.transform = `translateY(${deltaDoc}px) scale(1.025)`;
-            const draggedCenter = centersDoc[dragIndex] + deltaDoc;
+            const desiredTopDoc = (lastClientY + window.scrollY) - pointerOffset;
+            dragged.style.transform = `translateY(${desiredTopDoc - naturalTopDoc}px) scale(1.03)`;
+            const draggedCenter = desiredTopDoc + dragH / 2;
             let up = 0;
             let down = 0;
             cards.forEach((el, i) => {
@@ -2258,6 +2274,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 frame = requestAnimationFrame(apply);
             }
         };
+        apply(); // place the lifted card (re-anchors it under the finger if the collapse shifted it)
 
         const edgeAutoScroll = () => {
             const margin = 84;
@@ -2303,6 +2320,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 frame = null;
             }
             document.body.classList.remove("is-reordering");
+            list.classList.remove("reordering");
             dragged.classList.remove("we-dragging");
             cards.forEach((el) => {
                 el.style.transition = "";

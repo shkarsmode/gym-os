@@ -1480,6 +1480,25 @@ body.is-reordering .we-drag-handle {
     cursor: grabbing;
 }
 
+/* While reordering, collapse every card down to grip + name + muscle group. The
+   whole list then fits on screen, so the drag is smooth on phones and every
+   exercise stays visible. The grip stays pinned to the left of the name. */
+.workout-exercise-list.reordering .workout-exercise {
+    padding: 12px 14px;
+    box-shadow: none;
+}
+.workout-exercise-list.reordering .wd-thumb,
+.workout-exercise-list.reordering .exercise-header .card-caption,
+.workout-exercise-list.reordering .inline-actions,
+.workout-exercise-list.reordering .last-results,
+.workout-exercise-list.reordering .set-list,
+.workout-exercise-list.reordering .workout-exercise > .field {
+    display: none !important;
+}
+.workout-exercise-list.reordering .we-dragging {
+    box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.65);
+}
+
 /* "Last time" results, shown above the sets of an exercise */
 .last-results {
     margin: 12px 0 4px;
