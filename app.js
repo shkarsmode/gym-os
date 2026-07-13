@@ -1648,12 +1648,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     };
     let aiCooldownTimer = null;
 
-    const aiExamples = [
-        "Жим лежачи 4×10 по 80 кг, відпочинок 90 секунд, потім розводка 3×15 і доріжка 20 хвилин",
-        "Сьогодні спина: тяга верхнього блока 4 по 12, тяга штанги в нахилі 3×10 рабочий вес 70, планка 3 по хвилині",
-        "Груди й трицепс: жим гантелей під кутом чотири по десять, розгинання на блоці 3×15 RPE 8, велотренажер 10 км"
-    ];
-
     function aiSpeechSupported() {
         return typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
     }
@@ -1713,7 +1707,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             </div>
             ${recording ? `<div class="ai-record-status" role="status"><span class="ai-rec-dot"></span>Записую… <span id="aiInterim" class="ai-interim">${escapeHtml(aiState.interim)}</span></div>` : ""}
             ${micHint}
-            <div class="ai-examples">${aiExamples.map((example) => `<button class="ai-example" type="button" data-action="ai-example" data-index="${aiExamples.indexOf(example)}">${escapeHtml(example.length > 68 ? example.slice(0, 66) + "…" : example)}</button>`).join("")}</div>
             <div class="ai-actions">
                 <button class="button ai-primary large-workout-button" type="button" data-action="ai-parse"${disabled ? " disabled" : ""}>${processing ? `<span class="pixel-loader ai-loader">${Array.from({ length: 5 }, (_, i) => `<span style="--cell:${i}"></span>`).join("")}</span>` : `<i data-lucide="sparkles"></i>`}${primaryLabel}</button>
                 ${aiState.result || aiState.text ? `<button class="button button-ghost compact" type="button" data-action="ai-reset"><i data-lucide="eraser"></i>Очистити</button>` : ""}
@@ -1799,15 +1792,19 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const target = `data-ex-index="${exIndex}" data-set-index="${setIndex}"`;
         const isTimed = set.durationSeconds !== null && set.durationSeconds !== undefined;
         return `<div class="ai-set-row">
-            <span class="ai-set-index">${setIndex + 1}</span>
-            <gym-select class="ai-set-type" data-action="ai-set-field" ${target} data-field="type">${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
-            <label class="ai-set-field"><span>кг</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="ai-set-field" ${target} data-field="weight"></label>
-            ${isTimed
-                ? `<label class="ai-set-field"><span>сек</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="ai-set-field" ${target} data-field="durationSeconds"></label>`
-                : `<label class="ai-set-field"><span>повт</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="ai-set-field" ${target} data-field="repetitions"></label>`}
-            <label class="ai-set-field"><span>RPE</span><input type="number" inputmode="decimal" step="0.5" min="0" max="10" value="${set.rpe || ""}" placeholder="—" data-action="ai-set-field" ${target} data-field="rpe"></label>
-            <label class="ai-set-field"><span>відп</span><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="ai-set-field" ${target} data-field="restSeconds"></label>
-            <button class="icon-button ai-set-del" type="button" title="Видалити підхід" data-action="ai-remove-set" ${target}><i data-lucide="x"></i></button>
+            <div class="ai-set-row-head">
+                <span class="ai-set-index">${setIndex + 1}</span>
+                <gym-select class="ai-set-type" data-action="ai-set-field" ${target} data-field="type">${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
+                <button class="icon-button ai-set-del" type="button" title="Видалити підхід" data-action="ai-remove-set" ${target}><i data-lucide="x"></i></button>
+            </div>
+            <div class="ai-set-grid">
+                <label class="ai-set-field"><span>Вага, кг</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="ai-set-field" ${target} data-field="weight"></label>
+                ${isTimed
+                    ? `<label class="ai-set-field"><span>Час, с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="ai-set-field" ${target} data-field="durationSeconds"></label>`
+                    : `<label class="ai-set-field"><span>Повтори</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="ai-set-field" ${target} data-field="repetitions"></label>`}
+                <label class="ai-set-field"><span>RPE</span><input type="number" inputmode="decimal" step="0.5" min="0" max="10" value="${set.rpe || ""}" placeholder="—" data-action="ai-set-field" ${target} data-field="rpe"></label>
+                <label class="ai-set-field"><span>Відп, с</span><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="ai-set-field" ${target} data-field="restSeconds"></label>
+            </div>
         </div>`;
     }
 
@@ -1842,18 +1839,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     // ---- AI actions -----------------------------------------------------------
-    function aiSetExample(index) {
-        const example = aiExamples[Number(index)];
-        if (example) {
-            aiState.text = example;
-            renderAiBlock();
-            const textarea = element("aiTextarea");
-            if (textarea) {
-                textarea.focus();
-            }
-        }
-    }
-
     function aiToggleMic() {
         if (aiState.recognizing) {
             aiStopRecognition();
@@ -3761,7 +3746,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "ai-parse": aiParse,
             "ai-apply": aiApply,
             "ai-reset": aiReset,
-            "ai-example": () => aiSetExample(actionElement.dataset.index),
             "ai-add-set": () => aiAddSet(actionElement.dataset.exIndex),
             "ai-remove-set": () => aiRemoveSet(actionElement.dataset.exIndex, actionElement.dataset.setIndex),
             "ai-remove-exercise": () => aiRemoveExercise(actionElement.dataset.exIndex),
