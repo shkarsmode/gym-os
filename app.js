@@ -1643,7 +1643,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
-            ${workoutItem.exercises.length ? workoutItem.exercises.sort((left, right) => left.order - right.order).map((item, exerciseIndex) => workoutExerciseEditor(workoutItem, item, readonly, exerciseIndex === 0)).join("") : emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}
+            ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutItem.exercises.slice().sort((left, right) => left.order - right.order).map((item, exerciseIndex) => workoutExerciseEditor(workoutItem, item, readonly, exerciseIndex === 0)).join("")}</div>` : emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}
             ${cardioBlock(workoutItem, readonly)}
         `;
     }
@@ -1664,7 +1664,8 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             ? `<div class="previous-note"><span class="previous-note-label"><i data-lucide="sticky-note"></i>Остання нотатка · ${formatDate(lastNote.date)}</span><p>${escapeHtml(lastNote.notes)}</p></div>`
             : "";
         const showSetHint = !readonly && isFirstExercise;
-        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div><div class="inline-actions">${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}<button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div>${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        const dragHandle = readonly ? "" : `<button class="we-drag-handle" type="button" aria-label="Перетягни, щоб змінити порядок" title="Перетягни, щоб змінити порядок" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="grip-vertical"></i></button>`;
+        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header">${dragHandle}<div><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div><div class="inline-actions">${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}<button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div>${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly, index, showSetHint) {
@@ -2161,6 +2162,183 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
         setupTooltips();
         setupPullToRefresh();
+        setupExerciseReorder();
+    }
+
+    // Drag-and-drop reorder of exercises within a workout. One delegated
+    // pointerdown on the grip handle drives it, so it survives re-renders and
+    // works identically for touch and mouse (Pointer Events). During a drag the
+    // grabbed card follows the finger while the others slide open a gap via
+    // transforms (no live DOM churn); we commit the new order only on release.
+    function setupExerciseReorder() {
+        document.addEventListener("pointerdown", (event) => {
+            if (event.button != null && event.button !== 0) {
+                return; // left button / touch / pen only
+            }
+            const handle = event.target.closest && event.target.closest(".we-drag-handle");
+            if (!handle) {
+                return;
+            }
+            const list = handle.closest(".workout-exercise-list[data-reorder]");
+            if (!list) {
+                return;
+            }
+            beginExerciseDrag(event, handle, list);
+        });
+    }
+
+    let reorderAutoScrollTimer = null;
+
+    function beginExerciseDrag(event, handle, list) {
+        event.preventDefault();
+        const dragged = handle.closest(".workout-exercise");
+        const cards = Array.prototype.slice.call(list.querySelectorAll(".workout-exercise"));
+        const dragIndex = cards.indexOf(dragged);
+        if (dragIndex < 0 || cards.length < 2) {
+            return;
+        }
+        const scroll0 = window.scrollY;
+        // Fixed reference geometry in DOCUMENT coordinates (scroll-independent) so
+        // edge auto-scroll can't invalidate the hit-testing mid-drag.
+        const rects = cards.map((el) => el.getBoundingClientRect());
+        const centersDoc = rects.map((r) => r.top + r.height / 2 + scroll0);
+        const gap = cards.length > 1 ? Math.max(6, rects[1].top - rects[0].bottom) : 10;
+        const shift = rects[dragIndex].height + gap;
+        const startDocY = event.clientY + scroll0;
+        const pointerId = event.pointerId;
+        let lastClientY = event.clientY;
+        let targetIndex = dragIndex;
+        let frame = null;
+
+        try { handle.setPointerCapture(pointerId); } catch (_) {}
+        document.body.classList.add("is-reordering");
+        dragged.classList.add("we-dragging");
+        dragged.style.transition = "none";
+        cards.forEach((el, i) => {
+            if (i !== dragIndex) {
+                el.style.transition = "transform 0.19s cubic-bezier(0.22,1,0.36,1)";
+            }
+        });
+
+        const apply = () => {
+            frame = null;
+            const pointerDocY = lastClientY + window.scrollY;
+            const deltaDoc = pointerDocY - startDocY;
+            dragged.style.transform = `translateY(${deltaDoc}px) scale(1.025)`;
+            const draggedCenter = centersDoc[dragIndex] + deltaDoc;
+            let up = 0;
+            let down = 0;
+            cards.forEach((el, i) => {
+                if (i === dragIndex) {
+                    return;
+                }
+                if (i < dragIndex) {
+                    if (draggedCenter < centersDoc[i]) {
+                        el.style.transform = `translateY(${shift}px)`;
+                        up++;
+                    } else {
+                        el.style.transform = "translateY(0)";
+                    }
+                } else if (draggedCenter > centersDoc[i]) {
+                    el.style.transform = `translateY(${-shift}px)`;
+                    down++;
+                } else {
+                    el.style.transform = "translateY(0)";
+                }
+            });
+            targetIndex = up ? dragIndex - up : down ? dragIndex + down : dragIndex;
+        };
+        const schedule = () => {
+            if (!frame) {
+                frame = requestAnimationFrame(apply);
+            }
+        };
+
+        const edgeAutoScroll = () => {
+            const margin = 84;
+            const max = document.documentElement.scrollHeight - window.innerHeight;
+            let dir = 0;
+            if (lastClientY < margin && window.scrollY > 0) {
+                dir = -1;
+            } else if (lastClientY > window.innerHeight - margin && window.scrollY < max) {
+                dir = 1;
+            }
+            if (!dir) {
+                stopReorderAutoScroll();
+                return;
+            }
+            if (reorderAutoScrollTimer) {
+                return;
+            }
+            reorderAutoScrollTimer = setInterval(() => {
+                window.scrollBy(0, dir * 11);
+                schedule();
+            }, 16);
+        };
+
+        const onMove = (event2) => {
+            if (event2.pointerId !== pointerId) {
+                return;
+            }
+            event2.preventDefault();
+            lastClientY = event2.clientY;
+            schedule();
+            edgeAutoScroll();
+        };
+        const onUp = (event2) => {
+            if (event2.pointerId !== pointerId) {
+                return;
+            }
+            document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", onUp);
+            document.removeEventListener("pointercancel", onUp);
+            stopReorderAutoScroll();
+            if (frame) {
+                cancelAnimationFrame(frame);
+                frame = null;
+            }
+            document.body.classList.remove("is-reordering");
+            dragged.classList.remove("we-dragging");
+            cards.forEach((el) => {
+                el.style.transition = "";
+                el.style.transform = "";
+            });
+            try { handle.releasePointerCapture(pointerId); } catch (_) {}
+            commitExerciseReorder(list, dragIndex, targetIndex);
+        };
+        document.addEventListener("pointermove", onMove, { passive: false });
+        document.addEventListener("pointerup", onUp);
+        document.addEventListener("pointercancel", onUp);
+    }
+
+    function stopReorderAutoScroll() {
+        if (reorderAutoScrollTimer) {
+            clearInterval(reorderAutoScrollTimer);
+            reorderAutoScrollTimer = null;
+        }
+    }
+
+    function commitExerciseReorder(list, fromIndex, toIndex) {
+        if (fromIndex === toIndex) {
+            return;
+        }
+        const workoutId = list.dataset.workoutId;
+        const workoutItem = (workoutId && ownWorkout(workoutId)) || editWorkout();
+        if (!workoutItem) {
+            return;
+        }
+        const ordered = workoutItem.exercises.slice().sort((left, right) => left.order - right.order);
+        if (fromIndex >= ordered.length || toIndex >= ordered.length) {
+            return;
+        }
+        const [moved] = ordered.splice(fromIndex, 1);
+        ordered.splice(toIndex, 0, moved);
+        ordered.forEach((exercise, index) => {
+            exercise.order = index + 1;
+        });
+        workoutItem.updatedAt = new Date().toISOString();
+        persistWorkout(workoutItem);
+        renderSection();
     }
 
     // Re-fetch everything from the backend and re-render the current view. Used by
@@ -2274,7 +2452,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 armed = false;
                 return;
             }
-            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .focus-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
+            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .focus-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, .we-drag-handle, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
                 armed = false;
                 return;
             }
