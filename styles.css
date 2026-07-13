@@ -1412,6 +1412,23 @@ select option {
     min-width: 0;
 }
 
+/* Active-workout exercise header: small gif thumb (same .wd-thumb as the finished
+   workout detail) beside the title; the text block grows to fill the row. */
+.we-head-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.we-head-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
 /* Grip handle that starts a reorder drag (touch + mouse via Pointer Events). */
 .we-drag-handle {
     flex: 0 0 auto;
