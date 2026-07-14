@@ -4037,13 +4037,18 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function openDaySheet(date) {
-        const items = state.database.workouts.filter((item) => item.date === date).sort((left, right) => statusRank(left.status) - statusRank(right.status));
+        const meId = currentUser().id;
+        // Own workouts first, then by status — so you spot yours instantly.
+        const items = state.database.workouts.filter((item) => item.date === date).sort((left, right) => {
+            const ownDiff = (left.userId === meId ? 0 : 1) - (right.userId === meId ? 0 : 1);
+            return ownDiff !== 0 ? ownDiff : statusRank(left.status) - statusRank(right.status);
+        });
         const isToday = date === dateInput(new Date());
         const rows = items.map((workoutItem) => {
             const owner = userById(workoutItem.userId);
-            const own = workoutItem.userId === currentUser().id;
+            const own = workoutItem.userId === meId;
             const manage = canManage(workoutItem);
-            return `<article class="day-row"><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? "" : `<span class="chip">${escapeHtml(owner.displayName)}</span>`}</div><strong>${escapeHtml(workoutLabel(workoutItem))}</strong><p class="card-caption">${number(workoutVolume(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions">${manage ? `<button class="button button-secondary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button><button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : `<button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button>`}</div></article>`;
+            return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${number(workoutVolume(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions">${manage ? `<button class="button button-secondary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button><button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : `<button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button>`}</div></article>`;
         }).join("");
         openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div><div class="day-sheet-action">${startWorkoutButton(date, { label: isToday ? "Почати тренування" : "Додати тренування", buttonClass: "button button-primary" })}</div>`);
     }
@@ -4886,6 +4891,26 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const workoutItem = workoutId ? ownWorkout(workoutId) : (editWorkout() || activeWorkoutFor(currentUser().id));
         if (!workoutItem) {
             return;
+        }
+        // If sets have data (weight/reps) but weren't ticked off, don't silently
+        // finish — offer to auto-mark them done, finish as-is, or cancel.
+        const pendingSets = workoutItem.exercises
+            .flatMap((exercise) => exercise.sets)
+            .filter((set) => !set.isCompleted && (Number(set.weight) > 0 || Number(set.repetitions) > 0));
+        if (pendingSets.length > 0) {
+            const choice = await choiceDialog(`${pendingSets.length} підходів із даними ще не позначені виконаними. Позначити їх усі виконаними?`, {
+                title: "Завершити тренування?",
+                choices: [
+                    { label: "Позначити всі виконаними", value: "complete", variant: "primary" },
+                    { label: "Завершити як є", value: "asis", variant: "secondary" }
+                ]
+            });
+            if (!choice) {
+                return;
+            }
+            if (choice === "complete") {
+                pendingSets.forEach((set) => { set.isCompleted = true; });
+            }
         }
         workoutItem.status = "completed";
         workoutItem.finishedAt = new Date().toISOString();
@@ -5768,10 +5793,30 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             buttonText: { today: "Сьогодні", month: "Місяць", week: "Тиждень", list: "Список" },
             headerToolbar: mobile ? { left: "prev,next", center: "title", right: "today" } : { left: "prev,next today", center: "title", right: "dayGridMonth,listMonth" },
             displayEventTime: false,
-            events: state.database.workouts.map((workoutItem) => ({ id: workoutItem.id, title: userById(workoutItem.userId).displayName, start: workoutItem.date, classNames: [`workout-status-${workoutItem.status}`], extendedProps: { workoutId: workoutItem.id, date: workoutItem.date, num: (String(workoutItem.title || "").match(/#(\d+)/) || [])[1] || "" } })),
+            eventOrder: "mine,title",
+            events: state.database.workouts.map((workoutItem) => {
+                const owner = userById(workoutItem.userId);
+                const mine = workoutItem.userId === currentUser().id;
+                return {
+                    id: workoutItem.id,
+                    title: owner.displayName,
+                    start: workoutItem.date,
+                    classNames: [`workout-status-${workoutItem.status}`, ...(mine ? ["workout-mine"] : [])],
+                    extendedProps: {
+                        workoutId: workoutItem.id,
+                        date: workoutItem.date,
+                        num: String(workoutNumber(workoutItem)),
+                        mine: mine ? 0 : 1,
+                        avatarUrl: imageUrl(owner.avatarUrl) || "",
+                        initials: owner.avatarInitials || "",
+                        color: owner.avatarColor || "#333"
+                    }
+                };
+            }),
             eventContent: (arg) => {
-                const num = arg.event.extendedProps.num;
-                return { html: `<div class="fc-ev"><span class="fc-ev-name">${escapeHtml(arg.event.title || "")}</span>${num ? `<span class="fc-ev-num">#${escapeHtml(num)}</span>` : ""}</div>` };
+                const props = arg.event.extendedProps;
+                const av = `<span class="fc-ev-av" style="background:${escapeHtml(props.color)}">${escapeHtml(props.initials)}${props.avatarUrl ? `<img src="${escapeHtml(props.avatarUrl)}" alt="" referrerpolicy="no-referrer" decoding="async" onerror="this.remove()">` : ""}</span>`;
+                return { html: `<div class="fc-ev">${av}<span class="fc-ev-name">${escapeHtml(arg.event.title || "")}</span>${props.num ? `<span class="fc-ev-num">#${escapeHtml(props.num)}</span>` : ""}</div>` };
             },
             dateClick: (info) => openDaySheet(info.dateStr),
             eventClick: (info) => {
@@ -7587,6 +7632,56 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             backdrop.addEventListener("click", onBackdrop);
             element("confirmOkBtn").addEventListener("click", () => finish(true));
             element("confirmCancelBtn").addEventListener("click", () => finish(false));
+        });
+    }
+
+    // Like confirmDialog, but with N labelled choices. Resolves the chosen value,
+    // or null if dismissed via the backdrop. Reuses the same stack-aware overlay
+    // plumbing so it can appear on its own or on top of an already-open modal.
+    function choiceDialog(message, options = {}) {
+        const { title = "Підтвердження", choices = [] } = options;
+        return new Promise((resolve) => {
+            const variantClass = (variant) => variant === "primary" ? "button-primary" : variant === "danger" ? "button-danger" : "button-secondary";
+            const buttons = choices.map((choice, index) => `<button class="button ${variantClass(choice.variant)}" type="button" data-choice="${index}">${escapeHtml(choice.label)}</button>`).join("");
+            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions confirm-choices">${buttons}</div></div>`;
+            const stacked = !element("modalBackdrop").classList.contains("hidden");
+            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
+            let layer;
+            if (stacked) {
+                openSheet(html);
+                layer = element("modalLayer2");
+            } else {
+                clearTimeout(overlayCloseTimer);
+                const drawer = element("drawerLayer");
+                drawer.classList.add("hidden");
+                drawer.classList.remove("visible");
+                drawer.innerHTML = "";
+                layer = element("modalLayer");
+                layer.classList.remove("modal-fullscreen");
+                layer.innerHTML = html;
+                iconsIn(layer);
+                lockBackgroundScroll();
+                revealOverlay(layer);
+            }
+            let settled = false;
+            const finish = (result) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                backdrop.removeEventListener("click", onBackdrop);
+                if (stacked) {
+                    closeSheet();
+                } else {
+                    closeOverlay();
+                }
+                resolve(result);
+            };
+            const onBackdrop = () => finish(null);
+            backdrop.addEventListener("click", onBackdrop);
+            layer.querySelectorAll("[data-choice]").forEach((button) => {
+                button.addEventListener("click", () => finish(choices[Number(button.dataset.choice)].value));
+            });
         });
     }
 
