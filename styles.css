@@ -8040,11 +8040,21 @@ html.compact-ui .chip {
 }
 .ai-badge svg { width: 22px; height: 22px; }
 .ai-title { margin: 2px 0 4px; }
+.ai-head-text { flex: 1 1 auto; min-width: 0; }
+.ai-collapse-btn { flex: 0 0 auto; align-self: flex-start; width: 32px; height: 32px; margin: -4px -4px 0 0; color: var(--color-muted); }
+.ai-collapse-btn svg { width: 18px; height: 18px; }
+
+/* Compact inline AI button that replaces the full card for returning users. */
+.ai-inline-btn { border-color: var(--color-accent-border); }
+.ai-inline-btn i { color: var(--color-accent-strong); }
 
 .ai-textarea {
     width: 100%; min-height: 92px; resize: vertical; padding: 12px 14px;
     border-radius: var(--radius-md); font-size: 16px; line-height: 1.5;
 }
+/* Keep the input text at 16px (no iOS zoom-on-focus) but shrink the long example
+   placeholder so it doesn't dominate the field, especially on phones. */
+.ai-textarea::placeholder { font-size: 13.5px; }
 
 .ai-input-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .ai-tier-hint { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--color-accent-strong); }
@@ -8172,4 +8182,15 @@ html.compact-ui .chip {
     .ai-limit-grid { grid-template-columns: repeat(3, 1fr); }
     .ai-stats-filters { flex-direction: column; align-items: stretch; }
     .ai-req-metrics .ai-req-time { display: none; }
+
+    /* Tighter AI card on phones: smaller badge/title, shorter field, calmer placeholder. */
+    .ai-card { padding: 14px; }
+    .ai-head { gap: 10px; margin-bottom: 10px; }
+    .ai-badge { width: 34px; height: 34px; }
+    .ai-badge svg { width: 18px; height: 18px; }
+    .ai-title { font-size: 16px; }
+    .ai-head .card-caption { font-size: 12.5px; }
+    .ai-textarea { min-height: 68px; }
+    .ai-textarea::placeholder { font-size: 12.5px; }
+    .ai-actions { margin-top: 10px; }
 }

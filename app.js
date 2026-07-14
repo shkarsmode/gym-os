@@ -1626,8 +1626,18 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     function workoutStarter() {
         // AI block sits directly above the manual "Почати тренування" card. Available to
         // PRO (premium) and admins; hidden for free users (backend enforces it too).
-        const aiBlock = canUseAi() ? `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>` : "";
-        return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
+        // Returning users get it folded into a compact inline button instead.
+        let aiBlock = "";
+        let aiInlineButton = "";
+        if (canUseAi()) {
+            if (aiBlockCollapsed()) {
+                aiInlineButton = `<button class="button button-secondary large-workout-button ai-inline-btn" type="button" data-action="ai-expand"><i data-lucide="sparkles"></i>Створити за допомогою AI</button>`;
+            } else {
+                noteAiSeen();
+                aiBlock = `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>`;
+            }
+        }
+        return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}${aiInlineButton}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
     }
 
     // ===== AI-тренування (PRO + admin) ==========================================
@@ -1646,7 +1656,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         result: null,
         error: null,
         cooldownUntil: 0,
-        daily: null // { limit, used, remaining, tier } from the last successful parse
+        daily: null, // { limit, used, remaining, tier } from the last successful parse
+        forceExpanded: false, // session override: user tapped the compact "Створити за допомогою AI" button
+        seenCounted: false // guard so we count one "saw the AI card" per app session
     };
     let aiCooldownTimer = null;
 
@@ -1657,6 +1669,35 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     // PRO users get a 2000-char cap; admins get the full length.
     function aiMaxChars() {
         return isAdmin() ? 6000 : 2000;
+    }
+
+    // ---- AI block collapse ----------------------------------------------------
+    // Once someone has used AI (tapped "Створити за допомогою AI") or seen the card
+    // a few sessions, the full card folds into a compact button next to «Почати
+    // тренування». They can expand it on demand; it defaults back to compact next
+    // session. Local per-device (no cross-device sync needed for a layout choice).
+    function aiSeenKey() { return `ai-seen-${currentUser().id}`; }
+    function aiUsedKey() { return `ai-used-${currentUser().id}`; }
+    function aiCollapsedKey() { return `ai-collapsed-${currentUser().id}`; }
+
+    function markAiUsed() {
+        storage.writeSetting(aiUsedKey(), "1");
+    }
+
+    // Count one "saw the expanded AI card" per app session, capped at the threshold.
+    function noteAiSeen() {
+        if (aiState.seenCounted) { return; }
+        aiState.seenCounted = true;
+        const seen = Number(storage.readSetting(aiSeenKey()) || "0");
+        if (seen < 3) { storage.writeSetting(aiSeenKey(), String(seen + 1)); }
+    }
+
+    function aiBlockCollapsed() {
+        if (aiState.forceExpanded) { return false; }
+        if (storage.readSetting(aiCollapsedKey()) === "1") { return true; }
+        const used = storage.readSetting(aiUsedKey()) === "1";
+        const seen = Number(storage.readSetting(aiSeenKey()) || "0");
+        return used || seen >= 3;
     }
 
     function aiWorkoutBlock() {
@@ -1696,11 +1737,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return `<section class="card ai-card">
             <div class="ai-head">
                 <span class="ai-badge"><i data-lucide="sparkles"></i></span>
-                <div>
+                <div class="ai-head-text">
                     <p class="eyebrow">AI</p>
                     <h2 class="ai-title">AI-тренування</h2>
                     <p class="card-caption">Опиши тренування текстом (або надиктуй мікрофоном клавіатури) — AI зробить структурований чернетку.</p>
                 </div>
+                <button class="icon-button ai-collapse-btn" type="button" data-action="ai-collapse" title="Згорнути" aria-label="Згорнути AI-блок"><i data-lucide="chevron-up"></i></button>
             </div>
             <div class="ai-input-wrap">
                 <textarea id="aiTextarea" class="ai-textarea" data-action="ai-input" rows="3" maxlength="${maxChars}" placeholder="Наприклад: жим лежачи 4×10 по 80 кг, відпочинок 90 секунд, потім розводка 3×15 і доріжка 20 хвилин"${processing ? " disabled" : ""}>${escapeHtml(aiState.text)}</textarea>
@@ -1854,6 +1896,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         if (aiState.cooldownUntil && Date.now() < aiState.cooldownUntil) {
             return;
         }
+        markAiUsed(); // returning users see the compact button next time
         aiState.status = "processing";
         aiState.error = null;
         renderAiBlock();
@@ -3646,6 +3689,8 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "ai-parse": aiParse,
             "ai-apply": aiApply,
             "ai-reset": aiReset,
+            "ai-expand": () => { aiState.forceExpanded = true; renderSection(); },
+            "ai-collapse": () => { aiState.forceExpanded = false; storage.writeSetting(aiCollapsedKey(), "1"); renderSection(); },
             "ai-add-set": () => aiAddSet(actionElement.dataset.exIndex),
             "ai-remove-set": () => aiRemoveSet(actionElement.dataset.exIndex, actionElement.dataset.setIndex),
             "ai-remove-exercise": () => aiRemoveExercise(actionElement.dataset.exIndex),
