@@ -1624,17 +1624,21 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function workoutStarter() {
-        // Admin-only AI block sits directly above the manual "Почати тренування" card.
-        const aiBlock = isAdmin() ? `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>` : "";
+        // AI block sits directly above the manual "Почати тренування" card. Available to
+        // PRO (premium) and admins; hidden for free users (backend enforces it too).
+        const aiBlock = canUseAi() ? `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>` : "";
         return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
     }
 
-    // ===== AI-тренування (admin-only) ===========================================
+    // ===== AI-тренування (PRO + admin) ==========================================
     // A single compact block on the workout-prep screen: one textarea + a mic
-    // (Web Speech API) feeding the same field, example chips, and a "Створити за
-    // допомогою AI" button. The parsed structured workout is shown as an editable
-    // preview; "Застосувати тренування" seeds a NEW planned workout and opens it in
-    // the normal editor. Nothing is started or saved automatically.
+    // (Web Speech API) feeding the same field, and a "Створити за допомогою AI"
+    // button. The parsed structured workout is shown as an editable preview;
+    // "Застосувати тренування" seeds a NEW planned workout and opens it in the
+    // normal editor. Nothing is started or saved automatically. Free users don't see
+    // the block; PRO gets a daily quota + shorter input, admins are unlimited.
+    const AI_PRO_DAILY_LIMIT = 3;
+
     const aiState = {
         text: "",
         baseText: "",
@@ -1644,9 +1648,19 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         recognition: null,
         result: null,
         error: null,
-        cooldownUntil: 0
+        cooldownUntil: 0,
+        daily: null // { limit, used, remaining, tier } from the last successful parse
     };
     let aiCooldownTimer = null;
+
+    function canUseAi() {
+        return isAdmin() || effectiveRole() === "premium";
+    }
+
+    // PRO users get a 2000-char cap; admins get the full length.
+    function aiMaxChars() {
+        return isAdmin() ? 6000 : 2000;
+    }
 
     function aiSpeechSupported() {
         return typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -1676,8 +1690,20 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
     }
 
+    function aiTierHint() {
+        if (isAdmin()) {
+            return `<span class="ai-tier-hint"><i data-lucide="infinity"></i>Адмін · без ліміту</span>`;
+        }
+        const daily = aiState.daily;
+        if (daily && typeof daily.remaining === "number") {
+            return `<span class="ai-tier-hint">PRO · залишилось ${daily.remaining} з ${daily.limit} сьогодні</span>`;
+        }
+        return `<span class="ai-tier-hint">PRO · до ${AI_PRO_DAILY_LIMIT} на день</span>`;
+    }
+
     function aiInputCard() {
         const supportsSpeech = aiSpeechSupported();
+        const maxChars = aiMaxChars();
         const recording = aiState.recognizing;
         const processing = aiState.status === "processing";
         const cooldownLeft = aiState.cooldownUntil ? Math.max(0, aiState.cooldownUntil - Date.now()) : 0;
@@ -1698,13 +1724,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 <div>
                     <p class="eyebrow">AI</p>
                     <h2 class="ai-title">AI-тренування</h2>
-                    <p class="card-caption">Опиши тренування текстом або голосом — AI зробить структурований чернетку. Тільки для адміністраторів.</p>
+                    <p class="card-caption">Опиши тренування текстом або голосом — AI зробить структурований чернетку.</p>
                 </div>
             </div>
             <div class="ai-input-wrap ${recording ? "is-recording" : ""}">
-                <textarea id="aiTextarea" class="ai-textarea" data-action="ai-input" rows="3" maxlength="6000" placeholder="Наприклад: жим лежачи 4×10 по 80 кг, відпочинок 90 секунд, потім розводка 3×15 і доріжка 20 хвилин"${processing ? " disabled" : ""}>${escapeHtml(aiState.text)}</textarea>
+                <textarea id="aiTextarea" class="ai-textarea" data-action="ai-input" rows="3" maxlength="${maxChars}" placeholder="Наприклад: жим лежачи 4×10 по 80 кг, відпочинок 90 секунд, потім розводка 3×15 і доріжка 20 хвилин"${processing ? " disabled" : ""}>${escapeHtml(aiState.text)}</textarea>
                 ${mic}
             </div>
+            <div class="ai-input-meta">${aiTierHint()}<span id="aiCharCount" class="ai-char-count">${aiState.text.length} / ${maxChars}</span></div>
             ${recording ? `<div class="ai-record-status" role="status"><span class="ai-rec-dot"></span>Записую… <span id="aiInterim" class="ai-interim">${escapeHtml(aiState.interim)}</span></div>` : ""}
             ${micHint}
             <div class="ai-actions">
@@ -1839,6 +1866,15 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     // ---- AI actions -----------------------------------------------------------
+    function aiUpdateCharCount() {
+        const counter = element("aiCharCount");
+        if (counter) {
+            const max = aiMaxChars();
+            counter.textContent = `${Math.min(aiState.text.length, max)} / ${max}`;
+            counter.classList.toggle("is-full", aiState.text.length >= max);
+        }
+    }
+
     function aiToggleMic() {
         if (aiState.recognizing) {
             aiStopRecognition();
@@ -1879,11 +1915,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     interimText += transcript;
                 }
             }
+            const cap = aiMaxChars();
             if (finalText) {
-                aiState.baseText = aiJoinText(aiState.baseText, finalText);
+                aiState.baseText = aiJoinText(aiState.baseText, finalText).slice(0, cap);
             }
             aiState.interim = interimText;
-            aiState.text = aiJoinText(aiState.baseText, interimText);
+            // Speech sets .value programmatically, bypassing the textarea maxlength — cap here.
+            aiState.text = aiJoinText(aiState.baseText, interimText).slice(0, cap);
             const textarea = element("aiTextarea");
             if (textarea) {
                 textarea.value = aiState.text;
@@ -1892,6 +1930,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             if (interimEl) {
                 interimEl.textContent = interimText;
             }
+            aiUpdateCharCount();
         };
         recognition.onerror = (event) => {
             aiState.recognizing = false;
@@ -1963,6 +2002,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         try {
             const result = await storage.apiClient.parseAiWorkout({ text });
             aiState.result = aiNormalizeResult(result);
+            if (result && result.meta) {
+                aiState.daily = { limit: result.meta.dailyLimit, used: result.meta.dailyUsed, remaining: result.meta.dailyRemaining, tier: result.meta.tier };
+            }
             aiState.status = "result";
             aiState.error = null;
             renderAiBlock();
@@ -1970,6 +2012,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             aiState.status = "error";
             const status = Number(error && error.status ? error.status : 0);
             const payload = (error && error.payload) || {};
+            if (payload.code === "AI_DAILY_LIMIT") {
+                aiState.daily = { limit: AI_PRO_DAILY_LIMIT, used: AI_PRO_DAILY_LIMIT, remaining: 0, tier: "premium" };
+            }
             if (status === 429 && payload.retryAfterMs) {
                 aiState.cooldownUntil = Date.now() + Number(payload.retryAfterMs);
                 aiStartCooldownTick();
@@ -1995,6 +2040,8 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const code = String((error && error.payload && error.payload.code) || "");
         const messages = {
             GEMINI_NOT_CONFIGURED: "AI тимчасово недоступний: ключ Gemini не налаштовано.",
+            AI_FORBIDDEN: "AI-тренування доступне у тарифі PRO.",
+            AI_DAILY_LIMIT: `Ліміт PRO вичерпано: ${AI_PRO_DAILY_LIMIT} AI-тренування на день. Спробуй завтра.`,
             TIMEOUT: "AI не встиг відповісти. Спробуй ще раз.",
             RATE_LIMIT: "Забагато запитів. Зачекай кілька секунд.",
             AI_RATE_LIMIT: "Забагато AI-запитів. Зачекай трохи.",
@@ -2908,6 +2955,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         ];
         const proFeatures = [
             ["dumbbell", "До 2 тренувань на день"],
+            ["sparkles", "AI-тренування голосом або текстом — 3 на день"],
             ["calendar-days", "Минулий, поточний і наступний тиждень (5 / 6 / 5)"],
             ["list-plus", "До 30 власних вправ"],
             ["lightbulb", "До 3 запитів-ідей на день"],
@@ -2922,6 +2970,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             ["Тижні для тренувань", "поточний", "мин. + поточ. + наст."],
             ["Тренувань на тиждень (мин / пот / наст)", "— / 2 / —", "5 / 6 / 5"],
             ["Власні вправи", "1 / міс", "до 30"],
+            ["AI-тренування (на день)", false, "3"],
             ["Запитів-ідей на день", "1", "3"],
             ["Розширена аналітика", false, true],
             ["Повна історія тренувань", false, true],
@@ -4027,6 +4076,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         if (actionElement.dataset.action === "ai-input") {
             // Store transcript/typed text without repainting so the caret stays put.
             aiState.text = actionElement.value;
+            aiUpdateCharCount();
         }
 
         if (actionElement.dataset.action === "ai-catalog-search") {
