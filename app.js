@@ -1631,21 +1631,18 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     // ===== AI-тренування (PRO + admin) ==========================================
-    // A single compact block on the workout-prep screen: one textarea + a mic
-    // (Web Speech API) feeding the same field, and a "Створити за допомогою AI"
-    // button. The parsed structured workout is shown as an editable preview;
-    // "Застосувати тренування" seeds a NEW planned workout and opens it in the
-    // normal editor. Nothing is started or saved automatically. Free users don't see
-    // the block; PRO gets a daily quota + shorter input, admins are unlimited.
+    // A single compact block on the workout-prep screen: one textarea + a "Створити
+    // за допомогою AI" button. Voice input is left to the device keyboard's native
+    // dictation (types straight into the textarea). The parsed structured workout is
+    // shown as an editable preview; "Застосувати тренування" seeds a NEW planned
+    // workout and opens it in the normal editor. Nothing is started or saved
+    // automatically. Free users don't see the block; PRO gets a daily quota + shorter
+    // input, admins are unlimited.
     const AI_PRO_DAILY_LIMIT = 3;
 
     const aiState = {
         text: "",
-        baseText: "",
-        interim: "",
-        status: "idle", // idle | recording | processing | result | error
-        recognizing: false,
-        recognition: null,
+        status: "idle", // idle | processing | result | error
         result: null,
         error: null,
         cooldownUntil: 0,
@@ -1660,22 +1657,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     // PRO users get a 2000-char cap; admins get the full length.
     function aiMaxChars() {
         return isAdmin() ? 6000 : 2000;
-    }
-
-    function aiSpeechSupported() {
-        return typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-    }
-
-    function aiJoinText(base, addition) {
-        const left = String(base || "").replace(/\s+$/, "");
-        const right = String(addition || "").replace(/^\s+/, "");
-        if (!left) {
-            return right;
-        }
-        if (!right) {
-            return left;
-        }
-        return `${left} ${right}`;
     }
 
     function aiWorkoutBlock() {
@@ -1702,17 +1683,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function aiInputCard() {
-        const supportsSpeech = aiSpeechSupported();
         const maxChars = aiMaxChars();
-        const recording = aiState.recognizing;
         const processing = aiState.status === "processing";
         const cooldownLeft = aiState.cooldownUntil ? Math.max(0, aiState.cooldownUntil - Date.now()) : 0;
         const onCooldown = cooldownLeft > 0;
         const disabled = processing || onCooldown;
-        const mic = supportsSpeech
-            ? `<button class="ai-mic ${recording ? "is-recording" : ""}" type="button" data-action="ai-toggle-mic" title="${recording ? "Зупинити запис" : "Диктувати голосом"}" aria-label="${recording ? "Зупинити запис" : "Диктувати голосом"}">${recording ? aiWaveform() : `<i data-lucide="mic"></i>`}</button>`
-            : "";
-        const micHint = supportsSpeech ? "" : `<p class="input-hint ai-nospeech"><i data-lucide="mic-off"></i> Голосовий ввід не підтримується в цьому браузері — введи текст.</p>`;
         const primaryLabel = processing
             ? "Аналізую…"
             : onCooldown
@@ -1724,16 +1699,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 <div>
                     <p class="eyebrow">AI</p>
                     <h2 class="ai-title">AI-тренування</h2>
-                    <p class="card-caption">Опиши тренування текстом або голосом — AI зробить структурований чернетку.</p>
+                    <p class="card-caption">Опиши тренування текстом (або надиктуй мікрофоном клавіатури) — AI зробить структурований чернетку.</p>
                 </div>
             </div>
-            <div class="ai-input-wrap ${recording ? "is-recording" : ""}">
+            <div class="ai-input-wrap">
                 <textarea id="aiTextarea" class="ai-textarea" data-action="ai-input" rows="3" maxlength="${maxChars}" placeholder="Наприклад: жим лежачи 4×10 по 80 кг, відпочинок 90 секунд, потім розводка 3×15 і доріжка 20 хвилин"${processing ? " disabled" : ""}>${escapeHtml(aiState.text)}</textarea>
-                ${mic}
             </div>
             <div class="ai-input-meta">${aiTierHint()}<span id="aiCharCount" class="ai-char-count">${aiState.text.length} / ${maxChars}</span></div>
-            ${recording ? `<div class="ai-record-status" role="status"><span class="ai-rec-dot"></span>Записую… <span id="aiInterim" class="ai-interim">${escapeHtml(aiState.interim)}</span></div>` : ""}
-            ${micHint}
             <div class="ai-actions">
                 <button class="button ai-primary large-workout-button" type="button" data-action="ai-parse"${disabled ? " disabled" : ""}>${processing ? `<span class="pixel-loader ai-loader">${Array.from({ length: 5 }, (_, i) => `<span style="--cell:${i}"></span>`).join("")}</span>` : `<i data-lucide="sparkles"></i>`}${primaryLabel}</button>
                 ${aiState.result || aiState.text ? `<button class="button button-ghost compact" type="button" data-action="ai-reset"><i data-lucide="eraser"></i>Очистити</button>` : ""}
@@ -1741,10 +1713,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             ${aiState.status === "error" && aiState.error ? `<div class="ai-banner ai-banner-error" role="alert"><i data-lucide="alert-triangle"></i><span>${escapeHtml(aiState.error.message)}</span></div>` : ""}
             ${processing ? `<div class="ai-banner ai-banner-info"><i data-lucide="loader"></i><span>Аналізую опис тренування…</span></div>` : ""}
         </section>`;
-    }
-
-    function aiWaveform() {
-        return `<span class="ai-wave" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => `<span style="--bar:${i}"></span>`).join("")}</span>`;
     }
 
     function aiPreviewCard(result) {
@@ -1874,120 +1842,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
     }
 
-    function aiToggleMic() {
-        if (aiState.recognizing) {
-            aiStopRecognition();
-        } else {
-            aiStartRecognition();
-        }
-    }
-
-    function aiStartRecognition() {
-        const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!RecognitionCtor) {
-            toast("Голос недоступний", "Браузер не підтримує розпізнавання мовлення. Введи текст вручну.");
-            return;
-        }
-        if (aiState.recognizing) {
-            return;
-        }
-        let recognition;
-        try {
-            recognition = new RecognitionCtor();
-        } catch (error) {
-            toast("Мікрофон", "Не вдалося запустити розпізнавання.");
-            return;
-        }
-        recognition.lang = "uk-UA";
-        recognition.interimResults = true;
-        recognition.continuous = true;
-        aiState.baseText = aiState.text;
-        aiState.interim = "";
-        recognition.onresult = (event) => {
-            let finalText = "";
-            let interimText = "";
-            for (let i = event.resultIndex; i < event.results.length; i += 1) {
-                const transcript = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    finalText += transcript;
-                } else {
-                    interimText += transcript;
-                }
-            }
-            const cap = aiMaxChars();
-            if (finalText) {
-                aiState.baseText = aiJoinText(aiState.baseText, finalText).slice(0, cap);
-            }
-            aiState.interim = interimText;
-            // Speech sets .value programmatically, bypassing the textarea maxlength — cap here.
-            aiState.text = aiJoinText(aiState.baseText, interimText).slice(0, cap);
-            const textarea = element("aiTextarea");
-            if (textarea) {
-                textarea.value = aiState.text;
-            }
-            const interimEl = element("aiInterim");
-            if (interimEl) {
-                interimEl.textContent = interimText;
-            }
-            aiUpdateCharCount();
-        };
-        recognition.onerror = (event) => {
-            aiState.recognizing = false;
-            aiState.recognition = null;
-            if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-                aiState.status = "error";
-                aiState.error = { code: "MIC_DENIED", message: "Доступ до мікрофона заборонено. Дозволь його в налаштуваннях браузера або введи текст вручну." };
-            } else if (event.error !== "no-speech" && event.error !== "aborted") {
-                aiState.status = "error";
-                aiState.error = { code: "SPEECH_ERROR", message: "Помилка розпізнавання мовлення. Спробуй ще раз або введи текст." };
-            }
-            renderAiBlock();
-        };
-        recognition.onend = () => {
-            aiState.recognizing = false;
-            aiState.recognition = null;
-            aiState.text = aiJoinText(aiState.baseText, "");
-            aiState.interim = "";
-            if (aiState.status === "recording") {
-                aiState.status = "idle";
-            }
-            renderAiBlock();
-        };
-        try {
-            recognition.start();
-            aiState.recognition = recognition;
-            aiState.recognizing = true;
-            aiState.status = "recording";
-            aiState.error = null;
-            renderAiBlock();
-        } catch (error) {
-            aiState.recognizing = false;
-            aiState.recognition = null;
-        }
-    }
-
-    function aiStopRecognition() {
-        if (aiState.recognition) {
-            try {
-                aiState.recognition.stop();
-            } catch (error) {
-                // ignore — onend will still fire
-            }
-        }
-        aiState.recognizing = false;
-        if (aiState.status === "recording") {
-            aiState.status = "idle";
-        }
-    }
-
     async function aiParse() {
         const text = String(aiState.text || "").trim();
         if (text.length < 3) {
             toast("Замало тексту", "Опиши тренування трохи детальніше.");
             return;
-        }
-        if (aiState.recognizing) {
-            aiStopRecognition();
         }
         if (aiState.status === "processing") {
             return;
@@ -2216,12 +2075,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function aiReset() {
-        if (aiState.recognizing) {
-            aiStopRecognition();
-        }
         aiState.text = "";
-        aiState.baseText = "";
-        aiState.interim = "";
         aiState.result = null;
         aiState.error = null;
         aiState.status = "idle";
@@ -2289,7 +2143,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.database.workouts.push(workoutItem);
         state.editingWorkoutId = workoutItem.id;
         aiState.text = "";
-        aiState.baseText = "";
         aiState.result = null;
         aiState.status = "idle";
         await persistWorkout(workoutItem);
@@ -3790,7 +3643,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "revoke-user": () => setUserApproval(actionElement.dataset.userId, false),
             "export-data": exportData,
             "reset-curated-exercises": resetCuratedExercises,
-            "ai-toggle-mic": aiToggleMic,
             "ai-parse": aiParse,
             "ai-apply": aiApply,
             "ai-reset": aiReset,
