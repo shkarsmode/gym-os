@@ -2316,6 +2316,20 @@ tr:last-child td {
     color: var(--color-text) !important;
 }
 
+/* The global data-table `min-width: 680px` (for horizontally-scrollable data
+   tables) leaks into FullCalendar's list table and pushed the mobile month
+   list — names, #N — off the right edge. Reset it for the list view and let a
+   long name wrap instead of overflowing. */
+.fc-list-table {
+    min-width: 0 !important;
+}
+
+.fc-list-event .fc-ev-name {
+    white-space: normal;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 /* Calendar event: member name on the left, workout number (#N) on the right. */
 .fc-ev {
     display: flex;
