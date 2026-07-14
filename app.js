@@ -1765,7 +1765,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 <span class="chip">${result.meta && result.meta.model ? escapeHtml(result.meta.model) : "AI"}</span>
             </div>
             <div class="field-grid ai-meta-grid">
-                <div class="field"><label>Назва</label><input type="text" value="${escapeHtml(result.title || "")}" placeholder="Тренування" data-action="ai-workout-field" data-field="title"></div>
                 <div class="field"><label>Тип</label><gym-select data-action="ai-workout-field" data-field="workoutType">${typeOptions}</gym-select></div>
                 <div class="field"><label>Дата</label><input type="date" value="${escapeHtml(result.date || "")}" data-action="ai-workout-field" data-field="date"></div>
             </div>
