@@ -1429,6 +1429,81 @@ select option {
     gap: 4px;
 }
 
+/* A fully-completed exercise folds to just its header, animated via the grid
+   0fr↔1fr height trick. */
+.we-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease;
+}
+.we-body-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+.workout-exercise.we-collapsed .we-body {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+/* Done exercise: soft accent border + a rotating chevron toggle. */
+.workout-exercise.we-done {
+    border-color: var(--color-accent-border);
+    background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
+}
+.we-collapse-btn i {
+    transition: transform 0.22s ease;
+}
+.workout-exercise:not(.we-collapsed) .we-collapse-btn i {
+    transform: rotate(180deg);
+}
+
+/* Calendar "+N" more-link → pill that opens the day sheet. */
+.fc-daygrid-more-link {
+    text-decoration: none !important;
+}
+.fc-more-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-accent-strong);
+    background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface-2));
+    border-left: 3px solid var(--color-accent);
+}
+
+/* "Repeat last same-weekday workout" suggestion in an empty session. */
+.repeat-suggest {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface));
+}
+.repeat-suggest-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+    flex: 1 1 260px;
+}
+.repeat-suggest-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    color: var(--color-accent-strong);
+    background: var(--color-accent-dim);
+}
+.repeat-suggest-icon svg { width: 18px; height: 18px; }
+.repeat-suggest strong { display: block; margin-bottom: 3px; }
+
 /* Grip handle that starts a reorder drag (touch + mouse via Pointer Events). */
 .we-drag-handle {
     flex: 0 0 auto;

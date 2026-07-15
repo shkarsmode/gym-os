@@ -2425,9 +2425,58 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
-            ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutItem.exercises.slice().sort((left, right) => left.order - right.order).map((item, exerciseIndex) => workoutExerciseEditor(workoutItem, item, readonly, exerciseIndex === 0)).join("")}</div>` : emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}
+            ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutItem.exercises.slice().sort((left, right) => left.order - right.order).map((item, exerciseIndex) => workoutExerciseEditor(workoutItem, item, readonly, exerciseIndex === 0)).join("")}</div>` : `${readonly ? "" : repeatSuggestionCard(workoutItem)}${emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}`}
             ${cardioBlock(workoutItem, readonly)}
         `;
+    }
+
+    const WEEKDAY_ACC = ["неділю", "понеділок", "вівторок", "середу", "четвер", "п'ятницю", "суботу"];
+    function weekdayOf(dateStr) {
+        return new Date(`${String(dateStr).slice(0, 10)}T00:00:00`).getDay();
+    }
+
+    // The user's most recent completed workout (with exercises) on the SAME weekday
+    // as `dateStr`, before that date — used to offer "repeat last Wednesday's session".
+    function sameWeekdayWorkout(userId, dateStr, excludeId) {
+        const targetDow = weekdayOf(dateStr);
+        const day = String(dateStr).slice(0, 10);
+        return workoutsFor(userId)
+            .filter((item) => item.id !== excludeId && item.status === "completed" && (item.exercises || []).length && String(item.date).slice(0, 10) < day && weekdayOf(item.date) === targetDow)
+            .sort(byDateDesc)[0] || null;
+    }
+
+    function repeatSuggestionCard(workoutItem) {
+        if (workoutItem.exercises.length) {
+            return "";
+        }
+        const source = sameWeekdayWorkout(workoutItem.userId, workoutItem.date, workoutItem.id);
+        if (!source) {
+            return "";
+        }
+        return `<div class="repeat-suggest"><div class="repeat-suggest-main"><span class="repeat-suggest-icon"><i data-lucide="history"></i></span><div><strong>Повторити тренування в ${WEEKDAY_ACC[weekdayOf(workoutItem.date)]}?</strong><p class="card-caption">Минулого разу (${formatDate(source.date)}) — ${source.exercises.length} вправ, ${workoutSetCount(source)} підходів. Заповнити так само (ваги, повтори, відпочинок), а дату лишити сьогоднішню.</p></div></div><button class="button button-primary compact" type="button" data-action="apply-weekday-workout" data-workout-id="${source.id}"><i data-lucide="copy"></i>Застосувати</button></div>`;
+    }
+
+    // Copy a source workout's exercises + sets (fresh: uncompleted, no notes) + cardio
+    // + type into the current empty workout, keeping today's date.
+    async function applyWeekdayWorkout(sourceId) {
+        const workoutItem = editWorkout();
+        const source = state.database.workouts.find((item) => item.id === sourceId);
+        if (!workoutItem || !canManage(workoutItem) || !source) {
+            return;
+        }
+        workoutItem.workoutType = source.workoutType;
+        workoutItem.exercises = source.exercises.slice().sort((left, right) => left.order - right.order).map((exercise, index) => ({
+            id: createId("workout-exercise"),
+            exerciseId: exercise.exerciseId,
+            order: index + 1,
+            notes: "",
+            sets: (exercise.sets || []).map((set) => ({ ...set, id: createId("set"), isCompleted: false }))
+        }));
+        workoutItem.cardioSessions = (source.cardioSessions || []).map((session) => ({ ...session, id: createId("cardio") }));
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        renderSection();
+        toast("Тренування заповнено", `Скопійовано з ${formatDate(source.date)}. Перевір ваги й починай.`);
     }
 
     function cardioBlock(workoutItem, readonly) {
@@ -2449,10 +2498,19 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const dragHandle = readonly ? "" : `<button class="we-drag-handle" type="button" aria-label="Перетягни, щоб змінити порядок" title="Перетягни, щоб змінити порядок" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="grip-vertical"></i></button>`;
         // Small gif thumbnail, same style as the finished-workout detail (.wd-thumb).
         const media = exerciseMedia(exercise);
+        // eager + sync decode so a cached gif re-paints WITH the layout on re-render
+        // (renderSection rebuilds the card on every set edit) — no blink.
         const thumb = media
-            ? `<div class="wd-thumb"><img src="${escapeHtml(media)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.wd-thumb')?.remove()"></div>`
+            ? `<div class="wd-thumb"><img src="${escapeHtml(media)}" alt="${escapeHtml(exercise.name)}" referrerpolicy="no-referrer" loading="eager" decoding="sync" onerror="this.closest('.wd-thumb')?.remove()"></div>`
             : `<div class="wd-thumb wd-thumb-fallback"><i data-lucide="dumbbell"></i></div>`;
-        return `<article class="workout-exercise" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div></div><div class="inline-actions">${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}<button class="icon-button" type="button" title="Техніка" data-action="open-exercise" data-exercise-id="${exercise.id}"><i data-lucide="book-open"></i></button><button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div>${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></article>`;
+        // A fully-completed exercise folds to just its header (animated); the chevron
+        // toggles it and state.expandedExercises tracks manual expand overrides.
+        const allDone = workoutExercise.sets.length > 0 && workoutExercise.sets.every((set) => set.isCompleted);
+        state.expandedExercises = state.expandedExercises || new Set();
+        const collapsed = allDone && !state.expandedExercises.has(workoutExercise.id) && state.collapseAnimId !== workoutExercise.id;
+        const articleClass = `workout-exercise${allDone ? " we-done" : ""}${collapsed ? " we-collapsed" : ""}`;
+        const collapseToggle = allDone ? `<button class="icon-button we-collapse-btn" type="button" title="Згорнути / розгорнути" aria-label="Згорнути / розгорнути" data-action="toggle-exercise-collapse" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="chevron-down"></i></button>` : "";
+        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></div></div></article>`;
     }
 
     function setRow(workoutExerciseId, set, readonly, index, showSetHint) {
@@ -3597,9 +3655,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "edit-workout": () => openWorkoutEditor(actionElement.dataset.workoutId),
             "reopen-workout": () => reopenWorkout(actionElement.dataset.workoutId),
             "start-existing-workout": () => startExistingWorkout(actionElement.dataset.workoutId),
+            "apply-weekday-workout": () => applyWeekdayWorkout(actionElement.dataset.workoutId),
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
-            "open-add-exercise-modal": openAddExerciseModal,
+            "open-add-exercise-modal": () => { state.replaceExerciseTarget = null; openAddExerciseModal(); },
+            "replace-exercise": () => { state.replaceExerciseTarget = actionElement.dataset.workoutExerciseId; openAddExerciseModal(); },
             "open-muscle-grid": () => openSheet(pickerMuscleContent(), { fullscreen: true }),
             "pick-muscle": () => {
                 state.filters.pickerMuscle = actionElement.dataset.value;
@@ -3691,6 +3751,15 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "ai-reset": aiReset,
             "ai-expand": () => { aiState.forceExpanded = true; renderSection(); },
             "ai-collapse": () => { aiState.forceExpanded = false; storage.writeSetting(aiCollapsedKey(), "1"); renderSection(); },
+            "toggle-exercise-collapse": () => {
+                const id = actionElement.dataset.workoutExerciseId;
+                const card = actionElement.closest(".workout-exercise");
+                if (!card) { return; }
+                state.expandedExercises = state.expandedExercises || new Set();
+                // Toggle the class on the live DOM so the CSS height transition plays.
+                if (card.classList.contains("we-collapsed")) { state.expandedExercises.add(id); card.classList.remove("we-collapsed"); }
+                else { state.expandedExercises.delete(id); card.classList.add("we-collapsed"); }
+            },
             "ai-add-set": () => aiAddSet(actionElement.dataset.exIndex),
             "ai-remove-set": () => aiRemoveSet(actionElement.dataset.exIndex, actionElement.dataset.setIndex),
             "ai-remove-exercise": () => aiRemoveExercise(actionElement.dataset.exIndex),
@@ -4093,7 +4162,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             const owner = userById(workoutItem.userId);
             const own = workoutItem.userId === meId;
             const manage = canManage(workoutItem);
-            return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${number(workoutVolume(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions">${manage ? `<button class="button button-secondary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button><button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : `<button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button>`}</div></article>`;
+            return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${number(workoutVolume(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions"><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="list"></i>Деталі</button>${manage ? `<button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : ""}</div></article>`;
         }).join("");
         openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div><div class="day-sheet-action">${startWorkoutButton(date, { label: isToday ? "Почати тренування" : "Додати тренування", buttonClass: "button button-primary" })}</div>`);
     }
@@ -4120,7 +4189,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function pickerListContent() {
-        return `<div class="modal-header"><div><h2>Додати вправу</h2><p class="card-caption">Пошук за назвою + фільтри за групою м'язів і обладнанням.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody">${pickerBody()}</div>`;
+        const replacing = !!state.replaceExerciseTarget;
+        const heading = replacing ? "Замінити вправу" : "Додати вправу";
+        const caption = replacing ? "Обери, на яку вправу замінити — пошук + фільтри." : "Пошук за назвою + фільтри за групою м'язів і обладнанням.";
+        return `<div class="modal-header"><div><h2>${heading}</h2><p class="card-caption">${caption}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody">${pickerBody()}</div>`;
     }
 
     // Muscle-group filter priority order (the rest fall back alphabetically).
@@ -4817,7 +4889,30 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return true;
     }
 
+    // Swap the exercise in a slot for another one picked from the "Замінити вправу"
+    // picker, keeping the existing sets as a starting point. The target slot id was
+    // stashed on state when the picker opened.
+    async function replaceExercise(exerciseId) {
+        const targetId = state.replaceExerciseTarget;
+        state.replaceExerciseTarget = null;
+        const workoutItem = editWorkout();
+        const workoutExercise = workoutItem && canManage(workoutItem) ? workoutItem.exercises.find((item) => item.id === targetId) : null;
+        if (!workoutExercise) {
+            closeOverlay();
+            return;
+        }
+        workoutExercise.exerciseId = exerciseId;
+        workoutItem.updatedAt = new Date().toISOString();
+        state.editingWorkoutId = workoutItem.id;
+        await persistWorkout(workoutItem);
+        closeOverlay();
+        renderSection();
+    }
+
     async function addExercise(exerciseId) {
+        if (state.replaceExerciseTarget) {
+            return replaceExercise(exerciseId);
+        }
         const workoutItem = editWorkout();
         if (!workoutItem || !canManage(workoutItem)) {
             toast("Спочатку почни тренування", "Відкрий або почни тренування, щоб додати вправу.");
@@ -4875,16 +4970,50 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     async function toggleSet(workoutExerciseId, setId) {
-        const set = editSetByIds(workoutExerciseId, setId);
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        const set = workoutExercise ? workoutExercise.sets.find((item) => item.id === setId) : null;
         if (!set) {
             return;
         }
-        set.isCompleted = !set.isCompleted;
-        if (set.isCompleted && editWorkout()?.status === "active" && getPref("autoStartRest") === "1") {
+        const completing = !set.isCompleted;
+        set.isCompleted = completing;
+        if (completing && editWorkout()?.status === "active" && getPref("autoStartRest") === "1") {
             startTimer(set.restSeconds || 90);
         }
+        // Ticking the LAST set while earlier data-bearing ones aren't done → offer to
+        // mark them all (the common "forgot to tap each circle" case).
+        if (completing) {
+            const idx = workoutExercise.sets.findIndex((item) => item.id === setId);
+            const earlierPending = workoutExercise.sets.slice(0, idx).filter((item) => !item.isCompleted && (Number(item.weight) > 0 || Number(item.repetitions) > 0));
+            if (idx === workoutExercise.sets.length - 1 && earlierPending.length > 0) {
+                await persistWorkout(editWorkout());
+                renderSection();
+                const choice = await choiceDialog(`Познач ще ${earlierPending.length} попередніх підходів виконаними?`, {
+                    title: "Позначити всі виконаними?",
+                    closable: true,
+                    choices: [{ label: "Так, усі", value: "all", variant: "primary" }]
+                });
+                if (choice === "all") {
+                    earlierPending.forEach((item) => { item.isCompleted = true; });
+                }
+            }
+        }
         await persistWorkout(editWorkout());
+        // If the exercise just became fully complete, animate it collapsed.
+        state.expandedExercises = state.expandedExercises || new Set();
+        const nowAllDone = workoutExercise.sets.length > 0 && workoutExercise.sets.every((item) => item.isCompleted);
+        if (nowAllDone && !state.expandedExercises.has(workoutExerciseId)) {
+            state.collapseAnimId = workoutExerciseId;
+        }
         renderSection();
+        if (state.collapseAnimId === workoutExerciseId) {
+            requestAnimationFrame(() => {
+                const id = state.collapseAnimId;
+                state.collapseAnimId = null;
+                const card = document.querySelector(`.workout-exercise[data-workout-exercise-id="${id}"]`);
+                if (card) { void card.offsetHeight; card.classList.add("we-collapsed"); }
+            });
+        }
     }
 
     async function deleteSet(workoutExerciseId, setId) {
@@ -4943,19 +5072,17 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             .flatMap((exercise) => exercise.sets)
             .filter((set) => !set.isCompleted && (Number(set.weight) > 0 || Number(set.repetitions) > 0));
         if (pendingSets.length > 0) {
-            const choice = await choiceDialog(`${pendingSets.length} підходів із даними ще не позначені виконаними. Позначити їх усі виконаними?`, {
+            const choice = await choiceDialog(`${pendingSets.length} підходів із даними ще не позначені виконаними. Познач їх виконаними, щоб завершити.`, {
                 title: "Завершити тренування?",
+                closable: true,
                 choices: [
-                    { label: "Позначити всі виконаними", value: "complete", variant: "primary" },
-                    { label: "Завершити як є", value: "asis", variant: "secondary" }
+                    { label: "Позначити всі виконаними", value: "complete", variant: "primary" }
                 ]
             });
-            if (!choice) {
-                return;
+            if (choice !== "complete") {
+                return; // dismissed — can't finish with pending sets; go tick them off
             }
-            if (choice === "complete") {
-                pendingSets.forEach((set) => { set.isCompleted = true; });
-            }
+            pendingSets.forEach((set) => { set.isCompleted = true; });
         }
         workoutItem.status = "completed";
         workoutItem.finishedAt = new Date().toISOString();
@@ -5839,6 +5966,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             headerToolbar: mobile ? { left: "prev,next", center: "title", right: "today" } : { left: "prev,next today", center: "title", right: "dayGridMonth,listMonth" },
             displayEventTime: false,
             eventOrder: "mine,title",
+            // Cap a day cell at 4 workouts; the rest fold into a "+N" pill that opens
+            // the full day sheet (same modal as clicking a day) instead of FC's popover.
+            dayMaxEvents: 4,
+            moreLinkContent: (arg) => ({ html: `<span class="fc-more-pill">ще ${arg.num}</span>` }),
+            moreLinkClick: (arg) => { openDaySheet(dateInput(arg.date)); return "none"; },
             events: state.database.workouts.map((workoutItem) => {
                 const owner = userById(workoutItem.userId);
                 const mine = workoutItem.userId === currentUser().id;
@@ -7684,11 +7816,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     // or null if dismissed via the backdrop. Reuses the same stack-aware overlay
     // plumbing so it can appear on its own or on top of an already-open modal.
     function choiceDialog(message, options = {}) {
-        const { title = "Підтвердження", choices = [] } = options;
+        const { title = "Підтвердження", choices = [], closable = false } = options;
         return new Promise((resolve) => {
             const variantClass = (variant) => variant === "primary" ? "button-primary" : variant === "danger" ? "button-danger" : "button-secondary";
             const buttons = choices.map((choice, index) => `<button class="button ${variantClass(choice.variant)}" type="button" data-choice="${index}">${escapeHtml(choice.label)}</button>`).join("");
-            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions confirm-choices">${buttons}</div></div>`;
+            const closeBtn = closable ? `<button class="icon-button" type="button" data-choice-close="1" aria-label="Закрити"><i data-lucide="x"></i></button>` : "";
+            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div>${closeBtn}</div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions confirm-choices">${buttons}</div></div>`;
             const stacked = !element("modalBackdrop").classList.contains("hidden");
             const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
             let layer;
@@ -7727,6 +7860,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             layer.querySelectorAll("[data-choice]").forEach((button) => {
                 button.addEventListener("click", () => finish(choices[Number(button.dataset.choice)].value));
             });
+            const closeButton = layer.querySelector("[data-choice-close]");
+            if (closeButton) {
+                closeButton.addEventListener("click", () => finish(null));
+            }
         });
     }
 
