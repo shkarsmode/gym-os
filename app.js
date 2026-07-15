@@ -7240,6 +7240,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const input = document.querySelector(`#focusLayer input[data-field="${field}"]`);
         if (input) {
             input.value = value;
+            if (field === "weight") {
+                liveUpdateWeightDeltas(input); // steppers set value programmatically (no input event)
+            }
         }
     }
 
