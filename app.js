@@ -2510,10 +2510,25 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const collapsed = allDone && !state.expandedExercises.has(workoutExercise.id) && state.collapseAnimId !== workoutExercise.id;
         const articleClass = `workout-exercise${allDone ? " we-done" : ""}${collapsed ? " we-collapsed" : ""}`;
         const collapseToggle = allDone ? `<button class="icon-button we-collapse-btn" type="button" title="Згорнути / розгорнути" aria-label="Згорнути / розгорнути" data-action="toggle-exercise-collapse" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="chevron-down"></i></button>` : "";
-        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></div></div></article>`;
+        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></div></div></article>`;
     }
 
-    function setRow(workoutExerciseId, set, readonly, index, showSetHint) {
+    // Small "+N кг" / "−N кг" tag showing the weight change from the previous set.
+    // Shown right of the "Вага, кг" label on the 2nd+ set (editor + focus mode).
+    function weightDeltaBadge(prevWeight, currentWeight) {
+        if (prevWeight === null || prevWeight === undefined) {
+            return "";
+        }
+        const prev = Number(prevWeight);
+        const cur = Number(currentWeight);
+        if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev === cur) {
+            return "";
+        }
+        const diff = cur - prev;
+        return `<span class="set-delta ${diff > 0 ? "up" : "down"}" title="Різниця ваги з попереднім підходом">${diff > 0 ? "+" : "−"}${number(Math.abs(diff))} кг</span>`;
+    }
+
+    function setRow(workoutExerciseId, set, readonly, index, showSetHint, prevWeight) {
         const target = `data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}"`;
         const lock = readonly ? "disabled" : "";
         // Coach-mark on the very first set of the first exercise (until that set is
@@ -2532,7 +2547,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 </div>
             </div>
             <div class="set-fields${set.durationSeconds === null || set.durationSeconds === undefined ? "" : " has-duration"}">
-                <label class="set-field"><span class="set-field-label">Вага, кг</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
+                <label class="set-field"><span class="set-field-label">Вага, кг${weightDeltaBadge(prevWeight, set.weight)}</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
                 <label class="set-field"><span class="set-field-label">Повтори</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions" ${lock}></label>
                 ${set.durationSeconds === null || set.durationSeconds === undefined ? "" : `<label class="set-field"><span class="set-field-label">Час, с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="set-field" ${target} data-field="durationSeconds" ${lock}></label>`}
                 <label class="set-field"><span class="set-field-label">Відпочинок, с</span><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds" ${lock}></label>
@@ -6973,7 +6988,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             </label>
             <div class="focus-fields">
                 <div class="focus-field">
-                    <span class="focus-field-label">Вага, кг</span>
+                    <span class="focus-field-label">Вага, кг${weightDeltaBadge(previousSet ? previousSet.weight : null, set.weight)}</span>
                     <div class="focus-stepper">
                         <button class="focus-step" type="button" data-action="focus-step" data-field="weight" data-delta="-2.5" title="−2.5 кг"><i data-lucide="minus"></i></button>
                         <input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight">
