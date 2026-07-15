@@ -2528,6 +2528,35 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return `<span class="set-delta ${diff > 0 ? "up" : "down"}" title="Різниця ваги з попереднім підходом">${diff > 0 ? "+" : "−"}${number(Math.abs(diff))} кг</span>`;
     }
 
+    // Live-refresh the "+N кг" tags as you TYPE a weight (the `input` event) — without
+    // re-rendering, so the caret stays put. Reads live values straight from the DOM
+    // inputs. Editing set N updates N's own tag (vs N−1) and the next set's tag (vs N).
+    function liveUpdateWeightDeltas(input) {
+        const weightValue = (el) => { const w = el && el.querySelector('input[data-field="weight"]'); return w ? (Number(w.value) || 0) : null; };
+        // Focus mode shows one set at a time: read the previous set's weight from state.
+        const focusField = input.closest(".focus-field");
+        if (focusField) {
+            const exercise = editWorkoutExercise(input.dataset.workoutExerciseId);
+            const idx = exercise ? exercise.sets.findIndex((item) => item.id === input.dataset.setId) : -1;
+            const prevWeight = exercise && idx > 0 ? exercise.sets[idx - 1].weight : null;
+            const label = focusField.querySelector(".focus-field-label");
+            if (label) { label.innerHTML = `Вага, кг${weightDeltaBadge(prevWeight, Number(input.value) || 0)}`; }
+            return;
+        }
+        const list = input.closest(".set-list");
+        if (!list) { return; }
+        const rows = Array.prototype.slice.call(list.querySelectorAll(".set-row"));
+        const row = input.closest(".set-row");
+        const rowIndex = rows.indexOf(row);
+        const relabel = (targetRow, prevWeight) => {
+            const weightInput = targetRow.querySelector('input[data-field="weight"]');
+            const label = weightInput ? weightInput.closest(".set-field").querySelector(".set-field-label") : null;
+            if (label) { label.innerHTML = `Вага, кг${weightDeltaBadge(prevWeight, Number(weightInput.value) || 0)}`; }
+        };
+        if (rowIndex > 0) { relabel(row, weightValue(rows[rowIndex - 1])); }
+        if (rowIndex >= 0 && rowIndex + 1 < rows.length) { relabel(rows[rowIndex + 1], weightValue(row)); }
+    }
+
     function setRow(workoutExerciseId, set, readonly, index, showSetHint, prevWeight) {
         const target = `data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}"`;
         const lock = readonly ? "disabled" : "";
@@ -4034,6 +4063,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             if (pickerGrid) {
                 pickerGrid.innerHTML = exercisePickerCards();
             }
+        }
+
+        if (actionElement.dataset.action === "set-field" && actionElement.dataset.field === "weight") {
+            liveUpdateWeightDeltas(actionElement);
         }
 
         if (actionElement.dataset.action === "custom-exercise-media") {
