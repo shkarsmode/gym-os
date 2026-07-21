@@ -5803,6 +5803,46 @@ import {
         return `<div class="ach-badge-row" role="list" aria-label="Досягнення">${unlocked.map((achievement) => `<button class="ach-badge" type="button" role="listitem" tabindex="0" data-tip-title="${escapeHtml(achievement.title)}" data-tip-body="${escapeHtml(achievement.caption)} · +${achievement.xp} XP" aria-label="${escapeHtml(achievement.title)}"><i data-lucide="${achievement.icon}"></i></button>`).join("")}</div>`;
     }
 
+    // ---- Skeletons -------------------------------------------------------------
+    // Each mirrors the real component's wrapper class and span so the placeholder
+    // occupies exactly the space the content will. A skeleton that is the wrong size
+    // is worse than none: the page reflows the moment data lands.
+    //
+    // The container carries aria-busy, so screen readers hear "busy" instead of
+    // reading out a fake structure. The shapes themselves are decorative.
+
+    function skeletonMetric(span = "span-3") {
+        return `<section class="metric-card ${span} sk-wrap"><span class="sk sk-avatar"></span><div class="metric-body"><span class="sk sk-number"></span><span class="sk sk-line short" style="margin-top:8px;"></span></div></section>`;
+    }
+
+    function skeletonChartCard(span = "span-6") {
+        return `<section class="card ${span} chart-card sk-wrap"><div class="card-header"><div><span class="sk sk-title"></span><span class="sk sk-line half"></span></div></div><div class="chart-box"><span class="sk sk-chart"></span></div></section>`;
+    }
+
+    // `rows` fade progressively (see .sk-row:nth-child in the stylesheet) so a list
+    // reads as continuing below the fold rather than as a wall of bars.
+    function skeletonList(rows = 4, span = "span-12", withAvatar = true) {
+        const row = `<div class="sk-row">${withAvatar ? `<span class="sk sk-avatar"></span>` : ""}<div class="sk-row-main"><span class="sk sk-line wide"></span><span class="sk sk-line short"></span></div><span class="sk sk-chip"></span></div>`;
+        return `<section class="card ${span} sk-wrap"><span class="sk sk-title"></span>${row.repeat(rows)}</section>`;
+    }
+
+    // Appended below an existing list while the next page is in flight, so the rows
+    // already on screen stay put and readable.
+    function skeletonMore(rows = 2) {
+        const row = `<div class="sk-row"><span class="sk sk-avatar"></span><div class="sk-row-main"><span class="sk sk-line wide"></span><span class="sk sk-line short"></span></div></div>`;
+        return `<div class="sk-wrap sk-more" aria-busy="true">${row.repeat(rows)}</div>`;
+    }
+
+    // Whole-section placeholder: a metric strip over two charts, which is the shape
+    // most tabs in this app actually have.
+    function skeletonSection({ metrics = 4, charts = 2, list = 0 } = {}) {
+        return `<div class="grid dashboard-grid sk-wrap" aria-busy="true">`
+            + Array.from({ length: metrics }, () => skeletonMetric()).join("")
+            + Array.from({ length: charts }, () => skeletonChartCard()).join("")
+            + (list ? skeletonList(list) : "")
+            + `</div>`;
+    }
+
     function metric(title, value, icon, caption, span = "span-3", tip = "") {
         // Compact stat tile: icon + value + label. caption kept in the signature
         // for callers but rendered as a title attr only (minimalist, less height).
