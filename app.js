@@ -6,7 +6,20 @@ import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusL
 import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
 import { levelForXp, XP_REWARDS, LEVEL_COUNT } from "./lib/levels.js";
 import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_TIER_COUNT } from "./lib/frames.js";
-import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
+// evaluateAchievements is no longer called here — the kernel owns that. ACHIEVEMENTS
+// is still needed for rendering the full badge list, including locked ones.
+import { ACHIEVEMENTS } from "./lib/achievements.js";
+// The scoring kernel. These are the ONLY implementations of these rules — the backend
+// runs a byte-identical copy, so anything computed here must not be recomputed there.
+// See lib/scoring.js for the two order/timezone hazards documented at the top.
+import {
+    oneRepMax, workoutVolume, exerciseVolume, exerciseOneRepMax, topMap, exerciseUsageMap,
+    muscleSetMap as kernelMuscleSetMap, streak as kernelStreak,
+    duration as kernelDuration, autoDuration as kernelAutoDuration,
+    recordsFor as kernelRecordsFor, userStats as kernelUserStats, teamStats as kernelTeamStats,
+    userAchievements as kernelUserAchievements, xpEvents as kernelXpEvents,
+    userXp as kernelUserXp, userLevel as kernelUserLevel
+} from "./lib/scoring.js";
 
 (() => {
     "use strict";
@@ -6336,77 +6349,39 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.charts.clear();
     }
 
+    // Both delegate to the kernel. The kernel emits ids where app.js historically
+    // carried objects (mostUsedExercise), so those are resolved back here — several
+    // renderers read summary.mostUsedExercise?.name and would print nothing otherwise.
     function userStats(userId) {
-        const workouts = workoutsFor(userId);
-        const completed = workouts.filter((item) => item.status === "completed");
-        const allSets = completed.flatMap((item) => item.exercises.flatMap((exercise) => exercise.sets)).filter((set) => set.isCompleted);
-        const cardioSessions = workouts.flatMap((item) => item.cardioSessions || []);
-        const weekStart = startWeek(new Date());
-        const week = completed.filter((item) => new Date(item.date) >= weekStart);
-        const muscleMap = muscleSetMap(completed);
-        const exerciseMap = exerciseUsageMap(completed);
-        return {
-            userId,
-            totalWorkouts: workouts.length,
-            completedWorkouts: completed.length,
-            totalSets: allSets.length,
-            workingSets: allSets.filter((set) => set.type !== "warmup").length,
-            warmupSets: allSets.filter((set) => set.type === "warmup").length,
-            totalVolume: round(allSets.reduce((sum, set) => sum + set.weight * set.repetitions, 0), 1),
-            averageDurationMinutes: completed.length ? Math.round(completed.reduce((sum, item) => sum + duration(item), 0) / completed.length) : 0,
-            cardioMinutes: cardioSessions.reduce((sum, session) => sum + session.durationMinutes, 0),
-            cardioDistance: round(cardioSessions.reduce((sum, session) => sum + session.distance, 0), 1),
-            cardioSessions: cardioSessions.length,
-            weekVolume: round(week.reduce((sum, item) => sum + workoutVolume(item), 0), 1),
-            weekSets: week.flatMap((item) => item.exercises.flatMap((exercise) => exercise.sets)).filter((set) => set.isCompleted).length,
-            weekCardioMinutes: week.flatMap((item) => item.cardioSessions || []).reduce((sum, session) => sum + session.durationMinutes, 0),
-            trainingStreak: streak(completed),
-            lastWorkoutDate: completed.sort(byDateDesc)[0]?.date || null,
-            mostUsedExercise: topMap(exerciseMap, exerciseById),
-            mostTrainedMuscleGroup: topMap(muscleMap),
-            personalRecords: recordsFor(userId).length,
-            notesCount: completed.reduce((sum, item) => sum + (item.notes ? 1 : 0) + item.exercises.filter((exercise) => exercise.notes).length, 0)
-        };
+        const stats = kernelUserStats(userId, workoutsFor(userId), { exerciseById, now: new Date() });
+        return { ...stats, mostUsedExercise: stats.mostUsedExerciseId ? exerciseById(stats.mostUsedExerciseId) : null };
     }
 
     function teamStats() {
-        const userSummaries = state.database.users.map((user) => userStats(user.id));
-        const workouts = state.database.workouts;
-        const completed = workouts.filter((item) => item.status === "completed");
-        const cardioSessions = workouts.flatMap((item) => item.cardioSessions || []);
-        const mostActive = [...userSummaries].sort((left, right) => right.completedWorkouts - left.completedWorkouts)[0];
+        const now = new Date();
+        const summaries = state.database.users.map((user) => kernelUserStats(user.id, workoutsFor(user.id), { exerciseById, now }));
+        const team = kernelTeamStats(state.database.users, state.database.workouts, summaries, { exerciseById, now });
         return {
-            totalWorkouts: workouts.length,
-            completedWorkouts: completed.length,
-            totalSets: userSummaries.reduce((sum, item) => sum + item.totalSets, 0),
-            workingSets: userSummaries.reduce((sum, item) => sum + item.workingSets, 0),
-            totalVolume: round(userSummaries.reduce((sum, item) => sum + item.totalVolume, 0), 1),
-            averageDurationMinutes: completed.length ? Math.round(completed.reduce((sum, item) => sum + duration(item), 0) / completed.length) : 0,
-            cardioMinutes: cardioSessions.reduce((sum, session) => sum + session.durationMinutes, 0),
-            cardioDistance: round(cardioSessions.reduce((sum, session) => sum + session.distance, 0), 1),
-            cardioDays: new Set(workouts.filter((item) => item.cardioSessions?.length).map((item) => item.date)).size,
-            teamStreak: streak(completed),
-            mostActiveUser: userById(mostActive.userId),
-            mostUsedExercise: userSummaries.map((item) => item.mostUsedExercise).filter(Boolean)[0],
-            mostTrainedMuscleGroup: topMap(muscleSetMap(completed))
+            ...team,
+            // mostActiveUser is read nowhere today, but is kept so the shape of a team
+            // summary does not silently change under any caller that starts using it.
+            mostActiveUser: team.mostActiveUserId ? userById(team.mostActiveUserId) : null,
+            mostUsedExercise: team.mostUsedExerciseId ? exerciseById(team.mostUsedExerciseId) : null
         };
     }
 
+    // The kernel emits exerciseId only, so it carries no catalog objects and the backend
+    // can return records over the wire. Several renderers read record.exercise.name and
+    // record.exercise.primaryMuscleGroup, so the object is re-attached here.
+    function hydrateRecords(records) {
+        return records.map((record) => ({ ...record, exercise: exerciseById(record.exerciseId) }));
+    }
+
     function recordsFor(userId) {
-        const map = new Map();
-        workoutsFor(userId).filter((item) => item.status === "completed").forEach((workoutItem) => {
-            workoutItem.exercises.forEach((workoutExercise) => {
-                const exercise = exerciseById(workoutExercise.exerciseId);
-                workoutExercise.sets.filter((set) => set.isCompleted && set.type !== "warmup").forEach((set) => {
-                    const estimatedOneRepMax = oneRepMax(set.weight, set.repetitions);
-                    const current = map.get(exercise.id);
-                    if (!current || estimatedOneRepMax > current.estimatedOneRepMax) {
-                        map.set(exercise.id, { id: `record-${userId}-${exercise.id}`, userId, exerciseId: exercise.id, exercise, date: workoutItem.date, type: "estimated_one_rep_max", value: estimatedOneRepMax, estimatedOneRepMax, weight: set.weight, repetitions: set.repetitions, workoutId: workoutItem.id, isEstimated: set.repetitions !== 1 });
-                    }
-                });
-            });
-        });
-        return [...map.values()].sort((left, right) => right.estimatedOneRepMax - left.estimatedOneRepMax);
+        // workoutsFor returns state.database.workouts order, which is /export's date DESC.
+        // That is load-bearing: the kernel breaks 1RM ties by visit order, so feeding it
+        // ascending would silently move PR dates. See the note in lib/scoring.js.
+        return hydrateRecords(kernelRecordsFor(userId, workoutsFor(userId), exerciseById));
     }
 
     // Strength standards are no longer shipped in the backend payload. Regenerate
@@ -6535,60 +6510,17 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         });
     }
 
-    function workoutVolume(workoutItem) {
-        return round(workoutItem.exercises.reduce((sum, item) => sum + exerciseVolume(item), 0), 1);
-    }
+    // oneRepMax, workoutVolume, exerciseVolume and exerciseOneRepMax now come straight
+    // from lib/scoring.js — same names, same signatures, so every call site is unchanged.
 
-    function exerciseVolume(workoutExercise) {
-        return round(workoutExercise.sets.filter((set) => set.isCompleted).reduce((sum, set) => sum + set.weight * set.repetitions, 0), 1);
-    }
-
-    function exerciseOneRepMax(workoutExercise) {
-        return round(Math.max(0, ...workoutExercise.sets.filter((set) => set.isCompleted).map((set) => oneRepMax(set.weight, set.repetitions))), 1);
-    }
-
-    function oneRepMax(weight, repetitions) {
-        const load = Number(weight) || 0;
-        const reps = Math.round(Number(repetitions) || 0);
-        if (load <= 0 || reps <= 0) {
-            return 0;
-        }
-        if (reps === 1) {
-            return round(load, 1);
-        }
-        // Average of validated estimation formulas for higher accuracy.
-        // Reps are capped at 12 — predictions diverge sharply beyond that.
-        const cappedReps = Math.min(reps, 12);
-        const estimates = [
-            load * (1 + cappedReps / 30),                                 // Epley
-            load * 36 / (37 - cappedReps),                                // Brzycki
-            load * Math.pow(cappedReps, 0.10),                            // Lombardi
-            load * (1 + cappedReps / 40),                                 // O'Conner
-            100 * load / (48.8 + 53.8 * Math.exp(-0.075 * cappedReps)),   // Wathen
-            100 * load / (101.3 - 2.67123 * cappedReps)                   // Lander
-        ].filter((value) => Number.isFinite(value) && value > 0);
-        if (!estimates.length) {
-            return round(load, 1);
-        }
-        const average = estimates.reduce((sum, value) => sum + value, 0) / estimates.length;
-        return round(Math.max(average, load), 1);
-    }
-
-    // The clock-based duration (finishedAt - startedAt). Reopening + finishing a
-    // session later inflates this, which is why a manual override exists below.
+    // The kernel takes `now` explicitly so an unfinished workout is deterministic and
+    // the backend cannot disagree with the browser by running a moment later.
     function autoDuration(workoutItem) {
-        if (!workoutItem.startedAt) {
-            return 0;
-        }
-        return Math.max(0, Math.round(((workoutItem.finishedAt ? new Date(workoutItem.finishedAt) : new Date()) - new Date(workoutItem.startedAt)) / 60000));
+        return kernelAutoDuration(workoutItem, new Date());
     }
 
-    // Manual override (minutes) wins when set; otherwise fall back to the clock.
     function duration(workoutItem) {
-        if (workoutItem.durationOverride != null && workoutItem.durationOverride !== "") {
-            return Math.max(0, Math.round(Number(workoutItem.durationOverride)));
-        }
-        return autoDuration(workoutItem);
+        return kernelDuration(workoutItem, new Date());
     }
 
     function formatDurationLabel(minutes) {
@@ -6665,24 +6597,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return items.filter((item) => item.exercises.some((exercise) => exercise.exerciseId === exerciseId)).sort(byDateDesc)[0]?.date || null;
     }
 
+    // exerciseUsageMap and topMap come straight from the kernel — identical signatures.
+    // muscleSetMap needs the catalog lookup injected, since the kernel closes over nothing.
     function muscleSetMap(workouts) {
-        const map = new Map();
-        workouts.forEach((workoutItem) => workoutItem.exercises.forEach((workoutExercise) => {
-            const muscle = exerciseById(workoutExercise.exerciseId).primaryMuscleGroup;
-            map.set(muscle, (map.get(muscle) || 0) + workoutExercise.sets.filter((set) => set.isCompleted).length);
-        }));
-        return map;
-    }
-
-    function exerciseUsageMap(workouts) {
-        const map = new Map();
-        workouts.forEach((workoutItem) => workoutItem.exercises.forEach((workoutExercise) => map.set(workoutExercise.exerciseId, (map.get(workoutExercise.exerciseId) || 0) + 1)));
-        return map;
-    }
-
-    function topMap(map, transform = null) {
-        const entry = [...map.entries()].sort((left, right) => right[1] - left[1])[0];
-        return entry ? (transform ? transform(entry[0]) : entry[0]) : null;
+        return kernelMuscleSetMap(workouts, exerciseById);
     }
 
     function mainRank(userId) {
@@ -6702,75 +6620,53 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function streak(completedWorkouts) {
-        const dates = [...new Set(completedWorkouts.map((item) => item.date))].sort().reverse();
-        if (!dates.length) {
-            return 0;
-        }
-        let count = 0;
-        let cursor = new Date();
-        for (const date of dates) {
-            const diff = dayDiff(cursor, new Date(date));
-            if (diff <= 1 || count === 0) {
-                count += 1;
-                cursor = new Date(date);
-            } else {
-                break;
-            }
-        }
-        return count;
+        return kernelStreak(completedWorkouts, new Date());
     }
 
     // ---- Progression: XP, levels, avatar frames (all computed from existing data) ----
     // Reconstructs a dated XP ledger from the user's real activity. Total XP drives
     // the level (see lib/levels.js) and the events power the Levels-page history.
     // Everything an achievement check can look at, pre-filtered to the user.
-    function achievementData(userId, records = null) {
-        const workouts = workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc);
-        // Tenure ("years of service") counts from the account creation date, falling
-        // back to the first-ever workout if the profile has no createdAt.
-        const user = userById(userId);
-        const joinedAt = user?.createdAt || workouts[0]?.date || null;
-        return {
-            workouts,
-            joinedAt,
+    function userAchievements(userId, records = null) {
+        return kernelUserAchievements(userId, workoutsFor(userId), {
+            exerciseById,
+            userById,
+            featureRequests: state.database.featureRequests || [],
+            exercises: state.database.exercises,
             records: records || recordsFor(userId),
-            ideas: (state.database.featureRequests || []).filter((item) => item.userId === userId),
-            customExercises: state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt)),
-            exerciseInfo: (id) => {
-                const exercise = exerciseById(id);
-                return { name: exercise.name || "", primaryMuscleGroup: exercise.primaryMuscleGroup || "" };
-            }
-        };
+            // The five tenure badges unlock on wall-clock alone; passing the instant
+            // explicitly keeps the browser and the backend from disagreeing.
+            now: new Date()
+        });
     }
 
-    function userAchievements(userId, records = null) {
-        return evaluateAchievements(achievementData(userId, records));
+    // The kernel emits structured events with no UI text, so the backend can return the
+    // same ledger without shipping Ukrainian copy or icon names. The wording lives here.
+    function labelForXpEvent(event) {
+        if (event.kind === "workout") {
+            return { icon: "dumbbell", label: `Тренування · ${number(event.meta.volume)} кг${event.meta.continues ? " · серія" : ""}` };
+        }
+        if (event.kind === "record") {
+            return { icon: "flame", label: `Рекорд: ${exerciseById(event.refId).name} · ${number(event.meta.estimatedOneRepMax)} кг` };
+        }
+        if (event.kind === "idea") {
+            return { icon: "lightbulb", label: `Ідею втілено: ${event.meta.title}` };
+        }
+        if (event.kind === "exercise") {
+            return { icon: "plus-circle", label: `Додано вправу: ${event.meta.name}` };
+        }
+        return { icon: "award", label: `Досягнення: ${event.meta.title}` };
     }
 
     function xpEvents(userId, records = null) {
-        const events = [];
         const recordList = records || recordsFor(userId);
-        let previousDate = null;
-        workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc).forEach((workoutItem) => {
-            const volume = workoutVolume(workoutItem);
-            const volumeBonus = Math.min(XP_REWARDS.volumeCap, Math.floor(volume / XP_REWARDS.volumePerXp));
-            const continues = previousDate && dayDiff(new Date(workoutItem.date), new Date(previousDate)) <= 2;
-            events.push({ date: workoutItem.date, amount: XP_REWARDS.workout + volumeBonus + (continues ? XP_REWARDS.streak : 0), kind: "workout", icon: "dumbbell", label: `Тренування · ${number(volume)} кг${continues ? " · серія" : ""}` });
-            previousDate = workoutItem.date;
-        });
-        recordList.forEach((record) => {
-            events.push({ date: record.date, amount: XP_REWARDS.record, kind: "record", icon: "flame", label: `Рекорд: ${record.exercise.name} · ${number(record.estimatedOneRepMax)} кг` });
-        });
-        (state.database.featureRequests || []).filter((item) => item.userId === userId && item.status === "done").forEach((item) => {
-            events.push({ date: item.updatedAt || item.createdAt, amount: XP_REWARDS.ideaDone, kind: "idea", icon: "lightbulb", label: `Ідею втілено: ${item.title}` });
-        });
-        state.database.exercises.filter((exercise) => exercise.isCustom && exercise.createdByUserId === userId).forEach((exercise) => {
-            events.push({ date: exercise.createdAt, amount: XP_REWARDS.exercise, kind: "exercise", icon: "plus-circle", label: `Додано вправу: ${exercise.name}` });
-        });
-        userAchievements(userId, recordList).filter((achievement) => achievement.unlockedAt).forEach((achievement) => {
-            events.push({ date: achievement.unlockedAt, amount: achievement.xp, kind: "achievement", icon: "award", label: `Досягнення: ${achievement.title}` });
-        });
-        return events.filter((event) => event.date).sort((left, right) => new Date(right.date) - new Date(left.date));
+        const achievements = userAchievements(userId, recordList);
+        return kernelXpEvents(userId, workoutsFor(userId), {
+            records: recordList,
+            achievements,
+            featureRequests: state.database.featureRequests || [],
+            exercises: state.database.exercises
+        }).map((event) => ({ ...event, ...labelForXpEvent(event) }));
     }
 
     // Toasts newly unlocked achievements (first run seeds silently so history
