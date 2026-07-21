@@ -1,0 +1,274 @@
+{
+    "users": {
+        "u1": {
+            "xp": 6638,
+            "level": 93,
+            "records": [
+                {
+                    "exerciseId": "ex-squat",
+                    "date": "2026-07-18",
+                    "estimatedOneRepMax": 162.8,
+                    "weight": 150,
+                    "repetitions": 3
+                },
+                {
+                    "exerciseId": "ex-bench",
+                    "date": "2026-07-10",
+                    "estimatedOneRepMax": 100,
+                    "weight": 100,
+                    "repetitions": 1
+                },
+                {
+                    "exerciseId": "ex-row",
+                    "date": "2026-07-10",
+                    "estimatedOneRepMax": 87.1,
+                    "weight": 70,
+                    "repetitions": 8
+                }
+            ],
+            "achievements": [
+                {
+                    "id": "bench-100",
+                    "unlockedAt": "2026-07-10"
+                },
+                {
+                    "id": "early-bird",
+                    "unlockedAt": "2026-07-03"
+                },
+                {
+                    "id": "exercise-liked",
+                    "unlockedAt": "2026-01-05"
+                },
+                {
+                    "id": "exercises-3",
+                    "unlockedAt": "2026-01-07"
+                },
+                {
+                    "id": "first-pr",
+                    "unlockedAt": "2026-07-10"
+                },
+                {
+                    "id": "first-workout",
+                    "unlockedAt": "2026-07-03"
+                },
+                {
+                    "id": "idea-done",
+                    "unlockedAt": "2026-03-10"
+                },
+                {
+                    "id": "night-owl",
+                    "unlockedAt": "2026-07-04"
+                },
+                {
+                    "id": "quick-session",
+                    "unlockedAt": "2026-07-03"
+                },
+                {
+                    "id": "squat-140",
+                    "unlockedAt": "2026-07-11"
+                },
+                {
+                    "id": "tenure-1m",
+                    "unlockedAt": "2023-03-15"
+                },
+                {
+                    "id": "tenure-1y",
+                    "unlockedAt": "2024-02-15"
+                },
+                {
+                    "id": "tenure-2y",
+                    "unlockedAt": "2025-02-15"
+                },
+                {
+                    "id": "tenure-3y",
+                    "unlockedAt": "2026-02-15"
+                },
+                {
+                    "id": "tenure-6m",
+                    "unlockedAt": "2023-08-14"
+                },
+                {
+                    "id": "week-3",
+                    "unlockedAt": "2026-07-05"
+                },
+                {
+                    "id": "weekend-warrior",
+                    "unlockedAt": "2026-07-04"
+                }
+            ],
+            "stats": {
+                "userId": "u1",
+                "totalWorkouts": 9,
+                "completedWorkouts": 9,
+                "totalSets": 8,
+                "workingSets": 8,
+                "warmupSets": 0,
+                "totalVolume": 3160,
+                "averageDurationMinutes": 26,
+                "cardioMinutes": 45,
+                "cardioDistance": 7.5,
+                "cardioSessions": 1,
+                "weekVolume": 0,
+                "weekSets": 0,
+                "weekCardioMinutes": 0,
+                "trainingStreak": 1,
+                "lastWorkoutDate": "2026-07-18",
+                "mostUsedExerciseId": "ex-bench",
+                "mostTrainedMuscleGroup": "Груди",
+                "personalRecords": 3,
+                "notesCount": 0
+            },
+            "ledgerLength": 33
+        },
+        "u2": {
+            "xp": 774,
+            "level": 19,
+            "records": [
+                {
+                    "exerciseId": "ex-bench",
+                    "date": "2026-04-01",
+                    "estimatedOneRepMax": 78.6,
+                    "weight": 60,
+                    "repetitions": 10
+                }
+            ],
+            "achievements": [
+                {
+                    "id": "first-pr",
+                    "unlockedAt": "2026-04-01"
+                },
+                {
+                    "id": "first-workout",
+                    "unlockedAt": "2026-03-26"
+                },
+                {
+                    "id": "week-3",
+                    "unlockedAt": "2026-03-28"
+                },
+                {
+                    "id": "weekend-warrior",
+                    "unlockedAt": "2026-03-28"
+                }
+            ],
+            "stats": {
+                "userId": "u2",
+                "totalWorkouts": 7,
+                "completedWorkouts": 7,
+                "totalSets": 7,
+                "workingSets": 7,
+                "warmupSets": 0,
+                "totalVolume": 4200,
+                "averageDurationMinutes": 0,
+                "cardioMinutes": 0,
+                "cardioDistance": 0,
+                "cardioSessions": 0,
+                "weekVolume": 0,
+                "weekSets": 0,
+                "weekCardioMinutes": 0,
+                "trainingStreak": 7,
+                "lastWorkoutDate": "2026-04-01",
+                "mostUsedExerciseId": "ex-bench",
+                "mostTrainedMuscleGroup": "Груди",
+                "personalRecords": 1,
+                "notesCount": 0
+            },
+            "ledgerLength": 12
+        },
+        "u3": {
+            "xp": 2430,
+            "level": 51,
+            "records": [
+                {
+                    "exerciseId": "ex-bench",
+                    "date": "2026-06-18",
+                    "estimatedOneRepMax": 103.4,
+                    "weight": 90,
+                    "repetitions": 5
+                },
+                {
+                    "exerciseId": "missing-ex-deleted-forever",
+                    "date": "2026-06-20",
+                    "estimatedOneRepMax": 65.5,
+                    "weight": 50,
+                    "repetitions": 10
+                }
+            ],
+            "achievements": [
+                {
+                    "id": "bench-100",
+                    "unlockedAt": "2026-06-18"
+                },
+                {
+                    "id": "bench-140",
+                    "unlockedAt": "2026-06-18"
+                },
+                {
+                    "id": "first-pr",
+                    "unlockedAt": "2026-06-18"
+                },
+                {
+                    "id": "first-workout",
+                    "unlockedAt": "2026-06-15"
+                },
+                {
+                    "id": "quick-session",
+                    "unlockedAt": "2026-06-15"
+                },
+                {
+                    "id": "tenure-1m",
+                    "unlockedAt": "2026-02-20"
+                },
+                {
+                    "id": "tenure-6m",
+                    "unlockedAt": "2026-07-19"
+                },
+                {
+                    "id": "week-3",
+                    "unlockedAt": "2026-06-20"
+                },
+                {
+                    "id": "weekend-warrior",
+                    "unlockedAt": "2026-06-20"
+                }
+            ],
+            "stats": {
+                "userId": "u3",
+                "totalWorkouts": 5,
+                "completedWorkouts": 3,
+                "totalSets": 4,
+                "workingSets": 3,
+                "warmupSets": 1,
+                "totalVolume": 1575,
+                "averageDurationMinutes": 12,
+                "cardioMinutes": 0,
+                "cardioDistance": 0,
+                "cardioSessions": 0,
+                "weekVolume": 0,
+                "weekSets": 0,
+                "weekCardioMinutes": 0,
+                "trainingStreak": 1,
+                "lastWorkoutDate": "2026-06-20",
+                "mostUsedExerciseId": "ex-bench",
+                "mostTrainedMuscleGroup": "Груди",
+                "personalRecords": 2,
+                "notesCount": 0
+            },
+            "ledgerLength": 14
+        }
+    },
+    "team": {
+        "totalWorkouts": 21,
+        "completedWorkouts": 19,
+        "totalSets": 19,
+        "workingSets": 18,
+        "totalVolume": 8935,
+        "averageDurationMinutes": 14,
+        "cardioMinutes": 45,
+        "cardioDistance": 7.5,
+        "cardioDays": 1,
+        "teamStreak": 1,
+        "mostActiveUserId": "u1",
+        "mostUsedExerciseId": "ex-bench",
+        "mostTrainedMuscleGroup": "Груди"
+    }
+}

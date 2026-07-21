@@ -4,6 +4,7 @@
     "version": "0.34.3",
     "type": "module",
     "scripts": {
+        "test": "node --test lib/*.test.mjs",
         "dev": "vite",
         "build": "vite build",
         "preview": "vite preview"
