@@ -162,6 +162,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             const timer = setTimeout(() => controller.abort(), timeoutMs);
 
             let response;
+            let responseText = "";
             try {
                 response = await fetch(`${this.baseUrl}${path}`, {
                     credentials: "include",
@@ -176,6 +177,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                         ...(extraHeaders || {})
                     }
                 });
+                // Drained inside the guarded region on purpose. fetch() resolves as soon
+                // as the HEADERS arrive, so clearing the timer before reading the body
+                // left /export — the multi-hundred-KB payload that gates boot — entirely
+                // unbounded while streaming. A cellular handoff or captive portal stalls
+                // mid-body, which is exactly the case this timeout exists for.
+                responseText = await response.text();
             } catch (error) {
                 if (error?.name === "AbortError") {
                     const timeoutError = new Error(`Backend не відповів за ${Math.round(timeoutMs / 1000)} с.`);
@@ -187,8 +194,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             } finally {
                 clearTimeout(timer);
             }
-
-            const responseText = await response.text();
             let payload = null;
             let parseFailed = false;
             if (responseText) {
@@ -226,9 +231,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
 
         health() {
-            // Shorter than the default: /health gates the boot sequence, so a hung probe
-            // is the difference between an 8s "backend unreachable" screen and a 20s one.
-            return this.request("/health", { method: "GET", timeoutMs: 8000 });
+            // Uses the app's LONGEST bound on purpose. /health looks like a cheap probe
+            // but it is the one route that pays the entire Nest + Prisma cold start:
+            // vercel.ts bootstrapServer -> app.init() -> PrismaService.onModuleInit ->
+            // ensureSchema, which on a first boot runs ~28 serial statements over the
+            // pooler, on top of a Neon scale-to-zero compute wake. A short bound here
+            // does not protect anyone — it just reports a healthy backend as down.
+            return this.request("/health", { method: "GET" });
         }
 
         me() {
@@ -983,10 +992,22 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             // Push any offline-queued workout changes BEFORE loading, so /export
             // already includes them (snapshots survive reloads via localStorage).
             await flushOfflineQueue().catch(() => {});
-            // Order matters: "backend unreachable" must be checked BEFORE
+            // Order matters: "backend unreachable" is checked BEFORE
             // requiresAuthentication(), because an unreachable backend leaves
             // currentUser null and would otherwise be misreported as "not signed in".
-            if (storage.backendUnavailable) {
+            //
+            // But it must ALSO require a stored token. backendUnavailable always
+            // implies currentUser === null (refreshCurrentUser only runs when the
+            // backend answers), so an unguarded check here shadows the auth gate
+            // entirely and strands a genuinely logged-out user on a screen that tells
+            // them their session is fine and offers no way to sign in.
+            let hasStoredSession = false;
+            try {
+                hasStoredSession = Boolean(localStorage.getItem("gymos-auth-token"));
+            } catch (error) {
+                hasStoredSession = false;
+            }
+            if (storage.backendUnavailable && hasStoredSession) {
                 state.database = createEmptyDatabase();
                 renderLoadFailure("Backend не відповідає. Сесія збережена.");
                 return;
@@ -1042,7 +1063,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 renderSection();
             }
         });
-        window.addEventListener("online", () => flushOfflineQueue());
         if (readOfflineQueue().length) {
             showOfflineChip();
         }
@@ -1502,10 +1522,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             <section class="empty-state auth-gate">
                 <i data-lucide="cloud-off"></i>
                 <h2>Не вдалося завантажити дані</h2>
-                <p>Ти залишаєшся в системі — це проблема зв'язку з backend, а не з твоїм акаунтом.</p>
+                <p>Backend недоступний. Спробуй ще раз або увійди через Google.</p>
                 ${message ? `<p class="card-caption">${escapeHtml(message)}</p>` : ""}
                 <div class="action-row auth-gate-actions" style="justify-content:center;margin-top:16px;">
                     <button class="button button-primary large-workout-button" type="button" data-action="retry-load"><i data-lucide="refresh-cw"></i>Спробувати ще раз</button>
+                    <!-- Escape hatch: this screen is also reachable with a stale or
+                         rejected token, and without this the user has no way out. -->
+                    <button class="button button-secondary large-workout-button" type="button" data-action="login-google"><i data-lucide="log-in"></i>Увійти через Google</button>
                     <button class="button button-secondary large-workout-button" type="button" data-action="check-backend"><i data-lucide="server"></i>Перевірити backend</button>
                 </div>
                 <p class="profile-meta" style="margin-top:14px;">Backend: ${escapeHtml(storage.apiBaseUrl || "не налаштовано")} · статус: ${backendStatusLabel(storage.backendStatus)}</p>
@@ -3152,10 +3175,24 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function bindEvents() {
+        // Run-once. initialize() became re-entrant when renderLoadFailure gained a
+        // "retry-load" action, and the named handlers below dedupe per the DOM spec
+        // while the anonymous ones do NOT. setupExerciseReorder in particular adds a
+        // fresh document pointerdown listener each call, so N retries meant one grip
+        // press ran commitExerciseReorder N times — silently scrambling exercise order
+        // and persisting it. A static property, not a `let`: bindEvents is hoisted and
+        // called from initialize(), so a block-scoped flag risks a TDZ error.
+        if (bindEvents.done) {
+            return;
+        }
+        bindEvents.done = true;
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
         window.addEventListener("hashchange", handleRoute);
+        // Moved here from initialize() so the run-once guard above covers it too —
+        // it is an anonymous listener and would otherwise stack on every retry.
+        window.addEventListener("online", () => flushOfflineQueue());
         // Guarantee scrolling is never left frozen by a stray overlay lock.
         window.addEventListener("focus", ensureScrollUnlockedIfNoOverlay);
         window.addEventListener("pageshow", ensureScrollUnlockedIfNoOverlay);
@@ -5473,6 +5510,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
         if (storage.requiresAuthentication()) {
             renderAuthGate();
+            return;
+        }
+        // Reachable from renderLoadFailure, which leaves state.database empty. A bare
+        // renderSection() there hits renderMobileNavigation -> currentUser().id and
+        // throws on undefined, so re-run boot instead of painting an empty shell.
+        if (!currentUser()) {
+            await initialize();
             return;
         }
         renderSection();
@@ -8680,7 +8724,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
     function enqueueOffline(entry) {
         const queue = readOfflineQueue().filter((item) => !(item.id === entry.id && item.kind === entry.kind));
-        queue.push({ ...entry, ts: Date.now() });
+        // Stamped with the owner. The queue is a single un-scoped localStorage key that
+        // logout never clears, and the backend's saveFull creates a workout with no
+        // server row under whoever is currently signed in — so an unflushed entry could
+        // be replayed into a different account on a shared device.
+        queue.push({ ...entry, userId: storage.currentUser?.id || "", ts: Date.now() });
         writeOfflineQueue(queue);
         showOfflineChip();
     }
@@ -8700,7 +8748,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     let offlineFlushRunning = false;
 
     async function flushOfflineQueue() {
-        if (offlineFlushRunning || !(storage.mode === "api" && storage.apiClient.hasBaseUrl())) {
+        // storage.currentUser is required: a tokenless boot would otherwise 401 the
+        // whole queue at startup, and entries now carry an owner to compare against.
+        if (offlineFlushRunning || !(storage.mode === "api" && storage.apiClient.hasBaseUrl() && storage.currentUser)) {
             return;
         }
         let queue = readOfflineQueue();
@@ -8712,6 +8762,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         try {
             while (queue.length) {
                 const entry = queue[0];
+                // Never replay another account's work into this one. Entries predating
+                // this change carry no userId and stay eligible, which is the old
+                // behaviour and correct for a single-account device.
+                if (entry.userId && entry.userId !== (storage.currentUser?.id || "")) {
+                    queue.shift();
+                    writeOfflineQueue(queue);
+                    continue;
+                }
                 try {
                     if (entry.kind === "delete") {
                         try {
