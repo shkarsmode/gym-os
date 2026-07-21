@@ -1541,6 +1541,8 @@ import {
         element("mobileNavigation").innerHTML = "";
         element("sidebarProfileCard").innerHTML = `<div class="profile-meta">Потрібна авторизація Google</div>`;
         element("openUserSwitcherButton").innerHTML = "GO";
+        delete element("openUserSwitcherButton").dataset.avatarSig;
+        delete element("sidebarProfileCard").dataset.sig;
         element("sectionEyebrow").textContent = "Авторизація";
         element("sectionTitle").textContent = "GymOS";
         element("pageContent").innerHTML = `
@@ -1569,6 +1571,8 @@ import {
         element("mobileNavigation").innerHTML = "";
         element("sidebarProfileCard").innerHTML = `<div class="profile-meta">Немає зв'язку з backend</div>`;
         element("openUserSwitcherButton").innerHTML = "GO";
+        delete element("openUserSwitcherButton").dataset.avatarSig;
+        delete element("sidebarProfileCard").dataset.sig;
         element("sectionEyebrow").textContent = "Помилка завантаження";
         element("sectionTitle").textContent = "GymOS";
         element("pageContent").innerHTML = `
@@ -1607,6 +1611,8 @@ import {
         element("mobileNavigation").innerHTML = "";
         element("sidebarProfileCard").innerHTML = `<div class="profile-meta">Очікування підтвердження</div>`;
         element("openUserSwitcherButton").innerHTML = "GO";
+        delete element("openUserSwitcherButton").dataset.avatarSig;
+        delete element("sidebarProfileCard").dataset.sig;
         element("sectionEyebrow").textContent = "Доступ";
         element("sectionTitle").textContent = "GymOS";
         element("pageContent").innerHTML = `
@@ -1682,14 +1688,30 @@ import {
         button.style.setProperty("--fglowc", tier.glowColor);
         button.classList.add("has-frame");
         button.classList.toggle("is-anim", tier.conic);
-        button.innerHTML = `${escapeHtml(user.avatarInitials)}${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" decoding="async" onerror="this.remove()">` : ""}`;
+        // Only rebuild the <img> when the avatar actually changed. Rebuilding it on
+        // every tab switch / action recreated the element and made the photo blink.
+        const avatarSig = `${user.id}|${url}`;
+        if (button.dataset.avatarSig === avatarSig) {
+            return;
+        }
+        button.dataset.avatarSig = avatarSig;
+        button.innerHTML = `${escapeHtml(user.avatarInitials)}${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(user.displayName || "")}" referrerpolicy="no-referrer" loading="eager" decoding="sync" onerror="this.remove()">` : ""}`;
     }
 
     function renderSidebarProfile() {
         const user = currentUser();
         const stats = userStats(user.id);
         const info = userLevel(user.id);
-        element("sidebarProfileCard").innerHTML = `
+        // Skip the innerHTML rebuild (which recreates the avatar <img> → blink) when
+        // nothing shown here changed. Rebuild only when the user / avatar / level /
+        // XP / stats / plan actually change.
+        const profileCard = element("sidebarProfileCard");
+        const profileSig = `${user.id}|${imageUrl(user.avatarUrl)}|${info.level}|${info.xpToNext}|${Math.round(info.progress * 100)}|${stats.completedWorkouts}|${stats.totalVolume}|${hasUnlimited()}`;
+        if (profileCard.dataset.sig === profileSig) {
+            return;
+        }
+        profileCard.dataset.sig = profileSig;
+        profileCard.innerHTML = `
             <div class="profile-row">
                 ${framedAvatar(user, "small", info.level)}
                 <div>
@@ -3049,7 +3071,21 @@ import {
         if (item) {
             item.status = status;
         }
-        renderSection();
+        // Targeted DOM update instead of a full re-render — re-rendering the whole
+        // board recreated every author avatar <img> and made them blink.
+        const statusMeta = feedbackStatuses.find((entry) => entry.key === status) || feedbackStatuses[0];
+        const select = document.querySelector(`[data-action="set-feedback-status"][data-feedback-id="${id}"]`);
+        const card = select ? select.closest(".fb-item") : null;
+        if (card) {
+            card.className = card.className.replace(/\bstatus-[\w-]+/, `status-${status}`);
+            const badge = card.querySelector(".fb-status-badge");
+            if (badge) {
+                badge.className = `fb-status-badge status-${status}`;
+                badge.textContent = statusMeta.label;
+            }
+        } else {
+            renderSection();
+        }
         if (storage.mode === "api") {
             try {
                 await storage.apiClient.updateFeedbackStatus(id, status);
