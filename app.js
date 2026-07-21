@@ -8625,6 +8625,29 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function workoutPayload(workoutItem) {
+        // POST /workouts/:id/save is a destructive full replace: the backend deletes
+        // every set, exercise and cardio session of the workout and recreates them from
+        // this payload. Both `exercises` and `cardioSessions` below fall back to [], so
+        // serialising a workout that has no sets loaded would atomically and
+        // permanently delete that workout's real sets, with no error surfaced.
+        //
+        // Nothing produces such an object today — every workout is fully hydrated. This
+        // guard exists because the windowed/summary payload work is about to introduce
+        // list-shaped workout rows, and this is the function they must never reach.
+        //
+        // status 400 is load-bearing, not decoration: this is called inside the
+        // offline-queue flush, and isRetriableError() treats a status-less Error as
+        // network loss. Without it the queue head is never shifted and the queue
+        // deadlocks permanently on this entry.
+        //
+        // Array.isArray, not truthiness: a completed cardio-only workout legitimately
+        // has exercises: [] and must still save.
+        if (!Array.isArray(workoutItem.exercises) || !Array.isArray(workoutItem.cardioSessions)) {
+            const error = new Error("Внутрішня помилка: спроба зберегти тренування без завантажених підходів.");
+            error.status = 400;
+            throw error;
+        }
+
         return {
             date: workoutItem.date,
             title: workoutItem.title || "Тренування",
@@ -8780,8 +8803,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                             }
                         }
                     } else {
+                        // Prefer the live row so a replay carries any edits made since
+                        // it was queued — but only when it is actually hydrated. Once
+                        // the boot payload becomes windowed, the in-memory row for an
+                        // older workout may be a summary, and workoutPayload refuses
+                        // those. The snapshot captured at enqueue time is always whole.
                         const workoutItem = state.database?.workouts?.find((item) => item.id === entry.id);
-                        const payload = workoutItem ? workoutPayload(workoutItem) : entry.payload;
+                        const isHydrated = workoutItem && Array.isArray(workoutItem.exercises) && Array.isArray(workoutItem.cardioSessions);
+                        const payload = isHydrated ? workoutPayload(workoutItem) : entry.payload;
                         if (payload) {
                             await storage.apiClient.saveWorkout(entry.id, payload);
                         }
