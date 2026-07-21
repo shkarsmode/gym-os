@@ -39,6 +39,11 @@ import {
         section: "dashboard",
         profileUserId: null,
         editingWorkoutId: null,
+        // Cursor into the caller's own history under the windowed payload; null once
+        // everything is loaded. loadingMoreWorkouts guards a double fetch from a fast
+        // double-tap on "load more".
+        workoutsCursor: null,
+        loadingMoreWorkouts: false,
         viewUserId: null,
         frameOverride: null, // admin-only local frame preview; resets on reload
         authUser: null,
@@ -260,8 +265,23 @@ import {
             return this.request("/auth/logout", { method: "POST" });
         }
 
-        exportData() {
-            return this.request("/export", { method: "GET" });
+        // Asks for the windowed shape and offers the catalog it already has. An old
+        // server ignores both — the query param is unbound and the header is unread —
+        // and answers with the full v3 payload, which the client detects and handles.
+        // That is what lets the two sides deploy in either order.
+        exportData(catalogEtag = "") {
+            return this.request("/export?shape=windowed", {
+                method: "GET",
+                headers: catalogEtag ? { "If-None-Match": catalogEtag } : {}
+            });
+        }
+
+        fetchMyWorkouts(cursor = "", limit = 30) {
+            const params = new URLSearchParams({ limit: String(limit) });
+            if (cursor) {
+                params.set("cursor", cursor);
+            }
+            return this.request(`/workouts/mine?${params}`, { method: "GET" });
         }
 
         startImport(resources) {
@@ -413,7 +433,25 @@ import {
         }
 
         async load() {
-            return this.apiClient.exportData();
+            // The catalog is 40% of the payload and changes a few times a month, so the
+            // tag we were last served is offered back and the server omits that section
+            // when it still matches. `catalogEtag` is module-level rather than stored:
+            // a reload should re-fetch the catalog once, cheaply, rather than trust a
+            // tag that outlived the data it described.
+            const payload = await this.apiClient.exportData(this.catalogEtag || "");
+            if (payload && typeof payload === "object") {
+                if (payload.catalogEtag) {
+                    this.catalogEtag = payload.catalogEtag;
+                }
+                // Section omitted means "you already have it" — splice ours back in, or
+                // downstream sees a payload with no catalog at all.
+                if (!Array.isArray(payload.exercises) && Array.isArray(this.lastExercises)) {
+                    payload.exercises = this.lastExercises;
+                } else if (Array.isArray(payload.exercises)) {
+                    this.lastExercises = payload.exercises;
+                }
+            }
+            return payload;
         }
 
         async save(database) {
@@ -1060,6 +1098,9 @@ import {
             hideBusyOverlay(overlay);
         }
         state.profileUserId = state.database.currentUserId;
+        // Seeded from every payload install: null under the legacy shape (all history is
+        // already present), a cursor under the windowed one.
+        state.workoutsCursor = state.database.workoutsCursor || null;
         if (storage.mode !== "api") {
             await persist();
         }
@@ -1602,6 +1643,9 @@ import {
         }
         state.database = approvedDatabase;
         state.profileUserId = state.database.currentUserId;
+        // Seeded from every payload install: null under the legacy shape (all history is
+        // already present), a cursor under the windowed one.
+        state.workoutsCursor = state.database.workoutsCursor || null;
         renderShell();
         handleRoute();
         toast("Доступ відкрито", "Ласкаво просимо до GymOS!");
@@ -2745,7 +2789,7 @@ import {
 
     function calendar() {
         const history = workoutsFor(currentUser().id).sort(byDateDesc).slice(0, 8);
-        content(`<div class="grid dashboard-grid"><section class="calendar-shell span-12"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div>${startWorkoutButton(null, { compact: true })}</div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="calendar-shell span-12"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div>${startWorkoutButton(null, { compact: true })}</div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div>${loadMoreControl()}</section></div>`);
         requestAnimationFrame(renderCalendar);
     }
 
@@ -2779,7 +2823,7 @@ import {
         const summary = userId ? userStats(userId) : teamStats();
         const history = (userId ? workoutsFor(userId) : state.database.workouts).sort(byDateDesc).slice(0, 8);
         const scopeName = userId ? (userId === currentUser().id ? "Твій прогрес" : escapeHtml(userById(userId).displayName)) : "Уся команда";
-        content(`<section class="card stats-head"><div class="card-header"><div><h2>Статистика</h2><p class="card-caption">${scopeName} · за весь час. Обери учасника нижче або «Усі» для команди.</p></div></div>${statsUserBar(userId)}</section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Усього тренувань", summary.totalWorkouts, "calendar", "Усі статуси", "span-3")}${metric("Завершено", summary.completedWorkouts, "check-circle-2", "Фінішовані сесії", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets || 0} робочих`, "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Завершені підходи", "span-3")}${metric("Середня тривалість", `${summary.averageDurationMinutes || 0} хв`, "timer", "Завершені тренування", "span-3")}${metric("Кардіо хвилини", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} км`, "span-3")}${metric("Найчастіша вправа", summary.mostUsedExercise?.name || "—", "repeat", "Частота вправ", "span-3")}${metric("Найсильніший фокус", summary.mostTrainedMuscleGroup || "—", "target", "За завершеними підходами", "span-3")}${chartCard("Обсяг у часі", "Завершений обсяг за сесіями.", "statsVolume", "span-6")}${chartCard("Підходи за м'язами", "Розподіл завершених підходів.", "statsMuscle", "span-6")}${chartCard("Прогрес вправи", "Тренд розрахункового 1ПМ.", "statsProgress", "span-6")}${chartCard("Регулярність", "Кількість вправ у сесії.", "statsConsistency", "span-6")}${contributorCard()}<section class="card span-12"><div class="card-header"><div><h2>Історія</h2><p class="card-caption">${userId ? "Тренування обраного учасника." : "Спільна стрічка команди."}</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
+        content(`<section class="card stats-head"><div class="card-header"><div><h2>Статистика</h2><p class="card-caption">${scopeName} · за весь час. Обери учасника нижче або «Усі» для команди.</p></div></div>${statsUserBar(userId)}</section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Усього тренувань", summary.totalWorkouts, "calendar", "Усі статуси", "span-3")}${metric("Завершено", summary.completedWorkouts, "check-circle-2", "Фінішовані сесії", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets || 0} робочих`, "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Завершені підходи", "span-3")}${metric("Середня тривалість", `${summary.averageDurationMinutes || 0} хв`, "timer", "Завершені тренування", "span-3")}${metric("Кардіо хвилини", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} км`, "span-3")}${metric("Найчастіша вправа", summary.mostUsedExercise?.name || "—", "repeat", "Частота вправ", "span-3")}${metric("Найсильніший фокус", summary.mostTrainedMuscleGroup || "—", "target", "За завершеними підходами", "span-3")}${chartCard("Обсяг у часі", "Завершений обсяг за сесіями.", "statsVolume", "span-6")}${chartCard("Підходи за м'язами", "Розподіл завершених підходів.", "statsMuscle", "span-6")}${chartCard("Прогрес вправи", "Тренд розрахункового 1ПМ.", "statsProgress", "span-6")}${chartCard("Регулярність", "Кількість вправ у сесії.", "statsConsistency", "span-6")}${contributorCard()}<section class="card span-12"><div class="card-header"><div><h2>Історія</h2><p class="card-caption">${userId ? "Тренування обраного учасника." : "Спільна стрічка команди."}</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div>${loadMoreControl()}</section></div>`);
         requestAnimationFrame(() => {
             volumeChart("statsVolume", userId);
             muscleDistributionChart("statsMuscle", userId);
@@ -3437,6 +3481,9 @@ import {
         try {
             state.database = await loadDatabaseOrThrow();
             state.profileUserId = state.database.currentUserId;
+        // Seeded from every payload install: null under the legacy shape (all history is
+        // already present), a cursor under the windowed one.
+        state.workoutsCursor = state.database.workoutsCursor || null;
             renderShell();
             renderSection();
             showSyncIndicator("success", "Оновлено");
@@ -3957,6 +4004,7 @@ import {
             notifications: requestNotifications,
             "check-backend": checkBackendConnection,
             "retry-load": () => initialize(),
+            "load-more-workouts": loadMoreWorkoutsAction,
             "login-google": loginWithGoogle,
             logout: logout,
             "recheck-approval": recheckApproval,
@@ -5626,6 +5674,9 @@ import {
                 });
                 state.database = await loadDatabaseOrThrow();
                 state.profileUserId = state.database.currentUserId;
+        // Seeded from every payload install: null under the legacy shape (all history is
+        // already present), a cursor under the windowed one.
+        state.workoutsCursor = state.database.workoutsCursor || null;
                 renderShell();
                 renderSection();
                 toast("Дані імпортовано", `Тренувань: ${result.imported.workouts}, замірів ваги: ${result.imported.bodyweightEntries}.`);
@@ -5766,6 +5817,9 @@ import {
                 return;
             }
             state.profileUserId = state.database.currentUserId;
+        // Seeded from every payload install: null under the legacy shape (all history is
+        // already present), a cursor under the windowed one.
+        state.workoutsCursor = state.database.workoutsCursor || null;
             renderShell();
             renderSection();
             toast("Кеш очищено", "Дані перечитано з backend.");
@@ -5773,6 +5827,9 @@ import {
         }
         state.database = createSeedDatabase();
         state.profileUserId = state.database.currentUserId;
+        // Seeded from every payload install: null under the legacy shape (all history is
+        // already present), a cursor under the windowed one.
+        state.workoutsCursor = state.database.workoutsCursor || null;
         await persist();
         renderSection();
         toast("Демодані скинуто", "Створено свіжу локальну базу.");
@@ -6160,6 +6217,35 @@ import {
         }).join("");
     }
 
+    // ---- Shape-agnostic workout accessors ---------------------------------------
+    // Every workout row carries these aggregates whether or not it carries its sets,
+    // which is what lets one renderer serve both a hydrated own workout and a peer
+    // summary. Reading them from the row rather than recomputing is also the only
+    // correct thing to do for a summary — there are no sets to compute from.
+    function workoutExerciseCount(workoutItem) {
+        return Number.isFinite(workoutItem.exerciseCount)
+            ? workoutItem.exerciseCount
+            : (workoutItem.exercises || []).length;
+    }
+
+    function workoutVolumeOf(workoutItem) {
+        return Number.isFinite(workoutItem.totalVolume) ? workoutItem.totalVolume : workoutVolume(workoutItem);
+    }
+
+    function durationOf(workoutItem) {
+        return Number.isFinite(workoutItem.durationMinutes) ? workoutItem.durationMinutes : duration(workoutItem);
+    }
+
+    // Rendered under a history list when the caller's own history continues past what
+    // the boot payload delivered. Absent for peers and once everything is loaded, so
+    // there is no "load more" that does nothing.
+    function loadMoreControl() {
+        if (!state.workoutsCursor) {
+            return "";
+        }
+        return `<div class="action-row" style="justify-content:center;margin-top:14px;"><button class="button button-secondary compact" type="button" data-action="load-more-workouts"><i data-lucide="chevron-down"></i>Показати більше</button></div>`;
+    }
+
     function workoutHistoryList(workouts) {
         if (!workouts.length) {
             return emptyInline("Історія порожня", "Створи або заверши тренування, щоб воно з'явилося тут.");
@@ -6168,7 +6254,7 @@ import {
         return workouts.map((workoutItem) => {
             const owner = userById(workoutItem.userId);
             const readonly = !canManage(workoutItem);
-            return `<article class="history-card" data-action="open-workout" data-workout-id="${workoutItem.id}"><div class="card-header"><div><div class="tag-row" style="margin-bottom:8px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}</div><h3>${escapeHtml(workoutLabel(workoutItem))}</h3><p class="card-caption">${formatDate(workoutItem.date)} · ${escapeHtml(owner.displayName)}</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button></div>${workoutStatStrip([{ icon: "dumbbell", value: workoutItem.exercises.length, label: "вправ" }, { icon: "list-checks", value: workoutSetCount(workoutItem), label: "підходів" }, { icon: "boxes", value: `${number(workoutVolume(workoutItem))} кг` }, { icon: "heart-pulse", value: `${workoutCardioMinutes(workoutItem)} хв`, label: "кардіо" }, { icon: "timer", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption history-notes">${escapeHtml(workoutItem.notes).slice(0, 140)}</p>` : ""}</article>`;
+            return `<article class="history-card" data-action="open-workout" data-workout-id="${workoutItem.id}"><div class="card-header"><div><div class="tag-row" style="margin-bottom:8px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}</div><h3>${escapeHtml(workoutLabel(workoutItem))}</h3><p class="card-caption">${formatDate(workoutItem.date)} · ${escapeHtml(owner.displayName)}</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button></div>${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: workoutSetCount(workoutItem), label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${workoutCardioMinutes(workoutItem)} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption history-notes">${escapeHtml(workoutItem.notes).slice(0, 140)}</p>` : ""}</article>`;
         }).join("");
     }
 
@@ -6392,15 +6478,42 @@ import {
     // Both delegate to the kernel. The kernel emits ids where app.js historically
     // carried objects (mostUsedExercise), so those are resolved back here — several
     // renderers read summary.mostUsedExercise?.name and would print nothing otherwise.
+    // ---- Server scoring ---------------------------------------------------------
+    // Under the windowed payload the client no longer HOLDS the full lifetime corpus,
+    // so it cannot compute progression: XP, levels, records and all 39 achievements are
+    // derived from every set the user has ever logged. The server computes them with the
+    // identical kernel and ships the answer in `scoring`.
+    //
+    // Each accessor prefers that block and falls back to computing locally, so a v3
+    // payload from an older server still works unchanged.
+    function serverScoring(userId) {
+        const block = state.database?.scoring;
+        return block && block.users ? block.users[userId] || null : null;
+    }
+
+    function usingServerScoring() {
+        return Boolean(state.database?.scoring);
+    }
+
     function userStats(userId) {
-        const stats = kernelUserStats(userId, workoutsFor(userId), { exerciseById, now: new Date() });
+        const fromServer = serverScoring(userId);
+        const stats = fromServer
+            ? fromServer.stats
+            : kernelUserStats(userId, workoutsFor(userId), { exerciseById, now: new Date() });
         return { ...stats, mostUsedExercise: stats.mostUsedExerciseId ? exerciseById(stats.mostUsedExerciseId) : null };
     }
 
     function teamStats() {
+        // cardioDays, teamStreak and mostUsedExerciseId cannot be reconstructed from
+        // per-user rows — they need the merged corpus — so the server's team block is
+        // used whole rather than re-derived from the summaries it also sends.
+        const serverTeam = state.database?.scoring?.team;
         const now = new Date();
-        const summaries = state.database.users.map((user) => kernelUserStats(user.id, workoutsFor(user.id), { exerciseById, now }));
-        const team = kernelTeamStats(state.database.users, state.database.workouts, summaries, { exerciseById, now });
+        const summaries = serverTeam
+            ? []
+            : state.database.users.map((user) => kernelUserStats(user.id, workoutsFor(user.id), { exerciseById, now }));
+        const team = serverTeam
+            || kernelTeamStats(state.database.users, state.database.workouts, summaries, { exerciseById, now });
         return {
             ...team,
             // mostActiveUser is read nowhere today, but is kept so the shape of a team
@@ -6418,6 +6531,10 @@ import {
     }
 
     function recordsFor(userId) {
+        const fromServer = serverScoring(userId);
+        if (fromServer) {
+            return hydrateRecords(fromServer.records);
+        }
         // workoutsFor returns state.database.workouts order, which is /export's date DESC.
         // That is load-bearing: the kernel breaks 1RM ties by visit order, so feeding it
         // ascending would silently move PR dates. See the note in lib/scoring.js.
@@ -6668,6 +6785,18 @@ import {
     // the level (see lib/levels.js) and the events power the Levels-page history.
     // Everything an achievement check can look at, pre-filtered to the user.
     function userAchievements(userId, records = null) {
+        const fromServer = serverScoring(userId);
+        if (fromServer) {
+            // The server sends only what unlocked. The UI renders all 39 including
+            // locked ones and counts the array, so the full list is rebuilt here with
+            // unlock dates merged in — returning the server's array alone would make
+            // the Прокачка tab show only the earned badges.
+            const unlocked = new Map(fromServer.achievements.map((item) => [item.id, item.unlockedAt]));
+            return ACHIEVEMENTS.map((achievement) => ({
+                ...achievement,
+                unlockedAt: unlocked.get(achievement.id) || null
+            }));
+        }
         return kernelUserAchievements(userId, workoutsFor(userId), {
             exerciseById,
             userById,
@@ -6699,6 +6828,12 @@ import {
     }
 
     function xpEvents(userId, records = null) {
+        const fromServer = serverScoring(userId);
+        if (fromServer) {
+            // Only the caller's own ledger is sent — nothing renders a peer's. An empty
+            // array here is correct for peers, not a missing-data bug.
+            return fromServer.xpLedger.map((event) => ({ ...event, ...labelForXpEvent(event) }));
+        }
         const recordList = records || recordsFor(userId);
         const achievements = userAchievements(userId, recordList);
         return kernelXpEvents(userId, workoutsFor(userId), {
@@ -6741,6 +6876,13 @@ import {
     }
 
     function userXp(userId, records = null) {
+        // Must read the server's total, not sum the ledger: peer ledgers are shipped
+        // empty (nothing renders them), so summing would report every teammate at 0 XP
+        // and flatten the entire leaderboard.
+        const fromServer = serverScoring(userId);
+        if (fromServer) {
+            return fromServer.xp;
+        }
         return xpEvents(userId, records).reduce((sum, event) => sum + event.amount, 0);
     }
 
@@ -7527,6 +7669,15 @@ import {
     }
 
     function workoutNumber(workoutItem) {
+        // The server assigns the lifetime ordinal. Deriving it from the workouts held
+        // in memory is wrong under the windowed payload — a member with a hundred
+        // sessions holding the last thirty would be shown #1..#30 instead of #71..#100.
+        // The server value also fixes an old nondeterminism: this sorted by
+        // `createdAt || date` while /export never sent createdAt, so same-day workouts
+        // could swap numbers between loads.
+        if (Number.isFinite(workoutItem.seq)) {
+            return workoutItem.seq;
+        }
         const list = workoutsFor(workoutItem.userId).slice().sort((left, right) => new Date(left.createdAt || left.date) - new Date(right.createdAt || right.date));
         const index = list.findIndex((item) => item.id === workoutItem.id);
         return (index >= 0 ? index : list.length - 1) + 1;
@@ -7571,7 +7722,55 @@ import {
     }
 
     function workoutsFor(userId) {
+        // Under the windowed payload only the caller's own workouts carry sets; peers
+        // arrive as summaries. Asking for a peer's workouts here would return rows whose
+        // `exercises` key is absent, and any set-level computation over them yields zero
+        // rather than an error — a teammate showing 0 kg lifted reads as a bad workout,
+        // not as a bug. Fail loudly instead; peer aggregates come from `scoring`.
+        if (usingServerScoring() && userId !== state.database.currentUserId) {
+            throw new Error(`workoutsFor(${userId}): peer workouts carry no sets under the windowed payload — read scoring.users[id] instead`);
+        }
         return state.database.workouts.filter((workoutItem) => workoutItem.userId === userId);
+    }
+
+    // Swaps the button for a skeleton while the page is in flight, so the rows already
+    // on screen stay put and readable instead of the list collapsing to a spinner.
+    async function loadMoreWorkoutsAction() {
+        const button = document.querySelector('[data-action="load-more-workouts"]');
+        if (button) {
+            button.outerHTML = skeletonMore(2);
+        }
+        try {
+            await loadMoreOwnWorkouts();
+        } catch (error) {
+            console.error(error);
+            showSyncIndicator("error", friendlyError(error));
+        }
+        renderSection();
+    }
+
+    // Own history is paged: the boot payload carries the most recent slice and this
+    // pulls the next one. Returns false when there is nothing more to load.
+    async function loadMoreOwnWorkouts() {
+        if (!state.workoutsCursor || state.loadingMoreWorkouts) {
+            return false;
+        }
+        state.loadingMoreWorkouts = true;
+        try {
+            const page = await storage.apiClient.fetchMyWorkouts(state.workoutsCursor);
+            const known = new Set(state.database.workouts.map((item) => item.id));
+            // Upsert rather than append: a workout edited since boot may already be held,
+            // and a hydrated row must never be replaced by an older copy of itself.
+            for (const workoutItem of page.workouts || []) {
+                if (!known.has(workoutItem.id)) {
+                    state.database.workouts.push(workoutItem);
+                }
+            }
+            state.workoutsCursor = page.nextCursor || null;
+            return true;
+        } finally {
+            state.loadingMoreWorkouts = false;
+        }
     }
 
     function activeWorkoutFor(userId) {
@@ -7651,10 +7850,18 @@ import {
     }
 
     function workoutSetCount(workoutItem) {
+        // Prefer the row aggregate: a summary has no sets to count, and for a hydrated
+        // row the server counted exactly the same thing.
+        if (Number.isFinite(workoutItem.setCount)) {
+            return workoutItem.setCount;
+        }
         return workoutItem.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
     }
 
     function workoutCardioMinutes(workoutItem) {
+        if (Number.isFinite(workoutItem.cardioMinutes)) {
+            return workoutItem.cardioMinutes;
+        }
         return (workoutItem.cardioSessions || []).reduce((sum, session) => sum + session.durationMinutes, 0);
     }
 
