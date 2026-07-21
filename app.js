@@ -36,10 +36,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             exerciseSearch: "",
             activityScope: "mine",
             statsUserId: null, // null = current user; "all" = whole team; otherwise a user id
-            statsRange: "all",
-            statsMuscle: "all",
-            statsExerciseId: "all",
-            statsWorkoutType: "all",
+            // statsRange / statsMuscle / statsExerciseId / statsWorkoutType were removed:
+            // they were initialised to "all" and never assigned anywhere, so the
+            // filteredWorkouts() they drove was an identity function on every call.
             pickerMuscle: "all",
             pickerEquipment: "all",
             rankingsMuscle: "Груди", // default best-lift category in Рейтинги
@@ -2764,8 +2763,8 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     function stats() {
         const scopeId = state.filters.statsUserId;
         const userId = scopeId === "all" ? null : (scopeId || currentUser().id);
-        const summary = userId ? userStats(userId, true) : teamStats(true);
-        const history = filteredWorkouts(userId ? workoutsFor(userId) : state.database.workouts).sort(byDateDesc).slice(0, 8);
+        const summary = userId ? userStats(userId) : teamStats();
+        const history = (userId ? workoutsFor(userId) : state.database.workouts).sort(byDateDesc).slice(0, 8);
         const scopeName = userId ? (userId === currentUser().id ? "Твій прогрес" : escapeHtml(userById(userId).displayName)) : "Уся команда";
         content(`<section class="card stats-head"><div class="card-header"><div><h2>Статистика</h2><p class="card-caption">${scopeName} · за весь час. Обери учасника нижче або «Усі» для команди.</p></div></div>${statsUserBar(userId)}</section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Усього тренувань", summary.totalWorkouts, "calendar", "Усі статуси", "span-3")}${metric("Завершено", summary.completedWorkouts, "check-circle-2", "Фінішовані сесії", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets || 0} робочих`, "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Завершені підходи", "span-3")}${metric("Середня тривалість", `${summary.averageDurationMinutes || 0} хв`, "timer", "Завершені тренування", "span-3")}${metric("Кардіо хвилини", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} км`, "span-3")}${metric("Найчастіша вправа", summary.mostUsedExercise?.name || "—", "repeat", "Частота вправ", "span-3")}${metric("Найсильніший фокус", summary.mostTrainedMuscleGroup || "—", "target", "За завершеними підходами", "span-3")}${chartCard("Обсяг у часі", "Завершений обсяг за сесіями.", "statsVolume", "span-6")}${chartCard("Підходи за м'язами", "Розподіл завершених підходів.", "statsMuscle", "span-6")}${chartCard("Прогрес вправи", "Тренд розрахункового 1ПМ.", "statsProgress", "span-6")}${chartCard("Регулярність", "Кількість вправ у сесії.", "statsConsistency", "span-6")}${contributorCard()}<section class="card span-12"><div class="card-header"><div><h2>Історія</h2><p class="card-caption">${userId ? "Тренування обраного учасника." : "Спільна стрічка команди."}</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div></section></div>`);
         requestAnimationFrame(() => {
@@ -6237,12 +6236,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function volumeChart(id, userId) {
-        const workouts = filteredWorkouts(userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-14);
+        const workouts = (userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-14);
         barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map(workoutVolume), "Обсяг, кг");
     }
 
     function muscleDistributionChart(id, userId) {
-        const map = muscleSetMap(filteredWorkouts(userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed"));
+        const map = muscleSetMap((userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed"));
         doughnutChart(id, [...map.keys()], [...map.values()]);
     }
 
@@ -6263,7 +6262,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function progressChart(id, userId) {
-        const exerciseId = state.filters.statsExerciseId !== "all" ? state.filters.statsExerciseId : exerciseByName("Жим лежачи").id;
+        // Was gated on state.filters.statsExerciseId, which no UI ever assigned — it
+        // sat at "all" for the life of the app, so this always charted the bench press.
+        const exerciseId = exerciseByName("Жим лежачи").id;
         const points = progressData(userId, exerciseId);
         lineChart(id, points.map((point) => shortDate(point.date)), points.map((point) => point.value), "Розрах. 1ПМ");
     }
@@ -6274,7 +6275,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     }
 
     function consistencyChart(id, userId) {
-        const workouts = filteredWorkouts(userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-10);
+        const workouts = (userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-10);
         barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => item.exercises.length), "Вправи");
     }
 
@@ -6335,8 +6336,8 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.charts.clear();
     }
 
-    function userStats(userId, useFilters = false) {
-        const workouts = useFilters ? filteredWorkouts(workoutsFor(userId)) : workoutsFor(userId);
+    function userStats(userId) {
+        const workouts = workoutsFor(userId);
         const completed = workouts.filter((item) => item.status === "completed");
         const allSets = completed.flatMap((item) => item.exercises.flatMap((exercise) => exercise.sets)).filter((set) => set.isCompleted);
         const cardioSessions = workouts.flatMap((item) => item.cardioSessions || []);
@@ -6368,9 +6369,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         };
     }
 
-    function teamStats(useFilters = false) {
-        const userSummaries = state.database.users.map((user) => userStats(user.id, useFilters));
-        const workouts = useFilters ? filteredWorkouts(state.database.workouts) : state.database.workouts;
+    function teamStats() {
+        const userSummaries = state.database.users.map((user) => userStats(user.id));
+        const workouts = state.database.workouts;
         const completed = workouts.filter((item) => item.status === "completed");
         const cardioSessions = workouts.flatMap((item) => item.cardioSessions || []);
         const mostActive = [...userSummaries].sort((left, right) => right.completedWorkouts - left.completedWorkouts)[0];
@@ -6532,24 +6533,6 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             }
             return String(left.name || "").localeCompare(String(right.name || ""), "uk");
         });
-    }
-
-    function filteredWorkouts(workouts) {
-        let items = [...workouts];
-        if (state.filters.statsRange !== "all") {
-            const start = addDays(new Date(), -Number(state.filters.statsRange));
-            items = items.filter((item) => new Date(item.date) >= start);
-        }
-        if (state.filters.statsMuscle !== "all") {
-            items = items.filter((item) => item.exercises.some((exercise) => exerciseById(exercise.exerciseId).primaryMuscleGroup === state.filters.statsMuscle));
-        }
-        if (state.filters.statsExerciseId !== "all") {
-            items = items.filter((item) => item.exercises.some((exercise) => exercise.exerciseId === state.filters.statsExerciseId));
-        }
-        if (state.filters.statsWorkoutType !== "all") {
-            items = items.filter((item) => item.workoutType === state.filters.statsWorkoutType);
-        }
-        return items;
     }
 
     function workoutVolume(workoutItem) {
