@@ -152,24 +152,69 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 authToken = "";
             }
 
-            const response = await fetch(`${this.baseUrl}${path}`, {
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-                    ...(options.headers || {})
-                },
-                ...options
-            });
+            // Longer than the serverless execution wall (10s) on purpose: a backend that
+            // times out should surface as its real 504, not as a client-side abort that
+            // hides which side failed. Without this a stalled connection (cellular
+            // handoff, gym basement, captive portal) leaves the boot overlay spinning
+            // forever, because nothing else bounds a bare fetch.
+            const { timeoutMs = 20000, headers: extraHeaders, ...fetchOptions } = options;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+            let response;
+            try {
+                response = await fetch(`${this.baseUrl}${path}`, {
+                    credentials: "include",
+                    // `...fetchOptions` is spread BEFORE headers: it used to come after,
+                    // so any caller passing options.headers silently replaced the whole
+                    // header object and dropped Authorization.
+                    ...fetchOptions,
+                    signal: controller.signal,
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                        ...(extraHeaders || {})
+                    }
+                });
+            } catch (error) {
+                if (error?.name === "AbortError") {
+                    const timeoutError = new Error(`Backend не відповів за ${Math.round(timeoutMs / 1000)} с.`);
+                    timeoutError.status = 0;
+                    timeoutError.timedOut = true;
+                    throw timeoutError;
+                }
+                throw error;
+            } finally {
+                clearTimeout(timer);
+            }
 
             const responseText = await response.text();
-            const payload = responseText ? this.parseResponse(responseText) : null;
+            let payload = null;
+            let parseFailed = false;
+            if (responseText) {
+                try {
+                    payload = JSON.parse(responseText);
+                } catch (error) {
+                    parseFailed = true;
+                }
+            }
 
             if (!response.ok) {
                 const message = Array.isArray(payload?.message) ? payload.message.join(" ") : payload?.message || payload?.error || response.statusText || `HTTP ${response.status}`;
                 const error = new Error(message);
                 error.status = response.status;
                 error.payload = payload;
+                throw error;
+            }
+
+            // A 200 whose body is not JSON (an HTML error page from a proxy, a truncated
+            // response) must fail loudly. This used to return the raw string, which is
+            // truthy, so it flowed into state.database and the app rendered fabricated
+            // seed data as if it were the user's real training history.
+            if (parseFailed) {
+                const error = new Error("Backend повернув некоректну відповідь (не JSON).");
+                error.status = response.status;
+                error.malformed = true;
                 throw error;
             }
 
@@ -180,16 +225,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             return payload;
         }
 
-        parseResponse(responseText) {
-            try {
-                return JSON.parse(responseText);
-            } catch (error) {
-                return responseText;
-            }
-        }
-
         health() {
-            return this.request("/health", { method: "GET" });
+            // Shorter than the default: /health gates the boot sequence, so a hung probe
+            // is the difference between an 8s "backend unreachable" screen and a 20s one.
+            return this.request("/health", { method: "GET", timeoutMs: 8000 });
         }
 
         me() {
@@ -204,12 +243,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             return this.request("/export", { method: "GET" });
         }
 
-        importData(database) {
-            return this.request("/import", { method: "POST", body: JSON.stringify(database) });
-        }
-
         startImport(resources) {
-            return this.request("/import/start", { method: "POST", body: JSON.stringify({ resources }) });
+            // `confirm` is required by the backend: /import/start erases the named
+            // resources before any replacement chunk is written, so it refuses to run
+            // without an explicit token and an explicit resource list.
+            return this.request("/import/start", { method: "POST", body: JSON.stringify({ resources, confirm: "replace" }) });
         }
 
         importChunk(resource, items, meta = {}) {
@@ -358,7 +396,10 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
 
         async save(database) {
-            return this.apiClient.importData(database);
+            // Unreachable: DataService.save() routes api-mode writes through
+            // importUserData() (the chunked start/chunk/finish flow). The monolithic
+            // POST /import it used to call no longer exists. Fail loudly rather than 404.
+            throw new Error("ApiProvider.save is not a supported path — use importUserData()");
         }
 
         async reset() {
@@ -373,6 +414,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             this.mode = this.config.requireAuth ? this.config.dataMode || "api" : this.readSetting("dataMode") || this.config.dataMode || "local";
             this.apiBaseUrl = this.readSetting("apiBaseUrl") || this.config.apiBaseUrl || "";
             this.backendStatus = "unknown";
+            this.backendUnavailable = false;
             this.localProvider = new LocalStorageProvider(this.key);
             this.indexedDbProvider = new IndexedDbProvider("gymos-database", "state", this.key);
             this.apiClient = new ApiClient(this.apiBaseUrl);
@@ -399,6 +441,12 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     this.mode = "local";
                     this.writeSetting("dataMode", "local");
                 }
+                // With no local fallback we stay in api mode but never learn who the user
+                // is, because refreshCurrentUser is skipped below. currentUser then stays
+                // null, requiresAuthentication() reads true, and a signed-in member gets
+                // the Google login screen because the backend is down. Record the real
+                // reason so the boot path can tell those two states apart.
+                this.backendUnavailable = !isBackendAvailable;
                 if (isBackendAvailable) {
                     await this.refreshCurrentUser(false);
                 }
@@ -935,6 +983,14 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             // Push any offline-queued workout changes BEFORE loading, so /export
             // already includes them (snapshots survive reloads via localStorage).
             await flushOfflineQueue().catch(() => {});
+            // Order matters: "backend unreachable" must be checked BEFORE
+            // requiresAuthentication(), because an unreachable backend leaves
+            // currentUser null and would otherwise be misreported as "not signed in".
+            if (storage.backendUnavailable) {
+                state.database = createEmptyDatabase();
+                renderLoadFailure("Backend не відповідає. Сесія збережена.");
+                return;
+            }
             if (storage.requiresAuthentication()) {
                 state.database = createEmptyDatabase();
                 renderAuthGate();
@@ -952,17 +1008,23 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                 detail: "Каталог і історія приходять з backend.",
                 progress: 60
             });
-            state.database = await storage.load() || createSeedDatabase();
+            // No `|| createSeedDatabase()`: a falsy load is a failure, not a cue to
+            // invent three Ukrainian demo members and present them as the user's team.
+            state.database = await loadDatabaseOrThrow();
         } catch (error) {
             console.error(error);
             state.database = createEmptyDatabase();
-            renderAuthGate(friendlyError(error));
+            // Only a genuine auth failure sends the user back to the login screen.
+            // Everything else (5xx, 413, 429, timeout, malformed body, network) is a
+            // load failure with the session still intact.
+            if (Number(error?.status) === 401) {
+                renderAuthGate(friendlyError(error));
+            } else {
+                renderLoadFailure(friendlyError(error));
+            }
             return;
         } finally {
             hideBusyOverlay(overlay);
-        }
-        if (!state.database.version || state.database.version < 3) {
-            state.database = createSeedDatabase();
         }
         state.profileUserId = state.database.currentUserId;
         if (storage.mode !== "api") {
@@ -1001,6 +1063,34 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         } catch (error) {
             // non-fatal
         }
+    }
+
+    // Returns a human-readable reason the payload is unusable, or "" when it is fine.
+    // Every /export consumer runs this before assigning to state.database — the app
+    // used to silently substitute demo seed data whenever a load returned something
+    // unexpected, so a backend problem looked like real (but wrong) training history.
+    function databaseProblem(database) {
+        if (!database || typeof database !== "object" || Array.isArray(database)) {
+            return "Backend повернув порожню відповідь.";
+        }
+        if (!Array.isArray(database.users) || !Array.isArray(database.workouts) || !Array.isArray(database.exercises)) {
+            return "Backend повернув дані у невідомому форматі.";
+        }
+        if (!Number(database.version) || Number(database.version) < 3) {
+            return "Версія даних застаріла. Онови сторінку, щоб отримати свіжу версію застосунку.";
+        }
+        return "";
+    }
+
+    // Single funnel for every read of the backend snapshot. Refuses to install an
+    // unusable payload into state.database and throws a readable reason instead.
+    async function loadDatabaseOrThrow() {
+        const loaded = await storage.load();
+        const problem = databaseProblem(loaded);
+        if (problem) {
+            throw new Error(problem);
+        }
+        return loaded;
     }
 
     function createEmptyDatabase() {
@@ -1396,6 +1486,34 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         icons();
     }
 
+    // Shown when the session is valid but the data could not be loaded (backend down,
+    // 5xx, timeout, malformed response). Distinct from renderAuthGate on purpose: the
+    // user is signed in, their token is untouched, and the fix is to retry — not to
+    // log in again. Conflating the two is what made every backend hiccup read as
+    // "your account is gone".
+    function renderLoadFailure(message = "") {
+        element("sidebarNavigation").innerHTML = "";
+        element("mobileNavigation").innerHTML = "";
+        element("sidebarProfileCard").innerHTML = `<div class="profile-meta">Немає зв'язку з backend</div>`;
+        element("openUserSwitcherButton").innerHTML = "GO";
+        element("sectionEyebrow").textContent = "Помилка завантаження";
+        element("sectionTitle").textContent = "GymOS";
+        element("pageContent").innerHTML = `
+            <section class="empty-state auth-gate">
+                <i data-lucide="cloud-off"></i>
+                <h2>Не вдалося завантажити дані</h2>
+                <p>Ти залишаєшся в системі — це проблема зв'язку з backend, а не з твоїм акаунтом.</p>
+                ${message ? `<p class="card-caption">${escapeHtml(message)}</p>` : ""}
+                <div class="action-row auth-gate-actions" style="justify-content:center;margin-top:16px;">
+                    <button class="button button-primary large-workout-button" type="button" data-action="retry-load"><i data-lucide="refresh-cw"></i>Спробувати ще раз</button>
+                    <button class="button button-secondary large-workout-button" type="button" data-action="check-backend"><i data-lucide="server"></i>Перевірити backend</button>
+                </div>
+                <p class="profile-meta" style="margin-top:14px;">Backend: ${escapeHtml(storage.apiBaseUrl || "не налаштовано")} · статус: ${backendStatusLabel(storage.backendStatus)}</p>
+            </section>
+        `;
+        icons();
+    }
+
     function requiresApproval() {
         if (!(storage.mode === "api" && storage.config.requireAuth)) {
             return false;
@@ -1441,7 +1559,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             toast("Ще не підтверджено", "Адміністратор поки не підтвердив доступ.");
             return;
         }
-        state.database = await storage.load() || createSeedDatabase();
+        const approvedDatabase = await storage.load();
+        const approvedProblem = databaseProblem(approvedDatabase);
+        if (approvedProblem) {
+            renderLoadFailure(approvedProblem);
+            return;
+        }
+        state.database = approvedDatabase;
         state.profileUserId = state.database.currentUserId;
         renderShell();
         handleRoute();
@@ -3262,7 +3386,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
         showSyncIndicator("loading", "Оновлення…");
         try {
-            state.database = await storage.load();
+            state.database = await loadDatabaseOrThrow();
             state.profileUserId = state.database.currentUserId;
             renderShell();
             renderSection();
@@ -3783,6 +3907,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             "open-workout": () => openWorkout(actionElement.dataset.workoutId),
             notifications: requestNotifications,
             "check-backend": checkBackendConnection,
+            "retry-load": () => initialize(),
             "login-google": loginWithGoogle,
             logout: logout,
             "recheck-approval": recheckApproval,
@@ -5443,7 +5568,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     detail: "Фінальна перевірка після імпорту.",
                     progress: 100
                 });
-                state.database = await storage.load();
+                state.database = await loadDatabaseOrThrow();
                 state.profileUserId = state.database.currentUserId;
                 renderShell();
                 renderSection();
@@ -5500,7 +5625,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     detail: "Завантажуємо актуальний список вправ.",
                     progress: 100
                 });
-                state.database = await storage.load();
+                state.database = await loadDatabaseOrThrow();
 
                 toast(
                     "Каталог імпортовано",
@@ -5543,7 +5668,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                     detail: "Оновлюємо каталог і пов'язані тренування.",
                     progress: 85
                 });
-                state.database = await storage.load();
+                state.database = await loadDatabaseOrThrow();
             } else {
                 const curatedExercises = createExercises();
                 const curatedIds = new Set(curatedExercises.map((exercise) => exercise.id));
@@ -5574,7 +5699,16 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
         await storage.reset();
         if (storage.mode === "api") {
-            state.database = await storage.load();
+            // Not inside a try elsewhere in this function: loadDatabaseOrThrow now
+            // throws on a bad payload, and an unhandled rejection here would leave the
+            // user staring at a stale screen with no explanation.
+            try {
+                state.database = await loadDatabaseOrThrow();
+            } catch (error) {
+                console.error(error);
+                renderLoadFailure(friendlyError(error));
+                return;
+            }
             state.profileUserId = state.database.currentUserId;
             renderShell();
             renderSection();
@@ -8059,6 +8193,22 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
 
         updateBusyOverlay(overlay, options);
         overlay.classList.remove("hidden");
+
+        // A slow boot should say so rather than look identical to a hung one. The
+        // request itself is bounded by ApiClient's AbortController, so this only
+        // changes the copy while the user waits — it never becomes the failure path.
+        clearTimeout(overlay.slowTimer);
+        if (options.escalate !== false) {
+            overlay.slowTimer = setTimeout(() => {
+                if (!overlay.classList.contains("hidden")) {
+                    updateBusyOverlay(overlay, {
+                        message: "Backend відповідає повільно.",
+                        detail: "Ще чекаємо — з'єднання повільне або сервер прокидається."
+                    });
+                }
+            }, 6000);
+        }
+
         return overlay;
     }
 
@@ -8079,6 +8229,9 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             return;
         }
 
+        // Cancel the pending "responding slowly" escalation, or a fast boot that
+        // finishes at 5.9s still rewrites the panel copy after it is gone.
+        clearTimeout(overlay.slowTimer);
         window.setTimeout(() => {
             overlay.classList.add("hidden");
         }, 180);
