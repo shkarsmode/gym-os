@@ -7278,7 +7278,11 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.focus.setId = next ? next.id : context.set.id;
         state.focus.view = "rest";
         context.workout.updatedAt = new Date().toISOString();
-        await persistWorkout(context.workout);
+        // Debounced (650ms) rather than immediate: focus mode is tapped rapidly set
+        // after set, and each save rewrites the whole workout tree server-side. The
+        // three focus handlers are the only high-frequency save sites — the other 18
+        // call sites (create, finish, delete) stay immediate.
+        schedulePersistWorkout(context.workout);
         renderFocus();
     }
 
@@ -7289,7 +7293,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         }
         context.set.isCompleted = false;
         context.workout.updatedAt = new Date().toISOString();
-        await persistWorkout(context.workout);
+        schedulePersistWorkout(context.workout);
         renderFocus();
     }
 
@@ -7306,7 +7310,7 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         state.focus.setId = newSet.id;
         state.focus.view = "set";
         context.workout.updatedAt = new Date().toISOString();
-        await persistWorkout(context.workout);
+        schedulePersistWorkout(context.workout);
         renderFocus();
     }
 
@@ -8639,6 +8643,29 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         return Boolean(error) && !Number(error.status) && !/base url/i.test(String(error.message || ""));
     }
 
+    // Is this worth trying again, or is the server telling us it never will be?
+    // 408 and 429 are the only 4xx worth a retry; the rest of that range is a
+    // permanent rejection (malformed payload, forbidden, gone) and retrying it only
+    // burns the per-user throttle budget — which is 200 requests per 60s, shared with
+    // every other call the session makes.
+    function isRetriableError(error) {
+        const status = Number(error?.status) || 0;
+        if (!status) {
+            return true; // network loss or client-side timeout
+        }
+        return status === 408 || status === 429 || status >= 500;
+    }
+
+    // Honours Retry-After when the server sends one, so a 429 backs off by as much as
+    // the backend asked for rather than by our own guess.
+    function retryDelayMs(error, attempt) {
+        const retryAfter = Number(error?.payload?.retryAfter || error?.retryAfter || 0);
+        if (retryAfter > 0) {
+            return Math.min(retryAfter * 1000, 30000);
+        }
+        return 1000 * attempt;
+    }
+
     function readOfflineQueue() {
         try {
             return JSON.parse(storage.readSetting("offline-queue") || "[]") || [];
@@ -8702,12 +8729,17 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
                         }
                     }
                 } catch (error) {
-                    if (isNetworkError(error)) {
+                    // Anything retriable — network loss, a cold-start 500, a 429, an
+                    // expired session — leaves the entry in the queue. This used to
+                    // drop on ANY error carrying a status, so a single 5xx silently
+                    // destroyed a workout logged offline in a basement gym: the one
+                    // scenario the queue exists for.
+                    if (isRetriableError(error) || Number(error?.status) === 401) {
                         showOfflineChip();
                         return;
                     }
-                    // A real backend rejection (e.g. limit) — drop the entry so the
-                    // queue can't jam forever, and surface the reason.
+                    // A permanent rejection (bad payload, quota) — drop it, or the
+                    // queue jams forever behind an entry that can never succeed.
                     toast("Не вдалося синхронізувати", friendlyError(error), "error");
                 }
                 queue.shift();
@@ -8739,7 +8771,13 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
         const saver = getWorkoutSaver(workoutItem.id);
         showSyncIndicator("loading", "Зберігаємо…");
         clearTimeout(saver.timer);
-        saver.timer = setTimeout(() => runWorkoutSave(workoutItem.id), debounceMs);
+        // Cleared when it fires so `saver.timer` means "a save is still pending" —
+        // flushPendingWorkoutSaves() relies on that to avoid re-saving on every
+        // background/foreground cycle.
+        saver.timer = setTimeout(() => {
+            saver.timer = null;
+            runWorkoutSave(workoutItem.id);
+        }, debounceMs);
     }
 
     async function runWorkoutSave(workoutId) {
@@ -8788,10 +8826,15 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
             } else if (saver.queued) {
                 saver.queued = false;
                 saver.retries = 0;
+            } else if (!isRetriableError(saver.lastError)) {
+                // Permanent rejection — retrying cannot change the outcome. Surface it
+                // once instead of three times over six seconds.
+                saver.retries = 0;
+                showSyncIndicator("error", friendlyError(saver.lastError));
             } else if (saver.retries < 3) {
                 saver.retries += 1;
                 showSyncIndicator("loading", "Повтор збереження…");
-                setTimeout(() => runWorkoutSave(workoutId), 1000 * saver.retries);
+                setTimeout(() => runWorkoutSave(workoutId), retryDelayMs(saver.lastError, saver.retries));
             } else {
                 saver.retries = 0;
                 showSyncIndicator("error", friendlyError(saver.lastError));
@@ -8818,6 +8861,27 @@ import { evaluateAchievements, ACHIEVEMENTS } from "./lib/achievements.js";
     function schedulePersistWorkout(workoutItem) {
         requestWorkoutSave(workoutItem, 650);
     }
+
+    // Any debounced save still waiting when the app is backgrounded must fire now.
+    // Phones suspend a tab aggressively: without this, completing the last set and
+    // immediately locking the screen loses that set for up to 650ms of dead time.
+    // pagehide covers iOS Safari, where visibilitychange alone is unreliable.
+    function flushPendingWorkoutSaves() {
+        for (const [workoutId, saver] of workoutSavers) {
+            if (saver.timer) {
+                clearTimeout(saver.timer);
+                saver.timer = null;
+                runWorkoutSave(workoutId);
+            }
+        }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+            flushPendingWorkoutSaves();
+        }
+    });
+    window.addEventListener("pagehide", flushPendingWorkoutSaves);
 })();
 
 // Branded DevTools console banner + self-XSS warning. Pure client-side UX, no
