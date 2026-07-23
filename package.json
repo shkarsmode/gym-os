@@ -1,7 +1,7 @@
 {
     "name": "gym-os-front",
     "private": true,
-    "version": "0.34.4",
+    "version": "0.34.5",
     "type": "module",
     "scripts": {
         "test": "node --test lib/*.test.mjs",

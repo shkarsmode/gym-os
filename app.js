@@ -7759,13 +7759,11 @@ import {
 
     function workoutsFor(userId) {
         // Under the windowed payload only the caller's own workouts carry sets; peers
-        // arrive as summaries. Asking for a peer's workouts here would return rows whose
-        // `exercises` key is absent, and any set-level computation over them yields zero
-        // rather than an error — a teammate showing 0 kg lifted reads as a bad workout,
-        // not as a bug. Fail loudly instead; peer aggregates come from `scoring`.
-        if (usingServerScoring() && userId !== state.database.currentUserId) {
-            throw new Error(`workoutsFor(${userId}): peer workouts carry no sets under the windowed payload — read scoring.users[id] instead`);
-        }
+        // arrive as summaries (or aren't loaded at all). Set-level aggregates for peers
+        // come from `scoring` (see userStats/userXp), so callers here just get whatever
+        // rows are present — the current user's full window, a peer's summaries, or an
+        // empty list. It must never throw: the calendar, team cards and profile views
+        // all call it for peers and a throw takes the whole screen down.
         return state.database.workouts.filter((workoutItem) => workoutItem.userId === userId);
     }
 
