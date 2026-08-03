@@ -315,6 +315,12 @@ import {
             return this.request(`/workouts/${id}/save`, { method: "POST", body: JSON.stringify(payload) });
         }
 
+        // Full workout WITH sets. Own always; a peer's only when completed (the backend
+        // 404s otherwise) — which is exactly what "copy this session" needs.
+        fetchWorkout(id) {
+            return this.request(`/workouts/${id}`, { method: "GET" });
+        }
+
         updateWorkout(id, payload) {
             return this.request(`/workouts/${id}/update`, { method: "POST", body: JSON.stringify(payload) });
         }
@@ -1104,6 +1110,7 @@ import {
         if (storage.mode !== "api") {
             await persist();
         }
+        reconcileWorkoutStatuses();
         renderShell();
         handleRoute();
         preloadAvatars();
@@ -2656,8 +2663,29 @@ import {
     }
 
     const WEEKDAY_ACC = ["неділю", "понеділок", "вівторок", "середу", "четвер", "п'ятницю", "суботу"];
+    const WEEKDAY_NOM = ["Неділя", "Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота"];
+    const MONTH_SHORT = ["січ", "лют", "бер", "квіт", "трав", "черв", "лип", "серп", "вер", "жовт", "лист", "груд"];
+
     function weekdayOf(dateStr) {
         return new Date(`${String(dateStr).slice(0, 10)}T00:00:00`).getDay();
+    }
+
+    function weekdayLabel(dateStr) {
+        return WEEKDAY_NOM[weekdayOf(dateStr)] || "";
+    }
+
+    // Ukrainian count forms: 1 вправа / 2-4 вправи / 5+ вправ (with the 11-14 exception).
+    function pluralUk(count, one, few, many) {
+        const abs = Math.abs(Math.round(Number(count) || 0));
+        const mod10 = abs % 10;
+        const mod100 = abs % 100;
+        if (mod10 === 1 && mod100 !== 11) {
+            return one;
+        }
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+            return few;
+        }
+        return many;
     }
 
     // The user's most recent completed workout (with exercises) on the SAME weekday
@@ -3956,6 +3984,7 @@ import {
             "reopen-workout": () => reopenWorkout(actionElement.dataset.workoutId),
             "start-existing-workout": () => startExistingWorkout(actionElement.dataset.workoutId),
             "apply-weekday-workout": () => applyWeekdayWorkout(actionElement.dataset.workoutId),
+            "copy-workout-start": () => copyWorkoutAndStart(actionElement.dataset.workoutId),
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": () => { state.replaceExerciseTarget = null; openAddExerciseModal(); },
@@ -4239,6 +4268,7 @@ import {
     function actionProgressLabel(action) {
         const labels = {
             "start-workout": "Створюємо тренування",
+            "copy-workout-start": "Копіюємо тренування",
             "reopen-workout": "Відновлюємо тренування",
             "start-existing-workout": "Запускаємо тренування",
             "delete-workout": "Видаляємо тренування",
@@ -4946,6 +4976,89 @@ import {
         goToWorkoutEditor(workoutItem.id);
     }
 
+    // Clone ANY workout — your own or a teammate's — into a fresh session for today and
+    // open it, ready to train. Sets carry their weights/reps/rest but come in unticked,
+    // and notes are dropped: this is a starting point, not a copy of someone's log.
+    // A peer row (or any windowed summary) has no sets in memory, so it is hydrated
+    // from the backend first — GET /workouts/:id serves a peer's COMPLETED workout.
+    async function copyWorkoutAndStart(workoutId) {
+        const me = currentUser();
+        const today = dateInput(new Date());
+        const limit = workoutLimitState(me.id, today);
+        if (!limit.allowed) {
+            toast("Ліміт тренувань", limit.message);
+            return;
+        }
+        let source = state.database.workouts.find((item) => item.id === workoutId);
+        if (!source) {
+            return;
+        }
+        if (!Array.isArray(source.exercises)) {
+            if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+                toast("Не вдалося скопіювати", "Підходи цього тренування недоступні офлайн.");
+                return;
+            }
+            try {
+                source = await storage.apiClient.fetchWorkout(workoutId);
+            } catch (error) {
+                toast("Не вдалося скопіювати", friendlyError(error));
+                return;
+            }
+        }
+        if (!(await ensureSingleActiveWorkout())) {
+            return;
+        }
+        const now = new Date();
+        const ordered = (source.exercises || []).slice().sort((left, right) => (left.order || 0) - (right.order || 0));
+        const copy = {
+            id: createId("workout"),
+            userId: me.id,
+            date: today,
+            title: "Тренування",
+            status: "active",
+            workoutType: source.workoutType || getPref("defaultWorkoutType"),
+            durationOverride: null,
+            startedAt: now.toISOString(),
+            finishedAt: null,
+            notes: "",
+            exercises: ordered.map((exercise, index) => ({
+                id: createId("workout-exercise"),
+                exerciseId: exercise.exerciseId,
+                order: index + 1,
+                notes: "",
+                sets: (exercise.sets || []).map((set) => ({
+                    id: createId("set"),
+                    type: set.type || "working",
+                    weight: Number(set.weight) || 0,
+                    repetitions: Number(set.repetitions) || 0,
+                    durationSeconds: set.durationSeconds ?? null,
+                    rpe: Number(set.rpe) || 0,
+                    restSeconds: Number(set.restSeconds) || 90,
+                    isCompleted: false,
+                    notes: ""
+                }))
+            })),
+            cardioSessions: (source.cardioSessions || []).map((session) => ({
+                id: createId("cardio"),
+                type: session.type || "treadmill",
+                durationMinutes: Number(session.durationMinutes) || 0,
+                distance: Number(session.distance) || 0,
+                calories: Number(session.calories) || 0,
+                averageHeartRate: Number(session.averageHeartRate) || 0,
+                intensity: session.intensity || "medium",
+                notes: ""
+            })),
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+        };
+        state.database.workouts.push(copy);
+        state.editingWorkoutId = copy.id;
+        await persistWorkout(copy);
+        closeOverlay();
+        goToWorkoutEditor(copy.id);
+        toast("Тренування скопійовано", `${copy.exercises.length} ${pluralUk(copy.exercises.length, "вправа", "вправи", "вправ")} з вагами — можна починати.`);
+    }
+
     // ---- Personal workout templates (save a workout as a reusable template) ----
     async function loadPersonalTemplates() {
         if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
@@ -5192,7 +5305,42 @@ import {
         existing.status = "completed";
         existing.finishedAt = new Date().toISOString();
         existing.updatedAt = new Date().toISOString();
+        // MUST persist: this used to mutate memory only, so the finish was lost on the
+        // next load and the old session came back with its pre-finish status.
+        await persistWorkout(existing);
         return true;
+    }
+
+    // Self-heal statuses on boot. A PAST workout still marked «Заплановано»/«Активне»
+    // while carrying completed sets is a finished session that never got its finish tap
+    // (or whose finish never reached the server) — the backend defaults status to
+    // `planned`, so anything that dropped it left the session mislabelled forever.
+    // Future plans and today's session are deliberately untouched.
+    function reconcileWorkoutStatuses() {
+        const today = dateInput(new Date());
+        const meId = state.database?.currentUserId;
+        if (!meId) {
+            return 0;
+        }
+        let healed = 0;
+        (state.database.workouts || []).forEach((workoutItem) => {
+            if (workoutItem.userId !== meId || workoutItem.status === "completed") {
+                return;
+            }
+            if (String(workoutItem.date).slice(0, 10) >= today) {
+                return;
+            }
+            const hasDoneSets = (workoutItem.exercises || []).some((exercise) => (exercise.sets || []).some((set) => set.isCompleted));
+            if (!hasDoneSets) {
+                return;
+            }
+            workoutItem.status = "completed";
+            workoutItem.finishedAt = workoutItem.finishedAt || new Date(`${String(workoutItem.date).slice(0, 10)}T20:00:00`).toISOString();
+            workoutItem.updatedAt = new Date().toISOString();
+            healed += 1;
+            schedulePersistWorkout(workoutItem);
+        });
+        return healed;
     }
 
     // Swap the exercise in a slot for another one picked from the "Замінити вправу"
@@ -5550,7 +5698,7 @@ import {
         const readonly = !canManage(workoutItem);
         const totalSets = workoutSetCount(workoutItem);
         const cardioMinutes = workoutCardioMinutes(workoutItem);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" style="margin-top:14px;">${(workoutItem.exercises || []).length ? workoutItem.exercises.map(workoutDetailExercise).join("") : emptyInline(readonly ? "Деталі недоступні" : "Вправ ще немає", readonly ? "Повний розбір підходів доступний лише власнику тренування." : "Це порожнє або кардіо-тренування.")}</div>`, { fullscreen: true });
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;"><button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" style="margin-top:14px;">${(workoutItem.exercises || []).length ? workoutItem.exercises.map(workoutDetailExercise).join("") : emptyInline(readonly ? "Деталі недоступні" : "Вправ ще немає", readonly ? "Повний розбір підходів доступний лише власнику тренування." : "Це порожнє або кардіо-тренування.")}</div>`, { fullscreen: true });
     }
 
     // Compact, scannable exercise block for the workout-detail drawer: a small
@@ -6247,10 +6395,45 @@ import {
                 scope === "mine" ? "Заверши тренування — і воно з'явиться тут." : "Стрічка оновиться, коли команда завершить тренування."
             );
         }
-        return items.map((workoutItem) => {
-            const owner = userById(workoutItem.userId);
-            return `<article class="activity-item"><span class="activity-dot"></span><div class="activity-main"><strong><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${escapeHtml(workoutLabel(workoutItem))}</strong><p class="card-caption">${formatDate(workoutItem.date)} · ${number(workoutVolumeOf(workoutItem))} кг · ${workoutExerciseCount(workoutItem)} вправ</p></div><button class="button button-secondary compact activity-open" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Відкрити</button></article>`;
-        }).join("");
+        return items.map((workoutItem) => historyRow(workoutItem, { showOwner: scope === "all" })).join("");
+    }
+
+    // One row shape for every history list (dashboard feed, calendar, stats, profile).
+    // Leads with a calendar tile + weekday + workout TYPE instead of the meaningless
+    // "Тренування #N" title; the number survives as a muted tag. Reads only the
+    // shape-agnostic accessors, so a peer summary renders identically to a hydrated row.
+    function historyRow(workoutItem, options = {}) {
+        const owner = userById(workoutItem.userId);
+        const day = String(workoutItem.date).slice(0, 10);
+        const parsed = new Date(`${day}T00:00:00`);
+        const exercises = workoutExerciseCount(workoutItem);
+        const sets = workoutSetCount(workoutItem);
+        const cardio = workoutCardioMinutes(workoutItem);
+        const stats = [
+            `${number(workoutVolumeOf(workoutItem))} кг`,
+            `${exercises} ${pluralUk(exercises, "вправа", "вправи", "вправ")}`,
+            `${sets} ${pluralUk(sets, "підхід", "підходи", "підходів")}`,
+            cardio ? `${cardio} хв кардіо` : "",
+            `${durationOf(workoutItem)} хв`
+        ].filter(Boolean).join(" · ");
+        const ownerChip = options.showOwner && owner
+            ? `<button class="hist-owner" type="button" data-action="open-user" data-user-id="${owner.id}">${avatar(owner, "tiny")}${escapeHtml(owner.displayName)}</button>`
+            : "";
+        // "Завершено" is the norm in a history list — only the exceptions earn a badge.
+        const statusBadge = workoutItem.status === "completed"
+            ? ""
+            : `<span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>`;
+        return `<article class="hist-row status-${workoutItem.status}" data-action="open-workout" data-workout-id="${workoutItem.id}">
+            <div class="hist-date" aria-hidden="true"><span class="hist-day">${parsed.getDate()}</span><span class="hist-mon">${MONTH_SHORT[parsed.getMonth()] || ""}</span></div>
+            <div class="hist-main">
+                <div class="hist-top"><strong class="hist-weekday">${weekdayLabel(day)}</strong><span class="chip hist-type">${workoutTypeLabel(workoutItem.workoutType)}</span>${statusBadge}<span class="hist-num">#${workoutNumber(workoutItem)}</span>${ownerChip}</div>
+                <p class="hist-stats">${stats}</p>
+            </div>
+            <div class="hist-actions">
+                <button class="icon-button hist-copy" type="button" title="Скопіювати й почати таке саме" aria-label="Скопіювати й почати таке саме" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i></button>
+                <button class="button button-secondary compact hist-open" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Відкрити</button>
+            </div>
+        </article>`;
     }
 
     // ---- Shape-agnostic workout accessors ---------------------------------------
@@ -6287,11 +6470,8 @@ import {
             return emptyInline("Історія порожня", "Створи або заверши тренування, щоб воно з'явилося тут.");
         }
 
-        return workouts.map((workoutItem) => {
-            const owner = userById(workoutItem.userId);
-            const readonly = !canManage(workoutItem);
-            return `<article class="history-card" data-action="open-workout" data-workout-id="${workoutItem.id}"><div class="card-header"><div><div class="tag-row" style="margin-bottom:8px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}</div><h3>${escapeHtml(workoutLabel(workoutItem))}</h3><p class="card-caption">${formatDate(workoutItem.date)} · ${escapeHtml(owner.displayName)}</p></div><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}">Деталі</button></div>${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: workoutSetCount(workoutItem), label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${workoutCardioMinutes(workoutItem)} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption history-notes">${escapeHtml(workoutItem.notes).slice(0, 140)}</p>` : ""}</article>`;
-        }).join("");
+        const me = currentUser();
+        return workouts.map((workoutItem) => historyRow(workoutItem, { showOwner: !me || workoutItem.userId !== me.id })).join("");
     }
 
     const lazyScripts = new Map();

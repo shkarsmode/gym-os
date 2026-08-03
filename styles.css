@@ -3291,6 +3291,154 @@ tr:last-child td {
     background: var(--color-accent);
 }
 
+/* ---------- History row (dashboard feed, calendar, stats, profile) ----------
+   Calendar tile + weekday + workout type instead of a "Тренування #N" title. */
+.hist-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+@media (hover: hover) {
+    .hist-row:hover {
+        border-color: var(--color-border-strong);
+        background: var(--color-elevated);
+    }
+}
+
+.hist-date {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    padding: 7px 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-elevated);
+    line-height: 1;
+}
+
+.hist-day {
+    font-size: 18px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.hist-mon {
+    margin-top: 3px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--color-muted);
+}
+
+.hist-row.status-completed .hist-date {
+    border-color: var(--color-accent-border);
+    color: var(--color-accent-strong);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-elevated));
+}
+
+.hist-row.status-active .hist-date {
+    border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+    color: var(--color-warning);
+}
+
+.hist-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hist-top {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.hist-weekday {
+    font-size: 15px;
+}
+
+.hist-type {
+    font-weight: 700;
+}
+
+.hist-num {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.hist-owner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 9px 2px 2px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.hist-owner .avatar {
+    width: 20px;
+    height: 20px;
+    font-size: 9px;
+    border-radius: var(--radius-pill);
+}
+
+.hist-stats {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--color-muted);
+    overflow-wrap: anywhere;
+}
+
+.hist-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.hist-copy {
+    color: var(--color-muted);
+}
+
+.hist-copy:hover {
+    color: var(--color-accent-strong);
+    border-color: var(--color-accent-border);
+}
+
+@media (max-width: 700px) {
+    .hist-row {
+        gap: 10px;
+        padding: 11px 12px;
+    }
+    .hist-date {
+        width: 40px;
+        padding: 6px 0;
+    }
+    .hist-day {
+        font-size: 16px;
+    }
+    /* The whole row is tappable on phones — drop the label button, keep the copy icon. */
+    .hist-open,
+    .hist-num {
+        display: none;
+    }
+}
+
 .kpi-strip {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
