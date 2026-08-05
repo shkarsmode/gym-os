@@ -321,6 +321,14 @@ import {
             return this.request(`/workouts/${id}`, { method: "GET" });
         }
 
+        coachAnalyze(mode) {
+            return this.request("/ai/coach/analyze", { method: "POST", body: JSON.stringify({ mode }) });
+        }
+
+        coachChat(message, history) {
+            return this.request("/ai/coach/chat", { method: "POST", body: JSON.stringify({ message, history }) });
+        }
+
         impersonate(userId) {
             return this.request(`/auth/impersonate/${userId}`, { method: "POST" });
         }
@@ -1506,7 +1514,7 @@ import {
     // Desktop sidebar: a curated, ordered subset (exercises / stats / changelog /
     // settings intentionally live only in the Панель «Розділи» hub or the profile
     // buttons, to keep the rail short). Order mirrors the «Розділи» hub.
-    const SIDEBAR_ORDER = ["dashboard", "workout", "calendar", "levels", "users", "rankings", "feedback", "subscription", "moderation", "admin", "aistats", "profile"];
+    const SIDEBAR_ORDER = ["dashboard", "workout", "calendar", "coach", "levels", "users", "rankings", "feedback", "subscription", "moderation", "admin", "aistats", "profile"];
 
     function sidebarNavItems() {
         return SIDEBAR_ORDER
@@ -1770,7 +1778,7 @@ import {
         } else {
             element("sectionTitle").textContent = item.title;
         }
-        const renderers = { dashboard, workout, calendar, exercises, stats, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
+        const renderers = { dashboard, workout, calendar, exercises, stats, coach: coachSection, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         iconsIn(element("pageContent")); // shell icons already converted in renderShell()
         // Subtle enter animation only when the section actually changes (not on
@@ -1885,7 +1893,7 @@ import {
                 aiBlock = `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>`;
             }
         }
-        return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}${aiInlineButton}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
+        return `${aiBlock}${coachCta()}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}${aiInlineButton}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
     }
 
     // ===== AI-тренування (PRO + admin) ==========================================
@@ -3349,6 +3357,13 @@ import {
         if (collapseButton) {
             collapseButton.addEventListener("click", toggleSidebar);
         }
+        // Enter sends, Shift+Enter makes a new line — chat muscle memory.
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.shiftKey && event.target && event.target.id === "coachInput") {
+                event.preventDefault();
+                sendCoachMessage();
+            }
+        });
         setupTooltips();
         setupPullToRefresh();
         setupExerciseReorder();
@@ -4001,6 +4016,11 @@ import {
             "start-existing-workout": () => startExistingWorkout(actionElement.dataset.workoutId),
             "apply-weekday-workout": () => applyWeekdayWorkout(actionElement.dataset.workoutId),
             "copy-workout-start": () => copyWorkoutAndStart(actionElement.dataset.workoutId),
+            "coach-analyze": () => startCoach(actionElement.dataset.mode),
+            "coach-send": () => sendCoachMessage(),
+            "coach-ask": () => sendCoachMessage(actionElement.dataset.text),
+            "coach-clear": clearCoachThread,
+            "save-coach-onboarding": saveCoachOnboarding,
             "impersonate-user": () => impersonateUser(actionElement.dataset.userId),
             "stop-impersonation": stopImpersonation,
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
@@ -4884,7 +4904,7 @@ import {
 
     function openProfileEditor() {
         const user = currentUser();
-        openModal(`<div class="modal-header"><div><h2>Редагувати профіль</h2><p class="card-caption">Редагувати можна тільки профіль активного користувача.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Ім'я</label><input id="profileName" type="text" value="${escapeHtml(user.name)}"></div><div class="field"><label>Публічне ім'я</label><input id="profileDisplayName" type="text" value="${escapeHtml(user.displayName)}"></div><div class="field"><label>Зріст</label><input id="profileHeight" type="number" value="${user.height}"></div><div class="field"><label>Вага тіла</label><input id="profileBodyweight" type="number" step="0.1" value="${user.bodyweight}"></div><div class="field"><label>Тренувальна ціль</label><input id="profileGoal" type="text" value="${escapeHtml(user.trainingGoal)}"></div><div class="field"><label>Досвід</label><input id="profileExperience" type="text" value="${escapeHtml(user.trainingExperience)}"></div><div class="field"><label>Улюблена група</label>${select("profileMuscle", muscles(), user.favoriteMuscleGroup)}</div><div class="field"><label>Категорія</label><gym-select id="profileGender"><option value="male" ${user.gender === "male" ? "selected" : ""}>чоловіча</option><option value="female" ${user.gender === "female" ? "selected" : ""}>жіноча</option></gym-select></div></div><div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата заміру</label><gym-date id="bodyweightDate" value="${dateInput(new Date())}"></gym-date></div><div class="field"><label>Додати запис ваги</label><input id="bodyweightValue" type="number" step="0.1" value="${user.bodyweight}"></div></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-profile">Зберегти профіль</button></div>`);
+        openModal(`<div class="modal-header"><div><h2>Редагувати профіль</h2><p class="card-caption">Редагувати можна тільки профіль активного користувача.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="field-grid"><div class="field"><label>Ім'я</label><input id="profileName" type="text" value="${escapeHtml(user.name)}"></div><div class="field"><label>Публічне ім'я</label><input id="profileDisplayName" type="text" value="${escapeHtml(user.displayName)}"></div><div class="field"><label>Зріст</label><input id="profileHeight" type="number" value="${user.height}"></div><div class="field"><label>Вага тіла</label><input id="profileBodyweight" type="number" step="0.1" value="${user.bodyweight}"></div><div class="field"><label>Рік народження</label><input id="profileBirthYear" type="number" step="1" min="1920" placeholder="1998" value="${user.birthYear || ""}"></div><div class="field"><label>Тренувальна ціль</label><input id="profileGoal" type="text" value="${escapeHtml(user.trainingGoal)}"></div><div class="field"><label>Досвід</label><input id="profileExperience" type="text" value="${escapeHtml(user.trainingExperience)}"></div><div class="field"><label>Улюблена група</label>${select("profileMuscle", muscles(), user.favoriteMuscleGroup)}</div><div class="field"><label>Категорія</label><gym-select id="profileGender"><option value="male" ${user.gender === "male" ? "selected" : ""}>чоловіча</option><option value="female" ${user.gender === "female" ? "selected" : ""}>жіноча</option></gym-select></div></div><div class="field-grid" style="margin-top:14px;"><div class="field"><label>Дата заміру</label><gym-date id="bodyweightDate" value="${dateInput(new Date())}"></gym-date></div><div class="field"><label>Додати запис ваги</label><input id="bodyweightValue" type="number" step="0.1" value="${user.bodyweight}"></div></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-profile">Зберегти профіль</button></div>`);
     }
 
     async function saveProfile() {
@@ -4893,6 +4913,8 @@ import {
         user.displayName = inputValue("profileDisplayName") || user.displayName;
         user.height = numberValue("profileHeight", user.height);
         user.bodyweight = numberValue("profileBodyweight", user.bodyweight);
+        const birthYearInput = Math.round(numberValue("profileBirthYear", 0));
+        user.birthYear = birthYearInput >= 1920 && birthYearInput <= new Date().getFullYear() ? birthYearInput : null;
         user.trainingGoal = inputValue("profileGoal") || user.trainingGoal;
         user.trainingExperience = inputValue("profileExperience") || user.trainingExperience;
         user.favoriteMuscleGroup = inputValue("profileMuscle") || user.favoriteMuscleGroup;
@@ -4915,6 +4937,9 @@ import {
                 }
                 if (user.bodyweight >= 20 && user.bodyweight <= 300) {
                     payload.bodyweight = user.bodyweight;
+                }
+                if (user.birthYear) {
+                    payload.birthYear = user.birthYear;
                 }
                 await storage.apiClient.updateProfile(payload);
                 showSyncIndicator("success", "Збережено");
@@ -5805,6 +5830,357 @@ import {
         } catch (error) {
             toast("API URL не налаштовано", "Додай backend URL у налаштуваннях перед Google OAuth.");
         }
+    }
+
+    // ===== AI-тренер (аналіз + чат) =============================================
+    // The server does the analysis; this side owns the conversation. The thread lives
+    // in localStorage per user, so a reload keeps the discussion but nothing personal
+    // is stored server-side.
+    const coachState = {
+        thread: [],
+        status: "idle", // idle | loading
+        error: null,
+        meta: null,
+        loaded: false
+    };
+
+    // Proactive entry point (P3): right after a session it offers to break THAT
+    // workout down; otherwise, once a week, it offers the weekly digest. Silent when
+    // there is nothing to say, so it never becomes noise.
+    function coachCta() {
+        const me = currentUser();
+        const own = state.database.workouts.filter((item) => item.userId === me.id && item.status === "completed");
+        if (!own.length) {
+            return "";
+        }
+        const today = dateInput(new Date());
+        const finishedToday = own.some((item) => String(item.date).slice(0, 10) === today);
+        const lastRun = Number(storage.readSetting(`coach-last-${me.id}`) || 0);
+        const weekPassed = !lastRun || Date.now() - lastRun > 7 * 24 * 60 * 60 * 1000;
+        if (!finishedToday && !weekPassed) {
+            return "";
+        }
+        const mode = finishedToday ? "workout" : "weekly";
+        const title = finishedToday ? "Розібрати сьогоднішнє тренування?" : "Тиждень позаду — зробити підсумок?";
+        const caption = finishedToday
+            ? "AI-тренер порівняє його з твоєю нормою й скаже, що ставити наступного разу."
+            : "Подивимось, що змінилось за тиждень, і що варто підправити.";
+        return `<section class="card coach-cta"><span class="coach-badge"><i data-lucide="brain"></i></span><div class="coach-cta-text"><strong>${title}</strong><p class="card-caption">${caption}</p></div><button class="button button-primary compact" type="button" data-action="coach-analyze" data-mode="${mode}"><i data-lucide="sparkles"></i>Розібрати</button></section>`;
+    }
+
+    function coachThreadKey() {
+        return `coach-thread-${currentUser().id}`;
+    }
+
+    function loadCoachThread() {
+        if (coachState.loaded) {
+            return;
+        }
+        coachState.loaded = true;
+        try {
+            const raw = storage.readSetting(coachThreadKey());
+            const parsed = raw ? JSON.parse(raw) : [];
+            coachState.thread = Array.isArray(parsed) ? parsed.slice(-40) : [];
+        } catch (error) {
+            coachState.thread = [];
+        }
+    }
+
+    function saveCoachThread() {
+        try {
+            storage.writeSetting(coachThreadKey(), JSON.stringify(coachState.thread.slice(-40)));
+        } catch (error) {
+            // a full quota must never break the chat itself
+        }
+    }
+
+    // The coach reasons about recovery and strength standards, both of which need
+    // body data. Ask once, up front, instead of silently giving worse advice.
+    function coachOnboardingMissing() {
+        const user = currentUser();
+        const missing = [];
+        if (!Number(user.bodyweight)) {
+            missing.push("bodyweight");
+        }
+        if (!Number(user.height)) {
+            missing.push("height");
+        }
+        if (!Number(user.birthYear)) {
+            missing.push("birthYear");
+        }
+        return missing;
+    }
+
+    function openCoachOnboarding(nextAction) {
+        const user = currentUser();
+        const thisYear = new Date().getFullYear();
+        coachState.pendingAction = nextAction || null;
+        openModal(`<div class="modal-header"><div><p class="eyebrow">AI-тренер</p><h2>Кілька цифр — і почнемо</h2><p class="card-caption">Вага, зріст і рік народження потрібні, щоб тренер рахував навантаження, відновлення та нормативи саме під тебе. Це займе 10 секунд.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>
+            <div class="field-grid three">
+                <div class="field"><label>Вага, кг</label><input id="onbBodyweight" type="number" inputmode="decimal" step="0.1" min="20" max="300" value="${Number(user.bodyweight) || ""}" placeholder="82"></div>
+                <div class="field"><label>Зріст, см</label><input id="onbHeight" type="number" inputmode="numeric" step="1" min="80" max="240" value="${Number(user.height) || ""}" placeholder="180"></div>
+                <div class="field"><label>Рік народження</label><input id="onbBirthYear" type="number" inputmode="numeric" step="1" min="1920" max="${thisYear}" value="${Number(user.birthYear) || ""}" placeholder="1998"></div>
+            </div>
+            <p class="input-hint" style="margin-top:10px;"><i data-lucide="lock"></i>Дані видно лише тобі — вони не показуються в команді.</p>
+            <div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Пізніше</button><button class="button button-primary" type="button" data-action="save-coach-onboarding"><i data-lucide="check"></i>Зберегти й почати</button></div>`);
+    }
+
+    async function saveCoachOnboarding() {
+        const bodyweight = numberValue("onbBodyweight", 0);
+        const height = Math.round(numberValue("onbHeight", 0));
+        const birthYear = Math.round(numberValue("onbBirthYear", 0));
+        const thisYear = new Date().getFullYear();
+        if (!(bodyweight >= 20 && bodyweight <= 300)) {
+            toast("Перевір вагу", "Вкажи вагу від 20 до 300 кг.");
+            return;
+        }
+        if (!(height >= 80 && height <= 240)) {
+            toast("Перевір зріст", "Вкажи зріст від 80 до 240 см.");
+            return;
+        }
+        if (!(birthYear >= 1920 && birthYear <= thisYear)) {
+            toast("Перевір рік", `Вкажи рік народження між 1920 і ${thisYear}.`);
+            return;
+        }
+        const user = currentUser();
+        user.bodyweight = round(bodyweight, 1);
+        user.height = height;
+        user.birthYear = birthYear;
+        user.updatedAt = new Date().toISOString();
+        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+            try {
+                await storage.apiClient.updateProfile({ bodyweight: user.bodyweight, height, birthYear });
+            } catch (error) {
+                handleUserFacingError(error, "save-coach-onboarding");
+                return;
+            }
+        } else {
+            await persist({ silent: true });
+        }
+        closeOverlay();
+        renderSection();
+        const next = coachState.pendingAction;
+        coachState.pendingAction = null;
+        if (next === "analyze") {
+            runCoachAnalyze("full");
+        }
+    }
+
+    // Every coach entry point funnels through here so onboarding can never be skipped.
+    function startCoach(mode) {
+        if (coachOnboardingMissing().length) {
+            openCoachOnboarding("analyze");
+            return;
+        }
+        // Any analysis satisfies the weekly nudge and takes the user to the coach.
+        storage.writeSetting(`coach-last-${currentUser().id}`, String(Date.now()));
+        if (state.section !== "coach") {
+            navigate("coach");
+        }
+        runCoachAnalyze(mode || "full");
+    }
+
+    async function runCoachAnalyze(mode) {
+        if (coachState.status === "loading") {
+            return;
+        }
+        loadCoachThread();
+        coachState.status = "loading";
+        coachState.error = null;
+        coachState.thread.push({ role: "user", text: coachModeLabel(mode), kind: "action" });
+        renderCoachThread();
+        try {
+            const answer = await storage.apiClient.coachAnalyze(mode || "full");
+            coachState.meta = answer.meta || null;
+            coachState.thread.push({ role: "coach", summary: answer.summary, blocks: answer.blocks || [], followUps: answer.followUps || [] });
+        } catch (error) {
+            coachState.error = coachError(error);
+            coachState.thread.pop();
+        } finally {
+            coachState.status = "idle";
+            saveCoachThread();
+            renderCoachThread();
+        }
+    }
+
+    async function sendCoachMessage(preset) {
+        const input = element("coachInput");
+        const text = String(preset || (input ? input.value : "")).trim();
+        if (!text || coachState.status === "loading") {
+            return;
+        }
+        if (coachOnboardingMissing().length) {
+            openCoachOnboarding(null);
+            return;
+        }
+        loadCoachThread();
+        if (input) {
+            input.value = "";
+        }
+        coachState.status = "loading";
+        coachState.error = null;
+        coachState.thread.push({ role: "user", text });
+        renderCoachThread();
+        // Only the plain-text tail is replayed — blocks are rendering data, not context.
+        const history = coachState.thread
+            .filter((entry) => entry.role === "user" || entry.summary)
+            .slice(-10)
+            .map((entry) => ({ role: entry.role === "coach" ? "coach" : "user", text: entry.role === "coach" ? String(entry.summary || "") : String(entry.text || "") }))
+            .filter((entry) => entry.text);
+        try {
+            const answer = await storage.apiClient.coachChat(text, history.slice(0, -1));
+            coachState.meta = answer.meta || null;
+            coachState.thread.push({ role: "coach", summary: answer.summary, blocks: answer.blocks || [], followUps: answer.followUps || [] });
+        } catch (error) {
+            coachState.error = coachError(error);
+        } finally {
+            coachState.status = "idle";
+            saveCoachThread();
+            renderCoachThread();
+        }
+    }
+
+    function coachError(error) {
+        const code = error?.payload?.code || "";
+        const messages = {
+            AI_FORBIDDEN: "AI-тренер доступний у тарифі PRO.",
+            AI_DAILY_LIMIT: "Ліміт AI-тренера на сьогодні вичерпано. Спробуй завтра.",
+            GEMINI_NOT_CONFIGURED: "AI-тренер поки не налаштований.",
+            EMPTY_RESULT: "Ще замало даних — заверши хоча б одне тренування, і я зможу його розібрати.",
+            TIMEOUT: "Аналіз тривав задовго. Спробуй ще раз.",
+            RATE_LIMIT: "Забагато запитів поспіль. Дай пару секунд."
+        };
+        return messages[code] || friendlyError(error);
+    }
+
+    function coachModeLabel(mode) {
+        return ({ full: "Проаналізуй мої тренування", workout: "Розбери моє останнє тренування", weekly: "Підсумок за тиждень" })[mode] || "Проаналізуй мої тренування";
+    }
+
+    function clearCoachThread() {
+        coachState.thread = [];
+        coachState.error = null;
+        saveCoachThread();
+        renderCoachThread();
+    }
+
+    function coachSection() {
+        loadCoachThread();
+        const quota = coachState.meta && coachState.meta.dailyRemaining !== null && coachState.meta.dailyRemaining !== undefined
+            ? `<span class="chip">Залишилось ${coachState.meta.dailyRemaining} з ${coachState.meta.dailyLimit}</span>`
+            : hasUnlimited() ? `<span class="chip"><i data-lucide="infinity"></i>Без ліміту</span>` : "";
+        const starters = [
+            ["full", "Повний аналіз", "sparkles"],
+            ["workout", "Останнє тренування", "dumbbell"],
+            ["weekly", "Підсумок тижня", "calendar-check"]
+        ].map(([mode, label, icon]) => `<button class="button ${mode === "full" ? "button-primary" : "button-secondary"} compact" type="button" data-action="coach-analyze" data-mode="${mode}"><i data-lucide="${icon}"></i>${label}</button>`).join("");
+
+        content(`<div class="grid dashboard-grid">
+            <section class="card span-12 coach-head">
+                <div class="card-header">
+                    <div class="coach-title"><span class="coach-badge"><i data-lucide="brain"></i></span><div><p class="eyebrow">AI-тренер</p><h2>Розбір твоїх тренувань</h2><p class="card-caption">Аналізую все, що ти залогував: обсяг, прогрес по вправах, баланс груп мʼязів, відновлення — і кажу, що робити далі.</p></div></div>
+                    <div class="inline-actions wrap">${quota}${coachState.thread.length ? `<button class="icon-button" type="button" title="Очистити чат" data-action="coach-clear"><i data-lucide="eraser"></i></button>` : ""}</div>
+                </div>
+                <div class="coach-starters">${starters}</div>
+            </section>
+            <section class="card span-12 coach-panel">
+                <div id="coachThread" class="coach-thread"></div>
+                <div class="coach-composer">
+                    <textarea id="coachInput" rows="1" class="coach-input" placeholder="Запитай тренера: «чому жим стоїть?», «як додавати вагу?», «склади план на 4 тижні»" data-action="coach-input"></textarea>
+                    <button class="button button-primary coach-send" type="button" data-action="coach-send" aria-label="Надіслати"><i data-lucide="send-horizontal"></i></button>
+                </div>
+            </section>
+        </div>`);
+        renderCoachThread();
+    }
+
+    function renderCoachThread() {
+        const host = element("coachThread");
+        if (!host) {
+            return;
+        }
+        const empty = !coachState.thread.length && !coachState.error && coachState.status !== "loading";
+        host.innerHTML = empty
+            ? `<div class="coach-empty"><span class="coach-badge lg"><i data-lucide="brain"></i></span><h3>Готовий подивитись на твій прогрес</h3><p class="card-caption">Натисни «Повний аналіз» — і отримаєш розбір: що працює, що застопорилось і що змінити в наступних тренуваннях.</p></div>`
+            : coachState.thread.map(coachMessage).join("")
+                + (coachState.status === "loading" ? `<div class="coach-msg coach"><div class="coach-bubble coach-loading"><span class="pixel-loader">${Array.from({ length: 5 }, (_, index) => `<span style="--cell:${index}"></span>`).join("")}</span>Аналізую твої дані…</div></div>` : "")
+                + (coachState.error ? `<div class="coach-msg coach"><div class="coach-bubble coach-error"><i data-lucide="alert-triangle"></i>${escapeHtml(coachState.error)}</div></div>` : "");
+        iconsIn(host);
+        renderCoachCharts();
+        host.scrollTop = host.scrollHeight;
+    }
+
+    function coachMessage(entry, index) {
+        if (entry.role === "user") {
+            return `<div class="coach-msg user"><div class="coach-bubble user">${escapeHtml(entry.text)}</div></div>`;
+        }
+        const follow = (entry.followUps || []).length
+            ? `<div class="coach-follow">${entry.followUps.map((question) => `<button class="chip coach-chip" type="button" data-action="coach-ask" data-text="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}</div>`
+            : "";
+        return `<div class="coach-msg coach"><div class="coach-bubble">
+            ${entry.summary ? `<p class="coach-summary">${escapeHtml(entry.summary)}</p>` : ""}
+            ${(entry.blocks || []).map((block, blockIndex) => coachBlock(block, `${index}-${blockIndex}`)).join("")}
+            ${follow}
+        </div></div>`;
+    }
+
+    // Blocks render with the app's own components — the model never emits markup.
+    function coachBlock(block, id) {
+        const title = block.title ? `<h4 class="coach-block-title">${escapeHtml(block.title)}</h4>` : "";
+        if (block.kind === "callout") {
+            const icons = { win: "trophy", warning: "alert-triangle", insight: "lightbulb", neutral: "info" };
+            const tone = block.tone || "insight";
+            return `<div class="coach-callout tone-${escapeHtml(tone)}"><span class="coach-callout-ico"><i data-lucide="${icons[tone] || "lightbulb"}"></i></span><div>${block.title ? `<strong>${escapeHtml(block.title)}</strong>` : ""}${block.text ? `<p>${escapeHtml(block.text)}</p>` : ""}</div></div>`;
+        }
+        if (block.kind === "table") {
+            return `${title}<div class="coach-table-wrap"><table class="coach-table"><thead><tr>${(block.columns || []).map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${(block.rows || []).map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+        }
+        if (block.kind === "chart") {
+            return `${title}<div class="coach-chart"><canvas id="coachChart-${escapeHtml(id)}" height="180"></canvas></div>`;
+        }
+        if (block.kind === "plan" || block.kind === "exercise") {
+            return `${title}<div class="coach-plan">${(block.items || []).map((item) => {
+                const exercise = exerciseByName(item.exercise);
+                const media = exercise ? exerciseMedia(exercise) : "";
+                const thumb = media
+                    ? `<div class="wd-thumb"><img src="${escapeHtml(media)}" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.wd-thumb')?.remove()"></div>`
+                    : `<div class="wd-thumb wd-thumb-fallback"><i data-lucide="dumbbell"></i></div>`;
+                return `<div class="coach-plan-item">${thumb}<div class="coach-plan-text"><strong>${escapeHtml(item.exercise)}</strong><span class="coach-plan-detail">${escapeHtml(item.detail)}</span>${item.why ? `<span class="coach-plan-why">${escapeHtml(item.why)}</span>` : ""}</div></div>`;
+            }).join("")}</div>`;
+        }
+        return block.text ? `${title}<p class="coach-text">${escapeHtml(block.text)}</p>` : "";
+    }
+
+    // Charts are drawn after the HTML lands, with the app's existing Chart.js helpers.
+    function renderCoachCharts() {
+        const pending = [];
+        coachState.thread.forEach((entry, index) => {
+            (entry.blocks || []).forEach((block, blockIndex) => {
+                if (block.kind === "chart" && element(`coachChart-${index}-${blockIndex}`)) {
+                    pending.push({ id: `coachChart-${index}-${blockIndex}`, block });
+                }
+            });
+        });
+        if (!pending.length) {
+            return;
+        }
+        ensureChartLib().then(() => {
+            if (!window.Chart) {
+                return;
+            }
+            pending.forEach(({ id, block }) => {
+                if (!element(id)) {
+                    return;
+                }
+                if (block.chartType === "bar") {
+                    barChart(id, block.labels, block.values, block.valueLabel || "");
+                } else if (block.chartType === "doughnut") {
+                    doughnutChart(id, block.labels, block.values);
+                } else {
+                    lineChart(id, block.labels, block.values, block.valueLabel || "");
+                }
+            });
+        });
     }
 
     // ---- Admin impersonation ("увійти як користувач") --------------------------
