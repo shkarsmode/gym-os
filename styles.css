@@ -38,6 +38,9 @@
     --radius-pill: 999px;
 
     --sidebar-width: 268px;
+    /* Admin impersonation bar: its height drives the sticky topbar/sidebar offsets. */
+    --imp-h: 48px;
+    --imp-total: calc(var(--imp-h) + env(safe-area-inset-top, 0px));
     --mobile-nav-height: 86px;
 }
 
@@ -140,11 +143,136 @@ textarea:focus-visible {
     min-height: 100vh;
 }
 
+/* ---------- Admin impersonation bar ----------
+   First row of the app-shell (spans both columns), sticky above everything except
+   overlays, so "you are inside someone else's account" is never off-screen. The
+   sticky topbar/sidebar offsets shift by its height so nothing hides underneath. */
+.imp-bar {
+    grid-column: 1 / -1;
+    position: sticky;
+    top: 0;
+    z-index: 65;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: var(--imp-total);
+    padding: 7px 16px;
+    padding-top: calc(7px + env(safe-area-inset-top, 0px));
+    background: linear-gradient(180deg, var(--color-warning), color-mix(in srgb, var(--color-warning) 84%, #000));
+    color: #23180a;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.28);
+    box-shadow: 0 8px 22px -14px rgba(0, 0, 0, 0.75);
+}
+
+.imp-ico {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: rgba(0, 0, 0, 0.16);
+}
+
+.imp-ico svg {
+    width: 17px;
+    height: 17px;
+}
+
+.imp-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.imp-text strong,
+.imp-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.imp-text strong {
+    font-size: 13.5px;
+}
+
+.imp-sub {
+    font-size: 11.5px;
+    opacity: 0.78;
+}
+
+/* Doubled selector: the base `.button` rules are defined later in the file. */
+.imp-bar .imp-exit {
+    flex: 0 0 auto;
+    background: #1b1205;
+    color: #ffe4ad;
+    border-color: transparent;
+    font-weight: 700;
+}
+
+.imp-bar .imp-exit:hover {
+    background: #000;
+    border-color: transparent;
+    color: #fff;
+}
+
+body.is-impersonating .topbar {
+    top: var(--imp-offset, var(--imp-total));
+}
+
+body.is-impersonating .sidebar {
+    top: var(--imp-offset, var(--imp-total));
+    height: calc(100vh - var(--imp-offset, var(--imp-total)));
+}
+
+@media (max-width: 920px) {
+    :root {
+        --imp-h: 44px;
+    }
+    .imp-bar {
+        gap: 10px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+    /* Phone: keep the account name + exit, drop the explanatory second line. */
+    .imp-sub {
+        display: none;
+    }
+    .imp-exit span {
+        display: none;
+    }
+    /* Beat the blanket mobile `.button { width: 100% }` — this one sits in a row. */
+    .imp-bar .imp-exit {
+        width: auto;
+        flex: 0 0 auto;
+        padding: 8px 12px;
+    }
+}
+
+/* The owner-only entry point — deliberately unlike every other secondary button.
+   Doubled class so it beats the base `.button` rules defined further down. */
+.button.button-impersonate {
+    border-color: var(--color-warning);
+    color: #23180a;
+    font-weight: 700;
+    background: linear-gradient(180deg, var(--color-warning), color-mix(in srgb, var(--color-warning) 84%, #000));
+}
+
+.button.button-impersonate:hover {
+    border-color: var(--color-warning);
+    background: var(--color-warning);
+    color: #23180a;
+}
+
 .sidebar {
     position: sticky;
     top: 0;
     height: 100vh;
     padding: 22px 16px;
+    /* impersonation bar shifts the rail down so it is never covered */
+
     border-right: 1px solid var(--color-border);
     background: var(--color-surface);
     display: flex;

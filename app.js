@@ -321,6 +321,14 @@ import {
             return this.request(`/workouts/${id}`, { method: "GET" });
         }
 
+        impersonate(userId) {
+            return this.request(`/auth/impersonate/${userId}`, { method: "POST" });
+        }
+
+        stopImpersonation() {
+            return this.request("/auth/impersonate/stop", { method: "POST" });
+        }
+
         updateWorkout(id, payload) {
             return this.request(`/workouts/${id}/update`, { method: "POST", body: JSON.stringify(payload) });
         }
@@ -576,9 +584,16 @@ import {
             try {
                 const response = await this.apiClient.me();
                 this.currentUser = response?.user || null;
+                // Session shape, not user data: whether this is an impersonation and
+                // whether this account may start one. Read from the server on every
+                // boot so the warning banner cannot be lost or faked client-side.
+                this.impersonation = response?.impersonation?.active ? response.impersonation : null;
+                this.canImpersonate = Boolean(response?.canImpersonate);
                 return this.currentUser;
             } catch (error) {
                 this.currentUser = null;
+                this.impersonation = null;
+                this.canImpersonate = false;
                 if (shouldThrow) {
                     throw error;
                 }
@@ -1509,6 +1524,7 @@ import {
     }
 
     function renderShell() {
+        renderImpersonationBar();
         renderNavigation("sidebarNavigation", sidebarNavItems());
         renderMobileNavigation();
         renderCurrentUserButton();
@@ -3985,6 +4001,8 @@ import {
             "start-existing-workout": () => startExistingWorkout(actionElement.dataset.workoutId),
             "apply-weekday-workout": () => applyWeekdayWorkout(actionElement.dataset.workoutId),
             "copy-workout-start": () => copyWorkoutAndStart(actionElement.dataset.workoutId),
+            "impersonate-user": () => impersonateUser(actionElement.dataset.userId),
+            "stop-impersonation": stopImpersonation,
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
             "open-day-sheet": () => openDaySheet(actionElement.dataset.date),
             "open-add-exercise-modal": () => { state.replaceExerciseTarget = null; openAddExerciseModal(); },
@@ -5789,6 +5807,100 @@ import {
         }
     }
 
+    // ---- Admin impersonation ("увійти як користувач") --------------------------
+    // Owner-only support tool. The button only exists when the SERVER says this
+    // account may impersonate (`canImpersonate` from /auth/me) — the frontend never
+    // decides that itself, and the backend re-checks on every call.
+    function impersonateButton(user, isCurrent) {
+        if (!storage.canImpersonate || isCurrent || storage.impersonation) {
+            return "";
+        }
+        return `<button class="button button-impersonate compact" type="button" data-action="impersonate-user" data-user-id="${user.id}"><i data-lucide="user-round-cog"></i>Увійти як ${escapeHtml(user.displayName)}</button>`;
+    }
+
+    async function impersonateUser(userId) {
+        const target = userById(userId);
+        const name = target ? target.displayName : "користувача";
+        const confirmed = await confirmDialog(
+            `Далі ти працюєш у акаунті «${name}»: усе, що зробиш, буде від його імені. Вийти можна в будь-який момент кнопкою у верхній смузі.`,
+            { title: `Увійти як ${name}?`, confirmLabel: "Увійти в акаунт", danger: false }
+        );
+        if (!confirmed) {
+            return;
+        }
+        try {
+            const result = await storage.apiClient.impersonate(userId);
+            // Bearer copy for iOS Safari, which drops the cross-site session cookie.
+            if (result && result.token) {
+                try {
+                    localStorage.setItem("gymos-auth-token", result.token);
+                } catch (error) {
+                    // cookie-only session still works everywhere else
+                }
+            }
+            // Full reload: every cache, list and computed score in memory belongs to
+            // the previous account. Re-booting is the only honest way to swap identity.
+            location.hash = "#/dashboard";
+            location.reload();
+        } catch (error) {
+            toast("Не вдалося увійти", friendlyError(error));
+        }
+    }
+
+    async function stopImpersonation() {
+        try {
+            const result = await storage.apiClient.stopImpersonation();
+            if (result && result.token) {
+                try {
+                    localStorage.setItem("gymos-auth-token", result.token);
+                } catch (error) {
+                    // cookie-only session still works everywhere else
+                }
+            }
+        } catch (error) {
+            // Reload regardless: an expired or already-ended impersonation must never
+            // leave the admin stuck inside someone else's account.
+            toast("Сесію завершено", friendlyError(error));
+        }
+        location.hash = "#/users";
+        location.reload();
+    }
+
+    // Persistent, unmissable warning while impersonating. Lives as the first row of
+    // the app-shell grid (spanning both columns) so it never fights the sticky topbar
+    // or the mobile bottom nav — it simply sits above everything and sticks.
+    function renderImpersonationBar() {
+        const shell = document.querySelector(".app-shell");
+        const active = storage.impersonation;
+        let bar = document.getElementById("impersonationBar");
+        document.body.classList.toggle("is-impersonating", Boolean(active));
+        if (!active || !shell) {
+            if (bar) {
+                bar.remove();
+            }
+            return;
+        }
+        const name = (storage.currentUser && storage.currentUser.displayName) || currentUser()?.displayName || "користувач";
+        if (!bar) {
+            bar = document.createElement("div");
+            bar.id = "impersonationBar";
+            bar.className = "imp-bar";
+            bar.setAttribute("role", "status");
+            shell.prepend(bar);
+        }
+        if (bar.dataset.sig !== name) {
+            bar.dataset.sig = name;
+            bar.innerHTML = `<span class="imp-ico" aria-hidden="true"><i data-lucide="shield-alert"></i></span>
+                <span class="imp-text"><strong>Ти в акаунті ${escapeHtml(name)}</strong><span class="imp-sub">Режим адміна — усі дії від його імені</span></span>
+                <button class="button imp-exit compact" type="button" data-action="stop-impersonation"><i data-lucide="log-out"></i><span>Вийти</span></button>`;
+            iconsIn(bar);
+        }
+        // The sticky topbar/sidebar sit exactly below the bar. Publish its MEASURED
+        // height (content + safe area) instead of trusting a hardcoded one, or a
+        // taller line wrap silently slides the topbar underneath it.
+        document.documentElement.style.setProperty("--imp-offset", `${bar.offsetHeight}px`);
+    }
+
     async function logout() {
         try {
             localStorage.removeItem("gymos-auth-token");
@@ -6330,7 +6442,7 @@ import {
         const info = userLevel(user.id);
         const isCurrent = user.id === currentUser().id;
         const history = workoutsFor(user.id).sort(byDateDesc);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: isCurrent })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="badge unlocked">Це ви</span>` : ""}</div><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div>${achievementBadges(user.id)}</section><section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}</div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: isCurrent })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="badge unlocked">Це ви</span>` : ""}</div><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><div class="inline-actions wrap user-detail-actions">${impersonateButton(user, isCurrent)}<button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></div>${achievementBadges(user.id)}</section><section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}</div>`);
     }
 
     function exerciseMedia(exercise) {
