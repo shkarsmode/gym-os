@@ -433,6 +433,22 @@ import {
             return this.request("/ai/workouts/parse", { method: "POST", body: JSON.stringify(payload) });
         }
 
+        // Advisory "does this already exist?" check for the custom-exercise form. The
+        // backend answers 200 even when its AI judge is unavailable, and the caller
+        // swallows anything that still escapes. Shorter than the default 20s because the
+        // backend caps its own model call at 7s and this sits on the submit path: a user
+        // waiting on the Save button must not be held for the full network budget.
+        checkExerciseDuplicate(payload) {
+            return this.request("/ai/exercises/duplicate-check", { method: "POST", body: JSON.stringify(payload), timeoutMs: 12000 });
+        }
+
+        // Suggested demo gifs for an exercise name. Lives under /exercises, NOT /ai: the
+        // AI routes share one per-user cooldown, so asking for a gif there would lock the
+        // user out of the AI coach for seconds afterwards.
+        suggestExerciseMedia(payload) {
+            return this.request("/exercises/media-suggest", { method: "POST", body: JSON.stringify(payload) });
+        }
+
         fetchAiStatistics(kind, query = {}) {
             const params = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== "")).toString();
             return this.request(`/ai/statistics/${kind}${params ? `?${params}` : ""}`, { method: "GET" });
@@ -1917,6 +1933,19 @@ import {
         seenCounted: false // guard so we count one "saw the AI card" per app session
     };
     let aiCooldownTimer = null;
+
+    // Remembers the exercise name the user already saw the duplicate sheet for and chose
+    // to create anyway, so a retry after a failed save does not re-ask (and does not burn
+    // a second AI call). Reset every time the custom-exercise form opens.
+    let duplicateCheckState = { acknowledgedName: "" };
+
+    // Last gif-suggestion round. `picked` is kept so the save path can trust the server's
+    // content-type instead of guessing the media type from the file extension.
+    let mediaSuggestState = { query: "", items: [], picked: null };
+    // Bumped on every new search AND whenever the sheet is dismissed, so a slow response
+    // can never repaint a sheet the user has already closed or replaced.
+    let mediaSuggestToken = 0;
+    let mediaSuggestHooked = false;
 
     function canUseAi() {
         return isAdmin() || effectiveRole() === "premium";
@@ -4061,6 +4090,7 @@ import {
             "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
             "open-custom-exercise": () => openCustomExercise(),
             "save-custom-exercise": saveCustomExercise,
+            "suggest-exercise-media": suggestExerciseMedia,
             "edit-exercise": () => editExercise(actionElement.dataset.exerciseId),
             "delete-exercise": () => deleteExerciseEntry(actionElement.dataset.exerciseId),
             "approve-exercise": () => approveExerciseEntry(actionElement.dataset.exerciseId),
@@ -4313,6 +4343,7 @@ import {
             "add-exercise": "Додаємо вправу",
             "remove-workout-exercise": "Видаляємо вправу",
             "save-custom-exercise": "Зберігаємо вправу",
+            "suggest-exercise-media": "Підбираємо GIF",
             "add-set": "Додаємо підхід",
             "toggle-set": "Оновлюємо підхід",
             "delete-set": "Видаляємо підхід",
@@ -4400,7 +4431,9 @@ import {
             const url = imageUrl(actionElement.value);
             if (preview) {
                 preview.classList.toggle("has-image", Boolean(url));
-                preview.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Превʼю" referrerpolicy="no-referrer" onerror="this.remove(); this.closest('.media-url-preview')?.classList.remove('has-image');">` : "";
+                // Drop the class BEFORE detaching: closest() on an already-removed <img>
+                // has no parent left to find, so the empty frame used to stay visible.
+                preview.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Превʼю" referrerpolicy="no-referrer" onerror="this.closest('.media-url-preview')?.classList.remove('has-image'); this.remove();">` : "";
             }
         }
 
@@ -4681,6 +4714,10 @@ import {
     function openCustomExercise(exercise = null) {
         const data = exercise && exercise.id ? exercise : null;
         const isEdit = Boolean(data);
+        // Unconditional, and before the paywall return: a fresh form must never inherit
+        // the previous one's acknowledged name or picked gif.
+        duplicateCheckState = { acknowledgedName: "" };
+        mediaSuggestState = { query: "", items: [], picked: null };
         // Free tier: 1 custom exercise per month. Editing your own is always allowed.
         if (!isEdit && !hasUnlimited() && exerciseQuotaState(currentUser().id).over) {
             openPaywallModal({ type: "exercise" });
@@ -4688,13 +4725,16 @@ import {
         }
         const val = (value) => escapeHtml(value == null ? "" : String(value));
         const aliasesValue = data && Array.isArray(data.aliases) ? data.aliases.join(", ") : "";
+        // has-image is what makes .media-url-preview visible (it is display:none without
+        // it). The edit branch used to omit it, so an existing exercise's image stayed
+        // invisible until the user touched the input and handleInput re-rendered it.
         const previewBlock = data && imageUrl(data.mediaUrl)
-            ? `<div class="media-url-preview" id="customExerciseMediaPreview"><img src="${val(data.mediaUrl)}" alt="${val(data.name)}" referrerpolicy="no-referrer" onerror="this.remove()"></div>`
+            ? `<div class="media-url-preview has-image" id="customExerciseMediaPreview"><img src="${val(data.mediaUrl)}" alt="${val(data.name)}" referrerpolicy="no-referrer" onerror="this.closest('.media-url-preview')?.classList.remove('has-image'); this.remove();"></div>`
             : `<div class="media-url-preview" id="customExerciseMediaPreview"></div>`;
         const moderationHint = isEdit
             ? `<p class="card-caption">${isAdmin() ? "Зміни застосуються одразу." : "Після збереження вправа знову піде на модерацію."}</p>`
             : `<p class="card-caption">${isAdmin() ? "Вправа з'явиться в каталозі одразу." : "Нова вправа піде на модерацію адміну."}</p>`;
-        openModal(`<div class="modal-header"><div><h2>${isEdit ? "Редагувати вправу" : "Власна вправа"}</h2>${moderationHint}</div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="hidden" id="customExerciseId" value="${val(data?.id)}"><div class="field-grid"><div class="field"><label>Назва</label><input id="customExerciseName" type="text" placeholder="Жим у Smith під кутом" value="${val(data?.name)}"></div><div class="field"><label>Аліаси</label><input id="customExerciseAliases" type="text" placeholder="Через кому" value="${val(aliasesValue)}"></div><div class="field"><label>Основний м'яз</label>${select("customExerciseMuscle", muscles(), data?.primaryMuscleGroup || "Груди")}</div><div class="field"><label>Патерн руху</label>${select("customExercisePattern", patterns(), data?.movementPattern || "Горизонтальний жим")}</div><div class="field"><label>Обладнання</label>${select("customExerciseEquipment", equipment(), data?.equipment || "Тренажер")}</div><div class="field"><label>Складність</label>${select("customExerciseDifficulty", ["Початковий", "Середній", "Просунутий"], data?.difficulty || "Середній")}</div></div><div class="field" style="margin-top:14px;"><label>Опис</label><textarea id="customExerciseDescription" placeholder="Коротке пояснення">${val(data?.description)}</textarea></div><div class="field" style="margin-top:14px;"><label>Зображення / GIF (посилання)</label><input id="customExerciseMedia" type="url" placeholder="https://...jpg, .png або .gif" data-action="custom-exercise-media" value="${val(data?.mediaUrl)}">${previewBlock}</div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-custom-exercise">${isEdit ? "Зберегти зміни" : "Зберегти вправу"}</button></div>`);
+        openModal(`<div class="modal-header"><div><h2>${isEdit ? "Редагувати вправу" : "Власна вправа"}</h2>${moderationHint}</div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="hidden" id="customExerciseId" value="${val(data?.id)}"><div class="field-grid"><div class="field"><label>Назва</label><input id="customExerciseName" type="text" placeholder="Жим у Smith під кутом" value="${val(data?.name)}"></div><div class="field"><label>Аліаси</label><input id="customExerciseAliases" type="text" placeholder="Через кому" value="${val(aliasesValue)}"></div><div class="field"><label>Основний м'яз</label>${select("customExerciseMuscle", muscles(), data?.primaryMuscleGroup || "Груди")}</div><div class="field"><label>Патерн руху</label>${select("customExercisePattern", patterns(), data?.movementPattern || "Горизонтальний жим")}</div><div class="field"><label>Обладнання</label>${select("customExerciseEquipment", equipment(), data?.equipment || "Тренажер")}</div><div class="field"><label>Складність</label>${select("customExerciseDifficulty", ["Початковий", "Середній", "Просунутий"], data?.difficulty || "Середній")}</div></div><div class="field" style="margin-top:14px;"><label>Опис</label><textarea id="customExerciseDescription" placeholder="Коротке пояснення">${val(data?.description)}</textarea></div><div class="field" style="margin-top:14px;"><label>Зображення / GIF (посилання)</label><input id="customExerciseMedia" type="url" placeholder="https://...jpg, .png або .gif" data-action="custom-exercise-media" value="${val(data?.mediaUrl)}"><div class="action-row" style="margin-top:8px;"><button class="button button-secondary compact" type="button" data-action="suggest-exercise-media"><i data-lucide="sparkles"></i>Підібрати GIF</button></div>${previewBlock}</div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-custom-exercise">${isEdit ? "Зберегти зміни" : "Зберегти вправу"}</button></div>`);
     }
 
     function editExercise(exerciseId) {
@@ -4769,6 +4809,69 @@ import {
         toast("Вправу відхилено", exercise.name);
     }
 
+    // Returns true when the caller should go ahead and create the exercise. NEVER throws:
+    // a failing, slow or unavailable duplicate check must not stop somebody adding their
+    // exercise, and an escaped error would land in handleUserFacingError and show a red
+    // toast for something that was only ever advisory.
+    async function confirmNotDuplicate(payload, apiMode) {
+        // Nothing to ask in local mode. index.html sets allowLocalFallback:false, so in
+        // production this branch is dev-only.
+        if (!apiMode) {
+            return true;
+        }
+        const key = payload.name.trim().toLowerCase();
+        if (duplicateCheckState.acknowledgedName === key) {
+            return true;
+        }
+        let result = null;
+        try {
+            // The Save button is already spinning from runAction; only the chip's label is
+            // wrong, and the create path overwrites it back to "Зберігаємо вправу".
+            showSyncIndicator("loading", "Шукаємо схожі вправи");
+            result = await storage.apiClient.checkExerciseDuplicate({
+                // EXACTLY these five fields, never the whole payload: the backend runs a
+                // whitelist validation pipe with forbidNonWhitelisted, so any extra key
+                // (movementPattern, category, techniqueSteps...) makes the request 400.
+                name: payload.name,
+                primaryMuscleGroup: payload.primaryMuscleGroup,
+                equipment: payload.equipment,
+                description: payload.description,
+                aliases: payload.aliases
+            });
+        } catch (error) {
+            console.warn("duplicate check failed", error);
+            return true;
+        }
+        const matches = Array.isArray(result?.matches) ? result.matches : [];
+        if (!matches.length) {
+            return true; // nothing to warn about, the user sees no extra step at all
+        }
+        const choice = await openDuplicateSheet(matches, result);
+        if (choice === "create") {
+            duplicateCheckState.acknowledgedName = key;
+            return true;
+        }
+        if (typeof choice === "string" && choice.startsWith("use:")) {
+            useExistingExercise(choice.slice(4));
+            return false;
+        }
+        return false; // "cancel", backdrop or Escape: stay in the form, create nothing
+    }
+
+    // The user picked an existing exercise instead of creating a twin. Close the form and
+    // open the catalog entry so they can look at it.
+    function useExistingExercise(exerciseId) {
+        const existing = exerciseById(exerciseId);
+        closeOverlay();
+        renderSection();
+        toast("Вже є в каталозі", existing ? existing.name : "Скористайся наявною вправою.");
+        if (existing) {
+            // Safe immediately after closeOverlay: openDrawer clears the deferred wipe
+            // timer that would otherwise blank the layer 240 ms from now.
+            openExercise(exerciseId);
+        }
+    }
+
     async function saveCustomExercise() {
         const name = inputValue("customExerciseName").trim();
         if (!name) {
@@ -4784,7 +4887,13 @@ import {
         const muscle = inputValue("customExerciseMuscle");
         const pattern = inputValue("customExercisePattern");
         const mediaUrl = imageUrl(inputValue("customExerciseMedia"));
-        const mediaType = mediaUrl ? (/\.gif(\?|$)/i.test(mediaUrl) ? "gif" : "image") : "none";
+        // The extension is only a hint - a gif is often served from an extensionless URL.
+        // When the URL came from a suggestion the server already read its real
+        // content-type, so prefer that answer over guessing.
+        let mediaType = mediaUrl ? (/\.gif(\?|$)/i.test(mediaUrl) ? "gif" : "image") : "none";
+        if (mediaUrl && mediaSuggestState.picked && mediaSuggestState.picked.url === mediaUrl) {
+            mediaType = mediaSuggestState.picked.mediaType;
+        }
         // Admins publish instantly; everyone else (create or edit) goes to moderation.
         const status = isAdmin() ? "approved" : "pending";
         const payload = {
@@ -4823,6 +4932,14 @@ import {
             closeOverlay();
             renderSection();
             toast(status === "pending" ? "Зміни на модерації" : "Вправу оновлено", name);
+            return;
+        }
+
+        // Create path only - the edit branch above has already returned. Advisory: any
+        // failure inside falls through to creation, it never blocks. Returning here leaves
+        // the modal open with every field intact; nothing has been mutated yet.
+        const proceed = await confirmNotDuplicate(payload, apiMode);
+        if (!proceed) {
             return;
         }
 
@@ -8762,6 +8879,15 @@ import {
     let overlayCloseTimer = null;
     let sheetCloseTimer = null;
 
+    // Dismiss hooks for a stacked sheet that somebody is AWAITING a decision from.
+    // Three separate code paths close the sheet without knowing a promise is pending:
+    // the global #modalBackdrop2 click (bindEvents), closeOverlay(), and the
+    // data-action="close-sheet" button. A dialog whose caller is held in a loading state
+    // (saveCustomExercise sits inside runAction's button loader) would hang forever if
+    // any of them ran. Registering here means closeSheet is the single choke point that
+    // releases them, whoever called it.
+    const sheetDismissHooks = new Set();
+
     // Reveal an overlay layer (backdrop + modal/drawer) with a fade/scale-in.
     function revealOverlay(layer) {
         const backdrop = element("modalBackdrop");
@@ -8816,6 +8942,15 @@ import {
         const layer = element("modalLayer2");
         if (backdrop.classList.contains("hidden")) {
             return;
+        }
+        // Release anyone awaiting a decision BEFORE the sheet animates out. Each hook is
+        // removed before it runs, so the finish() it calls (which calls closeSheet again)
+        // cannot re-enter this loop.
+        if (sheetDismissHooks.size) {
+            Array.from(sheetDismissHooks).forEach((hook) => {
+                sheetDismissHooks.delete(hook);
+                hook();
+            });
         }
         backdrop.classList.remove("visible");
         layer.classList.remove("visible");
@@ -8926,6 +9061,272 @@ import {
                 closeButton.addEventListener("click", () => finish(null));
             }
         });
+    }
+
+    // ---- Duplicate-exercise warning sheet --------------------------------------
+    // Stacked ABOVE the still-open custom-exercise form (openSheet only ever touches
+    // #modalLayer2), so every field the user typed keeps its live DOM value. Resolves
+    // "create" | "use:<id>" | "cancel".
+    //
+    // Buttons here deliberately carry data-dup / data-dup-use instead of data-action:
+    // the global handleClick delegate matches any [data-action] anywhere in the document,
+    // so a data-action button inside the sheet would ALSO be routed through runAction and
+    // fire twice, with a second spinner. Same reason choiceDialog uses data-choice.
+    function openDuplicateSheet(matches, result) {
+        return new Promise((resolve) => {
+            const backdrop = element("modalBackdrop2");
+            openSheet(duplicateSheetHtml(matches, result));
+            const layer = element("modalLayer2");
+            let settled = false;
+            const finish = (value) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                sheetDismissHooks.delete(onDismiss);
+                backdrop.removeEventListener("click", onBackdrop);
+                document.removeEventListener("keydown", onKey, true);
+                closeSheet();
+                resolve(value);
+            };
+            // Covers every exit that bypasses our own buttons: closeOverlay(), the global
+            // backdrop click, and data-action="close-sheet". Without it the Save button
+            // stays disabled with a spinner forever, because runAction is still awaiting.
+            const onDismiss = () => finish("cancel");
+            const onBackdrop = () => finish("cancel");
+            // Capture phase so it lands before any other Escape handler gets to close the
+            // sheet out from under us. finish() closes it itself.
+            const onKey = (event) => {
+                if (event.key === "Escape") {
+                    finish("cancel");
+                }
+            };
+            sheetDismissHooks.add(onDismiss);
+            backdrop.addEventListener("click", onBackdrop);
+            document.addEventListener("keydown", onKey, true);
+            layer.querySelectorAll("[data-dup]").forEach((button) => {
+                button.addEventListener("click", () => finish(button.dataset.dup));
+            });
+            layer.querySelectorAll("[data-dup-use]").forEach((button) => {
+                button.addEventListener("click", () => finish(`use:${button.dataset.dupUse}`));
+            });
+        });
+    }
+
+    function duplicateSheetHtml(matches, result) {
+        const hasSame = matches.some((match) => match.verdict === "same");
+        const title = hasSame ? "Здається, така вправа вже є" : "Знайшли схожі вправи";
+        const lead = result?.aiUsed
+            ? "AI звірив твою вправу з каталогом. Подивись і вирішуй сам: узяти наявну чи все одно створити свою."
+            : "Знайшли вправи зі схожою назвою. Глянь, чи це не те саме.";
+        return `<div class="confirm-dialog dup-sheet">`
+            + `<div class="modal-header"><div><h2>${escapeHtml(title)}</h2><p class="card-caption">${escapeHtml(lead)}</p></div>`
+            + `<button class="icon-button" type="button" data-dup="cancel" aria-label="Закрити"><i data-lucide="x"></i></button></div>`
+            + duplicateDegradedNote(result)
+            + `<div class="dup-list">${matches.map(duplicateCard).join("")}</div>`
+            + `<p class="dup-footnote">Форма нікуди не зникла: усі поля лишились заповненими.</p>`
+            + `<div class="form-actions confirm-choices">`
+            + `<button class="button button-secondary" type="button" data-dup="cancel">Назад до форми</button>`
+            + `<button class="button button-primary" type="button" data-dup="create">Все одно створити</button>`
+            + `</div></div>`;
+    }
+
+    // Only shown when the AI judge did not run: the cards are then pure name similarity,
+    // which is a much weaker claim, and the copy has to say so.
+    function duplicateDegradedNote(result) {
+        if (result?.aiUsed) {
+            return "";
+        }
+        if (result?.degradedReason === "AI_FORBIDDEN") {
+            return `<div class="ai-banner ai-banner-info"><i data-lucide="sparkles"></i><p>AI-перевірка схожості доступна в PRO. Поки що звірили тільки за назвою.</p></div>`;
+        }
+        return `<div class="ai-banner ai-banner-warn"><i data-lucide="alert-triangle"></i><p>AI зараз недоступний, тож звірили тільки за назвою. Перевір сам, чи це справді те саме.</p></div>`;
+    }
+
+    function duplicateCard(match) {
+        const isSame = match.verdict === "same";
+        const verdictBadge = isSame
+            ? `<span class="pill-badge pending"><i data-lucide="copy"></i>Схоже, те саме</span>`
+            : `<span class="pill-badge"><i data-lucide="info"></i>Варіація</span>`;
+        const mineBadge = match.isMine ? `<span class="pill-badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : "";
+        // reason is model output: escaped like every other untrusted string.
+        const reason = match.reason
+            ? `<p class="dup-reason"><i data-lucide="sparkles"></i><span>${escapeHtml(match.reason)}</span></p>`
+            : "";
+        const tags = [match.primaryMuscleGroup, match.movementPattern, match.equipment]
+            .filter(Boolean)
+            .map((value) => `<span class="chip">${escapeHtml(value)}</span>`)
+            .join("");
+        // A null author means the built-in catalog rather than a person.
+        const author = match.author ? escapeHtml(match.author) : "GymOS";
+        // No data-action="open-exercise" on the article: it would fire openDrawer, which
+        // wipes #modalLayer and destroys the half-filled form behind this sheet. No
+        // reaction bar either: a like/dislike POST from a confirmation dialog is wrong.
+        return `<article class="exercise-card has-thumb dup-card ${isSame ? "is-same" : "is-similar"}">`
+            + exerciseThumb(match)
+            + `<div class="exercise-card-tags inline">${verdictBadge}${mineBadge}</div>`
+            + `<div class="exercise-card-body"><h3>${escapeHtml(match.name)}</h3>`
+            + (match.description ? `<p class="card-caption exercise-card-desc">${escapeHtml(match.description)}</p>` : "")
+            + (tags ? `<div class="tag-row">${tags}</div>` : "")
+            + reason
+            + `</div>`
+            + `<div class="exercise-card-footer"><span class="exercise-meta-name">${author}</span>`
+            + `<button class="button button-primary compact" type="button" data-dup-use="${escapeHtml(match.id)}">Використати цю</button></div>`
+            + `</article>`;
+    }
+
+    // ---- Suggested demo gifs sheet ---------------------------------------------
+    // Opened from the media field of the custom-exercise form. Same layer as the
+    // duplicate sheet, but the two can never be open at once: one is a side branch off a
+    // field, the other gates the Save button.
+    async function suggestExerciseMedia() {
+        const name = inputValue("customExerciseName").trim();
+        if (name.length < 2) {
+            toast("Спочатку введи назву", "Без назви немає що шукати.");
+            return;
+        }
+        if (!(storage.mode === "api" && storage.apiClient.hasBaseUrl())) {
+            toast("Потрібен звʼязок із сервером", "Підбір GIF працює лише онлайн.");
+            return;
+        }
+        const payload = {
+            name,
+            aliases: splitCsv(inputValue("customExerciseAliases")).slice(0, 8),
+            primaryMuscleGroup: inputValue("customExerciseMuscle"),
+            equipment: inputValue("customExerciseEquipment"),
+            movementPattern: inputValue("customExercisePattern"),
+            limit: 6
+        };
+        const token = ++mediaSuggestToken;
+        mediaSuggestState.query = name;
+        mediaSuggestState.items = [];
+        // Open on the loading state immediately: the search costs a couple of seconds and
+        // an empty screen behind a button spinner reads as nothing having happened.
+        renderMediaSuggestSheet(mediaSuggestLoadingHtml(name));
+        let response = null;
+        let failure = null;
+        try {
+            response = await storage.apiClient.suggestExerciseMedia(payload);
+        } catch (error) {
+            console.warn("media suggest failed", error);
+            failure = error;
+        }
+        if (token !== mediaSuggestToken) {
+            return; // sheet was dismissed, or a newer search took over
+        }
+        mediaSuggestState.items = Array.isArray(response?.items) ? response.items : [];
+        renderMediaSuggestSheet(mediaSuggestSheetHtml(response, name, failure));
+    }
+
+    // Paints (or repaints) the sheet and re-wires its listeners. openSheet replaces the
+    // whole innerHTML, so every listener has to be attached again after each render.
+    function renderMediaSuggestSheet(html) {
+        openSheet(html);
+        const layer = element("modalLayer2");
+        // One dismiss hook for as long as the sheet lives: any close path invalidates the
+        // token, so an in-flight response cannot repaint a sheet that is already gone.
+        if (!mediaSuggestHooked) {
+            mediaSuggestHooked = true;
+            sheetDismissHooks.add(() => {
+                mediaSuggestHooked = false;
+                mediaSuggestToken += 1;
+            });
+        }
+        layer.querySelectorAll("[data-media-close]").forEach((button) => {
+            button.addEventListener("click", () => closeSheet());
+        });
+        layer.querySelectorAll("[data-media-url]").forEach((button) => {
+            button.addEventListener("click", () => applySuggestedMedia(button.dataset.mediaUrl, button.dataset.mediaType));
+        });
+    }
+
+    function applySuggestedMedia(url, mediaType) {
+        const field = element("customExerciseMedia");
+        if (!field) {
+            closeSheet();
+            return;
+        }
+        field.value = url || "";
+        mediaSuggestState.picked = { url: url || "", mediaType: mediaType || "image" };
+        // Reuse the form's own input handler instead of duplicating the preview markup:
+        // it already toggles .has-image and injects the <img>.
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        closeSheet();
+        toast("Зображення додано", "Не забудь зберегти вправу.");
+    }
+
+    function mediaSuggestHeader(query, subtitle) {
+        return `<div class="modal-header"><div><h2>Підібрані GIF</h2>`
+            + `<p class="card-caption">Для «${escapeHtml(query)}»${subtitle ? ` · ${subtitle}` : ""}</p></div>`
+            + `<button class="icon-button" type="button" data-media-close="1" aria-label="Закрити"><i data-lucide="x"></i></button></div>`;
+    }
+
+    function mediaSuggestFooter() {
+        return `<div class="form-actions confirm-choices">`
+            + `<button class="button button-secondary" type="button" data-media-close="1">Без зображення</button></div>`;
+    }
+
+    function mediaSuggestLoadingHtml(query) {
+        const tiles = Array.from({ length: 6 }, () => `<div class="media-suggest-card is-skeleton sk-wrap" aria-hidden="true">`
+            + `<span class="sk media-suggest-skthumb"></span><span class="sk sk-line half"></span><span class="sk sk-line short"></span></div>`).join("");
+        return mediaSuggestHeader(query, "шукаємо анімації")
+            + `<div class="media-suggest-grid" aria-busy="true">${tiles}</div>`
+            + mediaSuggestFooter();
+    }
+
+    function mediaSuggestSheetHtml(response, query, failure) {
+        if (failure) {
+            return mediaSuggestHeader(query, "")
+                + `<div class="ai-banner ai-banner-error"><i data-lucide="alert-triangle"></i><p>Не вдалося отримати підказки. Встав посилання вручну або спробуй ще раз.</p></div>`
+                + mediaSuggestFooter();
+        }
+        const items = Array.isArray(response?.items) ? response.items : [];
+        const nearby = Array.isArray(response?.nearby) ? response.nearby : [];
+        const degraded = response?.degraded;
+        const notes = [];
+        if (degraded === "ai_unavailable" || degraded === "ai_quota") {
+            notes.push(`<div class="ai-banner ai-banner-info"><i data-lucide="sparkles"></i><p>AI зараз недоступний, тож шукали просто за назвою.</p></div>`);
+        }
+        if (response?.lowConfidence) {
+            notes.push(`<div class="ai-banner ai-banner-warn"><i data-lucide="alert-triangle"></i><p>Не впевнені, що правильно розпізнали назву. Перевір, чи це та сама вправа.</p></div>`);
+        }
+        if (degraded === "verification_failed" || degraded === "timeout") {
+            notes.push(`<div class="ai-banner ai-banner-warn"><i data-lucide="alert-triangle"></i><p>Встигли перевірити не всі варіанти. Спробуй ще раз, якщо тут замало.</p></div>`);
+        }
+        // Showing WHAT was searched for is the mitigation for the real failure mode here:
+        // a working gif of the wrong exercise. The user has to be able to spot it.
+        const subtitle = response?.resolvedName ? `шукали як «${escapeHtml(response.resolvedName)}»` : "";
+        const head = mediaSuggestHeader(query, subtitle) + notes.join("");
+        if (!items.length) {
+            const nearbyBlock = nearby.length
+                ? `<p class="card-caption dup-footnote">Схожі за групою мʼязів:</p>`
+                  + `<div class="media-suggest-grid">${nearby.map(mediaSuggestCard).join("")}</div>`
+                : "";
+            return head
+                + `<div class="ai-empty"><i data-lucide="search"></i><p>Нічого перевіреного не знайшли. Встав посилання вручну або спробуй іншу назву.</p></div>`
+                + nearbyBlock + mediaSuggestFooter();
+        }
+        return head
+            + `<div class="media-suggest-grid">${items.map(mediaSuggestCard).join("")}</div>`
+            + mediaSuggestFooter();
+    }
+
+    function mediaSuggestCard(item) {
+        const isGif = item?.mediaType === "gif";
+        const url = imageUrl(item?.url);
+        if (!url) {
+            return "";
+        }
+        const label = item?.label || "";
+        return `<button class="media-suggest-card${isGif ? " is-gif" : ""}" type="button" data-media-url="${escapeHtml(url)}" data-media-type="${escapeHtml(item?.mediaType || "image")}">`
+            + `<span class="media-suggest-thumb"><img src="${escapeHtml(url)}" alt="${escapeHtml(label)}" referrerpolicy="no-referrer" loading="lazy" decoding="async"`
+            // Backstop, not the guarantee: the server HEAD-verified every URL, but a tile
+            // that still fails to paint removes itself rather than showing a broken frame.
+            + ` onerror="this.closest('.media-suggest-card')?.remove();"></span>`
+            + `<span class="pill-badge${isGif ? " mine" : " pending"}"><i data-lucide="${isGif ? "play" : "eye"}"></i>${isGif ? "GIF" : "Фото"}</span>`
+            + `<span class="media-suggest-label">${escapeHtml(label)}</span>`
+            + `<span class="media-suggest-meta">${escapeHtml(item?.sourceLabel || "")}</span>`
+            + `</button>`;
     }
 
     function openDrawer(html, opts = {}) {

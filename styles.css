@@ -8878,3 +8878,171 @@ html.compact-ui .chip {
         background-color: var(--color-surface-2);
     }
 }
+
+/* ============================================================================
+   Duplicate-exercise warning sheet (stacked over the custom-exercise form).
+   Everything structural is reused from the catalog card: .exercise-card,
+   .has-thumb, .exercise-card-body/-tags/-footer, .pill-badge, .chip, .tag-row.
+   Only the bits that do not exist yet are declared here.
+   ============================================================================ */
+
+.dup-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+/* The card is informational here, not a link (no data-action, no drawer), so the
+   catalog card's pointer cursor and hover lift would be a lie. */
+.dup-card {
+    cursor: default;
+}
+
+/* "same" is the stronger, more expensive claim, so it carries the same amber the
+   pending badge uses. "similar" stays neutral: a deliberate variation must not
+   look like a mistake the user is about to make. */
+.dup-card.is-same {
+    border-color: rgba(251, 191, 36, 0.34);
+    background: color-mix(in srgb, var(--color-warning) 5%, var(--color-surface-2));
+}
+
+@media (hover: hover) {
+    .dup-card:hover {
+        border-color: var(--color-border);
+        background: var(--color-surface-2);
+    }
+
+    .dup-card.is-same:hover {
+        border-color: rgba(251, 191, 36, 0.34);
+        background: color-mix(in srgb, var(--color-warning) 5%, var(--color-surface-2));
+    }
+}
+
+/* The catalog thumb is 200px tall; up to four stacked cards at that height would
+   push the decision buttons off the bottom of the sheet. */
+.dup-card .exercise-thumb {
+    height: 132px;
+}
+
+/* The AI's one-line explanation of why it flagged this exercise. */
+.dup-reason {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 2px 0 0;
+    color: var(--color-muted);
+    font-size: 11.5px;
+    line-height: 1.45;
+}
+
+.dup-reason i,
+.dup-reason svg {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: var(--color-accent);
+}
+
+/* Four cards easily outgrow the sheet's 88vh, and the three-way decision must never
+   be the thing the user has to scroll to find. The sheet layer is the scroll
+   container (.modal-layer is overflow:auto), so sticky pins this to its bottom edge. */
+.dup-sheet .confirm-choices {
+    position: sticky;
+    bottom: 0;
+    margin-top: 12px;
+    padding: 12px 0 2px;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+}
+
+.dup-footnote {
+    margin: 14px 0 0;
+    color: var(--color-faint);
+    font-size: 12px;
+}
+
+/* ============================================================================
+   Suggested exercise media (nested sheet off the custom-exercise media field)
+   ============================================================================ */
+
+.media-suggest-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.media-suggest-card {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+/* An animated demo is what the user actually asked for, so the gif tiles get the
+   accent edge and the static photos stay quiet. */
+.media-suggest-card.is-gif {
+    border-color: var(--color-accent-border);
+}
+
+@media (hover: hover) {
+    .media-suggest-card:hover {
+        border-color: var(--color-accent-border);
+        background: var(--color-accent-dim);
+        transform: translateY(-2px);
+    }
+}
+
+.media-suggest-card.is-skeleton {
+    cursor: default;
+    transform: none;
+}
+
+.media-suggest-thumb {
+    display: block;
+    height: 132px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: radial-gradient(circle at 50% 40%, var(--color-elevated), var(--color-surface-2));
+    line-height: 0;
+}
+
+/* contain, never cover - house rule: a demo gif is never cropped (see .exercise-thumb). */
+.media-suggest-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Skeleton stand-in for the thumb. Kept off .media-suggest-thumb so the sweep
+   gradient is not overwritten by the thumb's own background shorthand. */
+.media-suggest-skthumb {
+    height: 132px;
+}
+
+.media-suggest-card .pill-badge {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+}
+
+/* The matched name is not decoration: it is how the user spots a perfectly good
+   gif of the WRONG exercise before picking it. */
+.media-suggest-label {
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.media-suggest-meta {
+    color: var(--color-faint);
+    font-size: 11px;
+}
