@@ -5854,11 +5854,68 @@ import {
 
     function openWorkout(workoutId) {
         const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
+        if (!workoutItem) {
+            return;
+        }
         const owner = userById(workoutItem.userId);
         const readonly = !canManage(workoutItem);
         const totalSets = workoutSetCount(workoutItem);
         const cardioMinutes = workoutCardioMinutes(workoutItem);
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${duration(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;"><button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" style="margin-top:14px;">${(workoutItem.exercises || []).length ? workoutItem.exercises.map(workoutDetailExercise).join("") : emptyInline(readonly ? "Деталі недоступні" : "Вправ ще немає", readonly ? "Повний розбір підходів доступний лише власнику тренування." : "Це порожнє або кардіо-тренування.")}</div>`, { fullscreen: true });
+        // A peer's session, and anything past the boot window, arrives as a summary: the
+        // aggregate chips are populated but `exercises` is absent ENTIRELY, which is how a
+        // summary is told apart from a genuinely empty session (that one has []). Without
+        // this the drawer claimed "Вправ ще немає" for a workout whose own chip said 6.
+        const needsDetail = !Array.isArray(workoutItem.exercises) && !workoutItem.detailUnavailable;
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;"><button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" data-workout-detail="${workoutItem.id}" style="margin-top:14px;">${workoutDetailBody(workoutItem, needsDetail)}</div>`, { fullscreen: true });
+        if (needsDetail) {
+            hydrateWorkoutDetail(workoutId);
+        }
+    }
+
+    function workoutDetailBody(workoutItem, needsDetail) {
+        if (needsDetail) {
+            return emptyInline("Завантажуємо підходи", "Це тренування підвантажується з сервера.");
+        }
+        if ((workoutItem.exercises || []).length) {
+            return workoutItem.exercises.map(workoutDetailExercise).join("");
+        }
+        // Only say "not available" when the server actually refused. A hydrated workout
+        // with no exercises really is an empty or cardio-only session, whoever owns it.
+        if (workoutItem.detailUnavailable) {
+            return emptyInline("Деталі недоступні", "Повний розбір підходів доступний лише власнику тренування.");
+        }
+        return emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.");
+    }
+
+    // Pulls the full row for a summary and repaints the drawer in place. GET /workouts/:id
+    // serves a peer's COMPLETED session (and anything at all to an admin); for a peer's
+    // unfinished one it 404s by design, which is what detailUnavailable records so we do
+    // not refetch on every open.
+    async function hydrateWorkoutDetail(workoutId) {
+        const stillOpen = () => Boolean(element("drawerLayer")?.querySelector(`[data-workout-detail="${workoutId}"]`));
+        if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+            return;
+        }
+        let full = null;
+        try {
+            full = await storage.apiClient.fetchWorkout(workoutId);
+        } catch (error) {
+            full = null;
+        }
+        const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
+        if (!workoutItem) {
+            return;
+        }
+        if (full && Array.isArray(full.exercises)) {
+            Object.assign(workoutItem, full);
+        } else {
+            workoutItem.detailUnavailable = true;
+        }
+        // Repaint only if the user is still looking at this workout: the fetch can outlive
+        // the drawer, and openWorkout on a stale id would yank them back into it.
+        if (stillOpen()) {
+            openWorkout(workoutId);
+        }
     }
 
     // Compact, scannable exercise block for the workout-detail drawer: a small
