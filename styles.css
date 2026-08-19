@@ -1733,7 +1733,7 @@ body.is-reordering .we-drag-handle {
    background + z-index because the set rows scroll underneath it. */
 .last-results {
     position: sticky;
-    top: calc(var(--topbar-h, 64px) + 6px);
+    top: calc(var(--topbar-h, 64px) + var(--wab-h, 0px) + 2px);
     z-index: 4;
     margin: 12px 0 4px;
     padding: 10px 12px;
@@ -1751,7 +1751,7 @@ body.is-reordering .we-drag-handle {
 }
 
 body.is-impersonating .last-results {
-    top: calc(var(--imp-offset, 48px) + var(--topbar-h, 64px) + 6px);
+    top: calc(var(--imp-offset, 48px) + var(--topbar-h, 64px) + var(--wab-h, 0px) + 2px);
 }
 
 .last-results-label {

@@ -4654,6 +4654,11 @@ import {
         if (topbar) {
             document.documentElement.style.setProperty("--topbar-h", `${topbar.offsetHeight}px`);
         }
+        // The workout action bar is sticky too and parks directly under the topbar, so
+        // anything else that sticks (the «Минулого разу» pill) has to start below it.
+        // Measured, not hardcoded: on a narrow phone the bar wraps to two rows.
+        const actionBar = document.querySelector(".workout-actionbar");
+        document.documentElement.style.setProperty("--wab-h", actionBar ? `${actionBar.offsetHeight}px` : "0px");
     }
 
     function openQuickAction() {
