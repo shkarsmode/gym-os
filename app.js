@@ -9631,32 +9631,6 @@ import {
             const layer = element("modalLayer2");
             let settled = false;
             const finish = (value) => {
-    // Small text prompt built on the same overlay plumbing as confirmDialog.
-    // Resolves the edited text, or null when dismissed.
-    function promptDialog(title, initialValue = "") {
-        return new Promise((resolve) => {
-            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><div class="field" style="margin-top:8px;"><textarea id="promptDialogInput" rows="3">${escapeHtml(initialValue)}</textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" id="promptCancelBtn">Скасувати</button><button class="button button-primary" type="button" id="promptOkBtn">Зберегти</button></div></div>`;
-            const stacked = !element("modalBackdrop").classList.contains("hidden");
-            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
-            let layer;
-            if (stacked) {
-                openSheet(html);
-                layer = element("modalLayer2");
-            } else {
-                clearTimeout(overlayCloseTimer);
-                const drawer = element("drawerLayer");
-                drawer.classList.add("hidden");
-                drawer.classList.remove("visible");
-                drawer.innerHTML = "";
-                layer = element("modalLayer");
-                layer.classList.remove("modal-fullscreen");
-                layer.innerHTML = html;
-                iconsIn(layer);
-                lockBackgroundScroll();
-                revealOverlay(layer);
-            }
-            let settled = false;
-            const finish = (result) => {
                 if (settled) {
                     return;
                 }
@@ -9688,6 +9662,54 @@ import {
             layer.querySelectorAll("[data-dup-use]").forEach((button) => {
                 button.addEventListener("click", () => finish(`use:${button.dataset.dupUse}`));
             });
+        });
+    }
+
+    // Small text prompt built on the same overlay plumbing as confirmDialog.
+    // Resolves the edited text, or null when dismissed.
+    function promptDialog(title, initialValue = "") {
+        return new Promise((resolve) => {
+            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><div class="field" style="margin-top:8px;"><textarea id="promptDialogInput" rows="3">${escapeHtml(initialValue)}</textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" id="promptCancelBtn">Скасувати</button><button class="button button-primary" type="button" id="promptOkBtn">Зберегти</button></div></div>`;
+            const stacked = !element("modalBackdrop").classList.contains("hidden");
+            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
+            let layer;
+            if (stacked) {
+                openSheet(html);
+                layer = element("modalLayer2");
+            } else {
+                clearTimeout(overlayCloseTimer);
+                const drawer = element("drawerLayer");
+                drawer.classList.add("hidden");
+                drawer.classList.remove("visible");
+                drawer.innerHTML = "";
+                layer = element("modalLayer");
+                layer.classList.remove("modal-fullscreen");
+                layer.innerHTML = html;
+                iconsIn(layer);
+                lockBackgroundScroll();
+                revealOverlay(layer);
+            }
+            let settled = false;
+            const finish = (result) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                backdrop.removeEventListener("click", onBackdrop);
+                if (stacked) {
+                    closeSheet();
+                } else {
+                    closeOverlay();
+                }
+                resolve(result);
+            };
+            const onBackdrop = () => finish(null);
+            backdrop.addEventListener("click", onBackdrop);
+            layer.querySelector("#promptOkBtn").addEventListener("click", () => finish(layer.querySelector("#promptDialogInput").value));
+            layer.querySelector("#promptCancelBtn").addEventListener("click", () => finish(null));
+            const input = layer.querySelector("#promptDialogInput");
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
         });
     }
 
@@ -9905,24 +9927,6 @@ import {
             + `<span class="media-suggest-label">${escapeHtml(label)}</span>`
             + `<span class="media-suggest-meta">${escapeHtml(item?.sourceLabel || "")}</span>`
             + `</button>`;
-    }
-
-                backdrop.removeEventListener("click", onBackdrop);
-                if (stacked) {
-                    closeSheet();
-                } else {
-                    closeOverlay();
-                }
-                resolve(result);
-            };
-            const onBackdrop = () => finish(null);
-            backdrop.addEventListener("click", onBackdrop);
-            layer.querySelector("#promptOkBtn").addEventListener("click", () => finish(layer.querySelector("#promptDialogInput").value));
-            layer.querySelector("#promptCancelBtn").addEventListener("click", () => finish(null));
-            const input = layer.querySelector("#promptDialogInput");
-            input.focus();
-            input.setSelectionRange(input.value.length, input.value.length);
-        });
     }
 
     function openDrawer(html, opts = {}) {
