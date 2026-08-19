@@ -8,7 +8,7 @@
 // their URLs are immutable: a new deploy = a new filename. Those are served
 // cache-first (instant on repeat visits); everything else stays network-first so
 // deploys (index.html) are picked up immediately. Offline still works either way.
-const CACHE = "gymos-shell-v4";
+const CACHE = "gymos-shell-v5";
 const SHELL = [
     "/",
     "/index.html",
@@ -80,4 +80,55 @@ self.addEventListener("fetch", (event) => {
                 return Response.error();
             }))
     );
+});
+
+// ---- Web Push -------------------------------------------------------------
+// The server sends a JSON body ({title, body, url, type}); anything unparseable
+// still shows a generic notification rather than nothing, because a push that
+// arrives and renders nothing looks like a broken app.
+self.addEventListener("push", (event) => {
+    let payload = {};
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch (error) {
+        payload = { body: event.data ? event.data.text() : "" };
+    }
+    const title = payload.title || "GymOS";
+    const options = {
+        body: payload.body || "Нова активність у стрічці",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        // Same tag per category collapses a burst of likes into one line instead of
+        // stacking twenty notifications on the lock screen.
+        tag: payload.type || "gymos",
+        renotify: false,
+        data: { url: payload.url || "#/feed" }
+    };
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Focus an existing tab when there is one — opening a second copy of a PWA is
+// disorienting — and only fall back to opening a window.
+self.addEventListener("notificationclick", (event) => {
+    event.notification.close();
+    const target = (event.notification.data && event.notification.data.url) || "#/feed";
+    event.waitUntil((async () => {
+        const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        for (const client of clientList) {
+            if ("focus" in client) {
+                await client.focus();
+                if ("navigate" in client) {
+                    try {
+                        await client.navigate(`/${target}`);
+                    } catch (error) {
+                        // cross-origin or unsupported — the focused tab is enough
+                    }
+                }
+                return;
+            }
+        }
+        if (self.clients.openWindow) {
+            await self.clients.openWindow(`/${target}`);
+        }
+    })());
 });

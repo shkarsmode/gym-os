@@ -9,6 +9,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 // evaluateAchievements is no longer called here — the kernel owns that. ACHIEVEMENTS
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
+import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES } from "./lib/feed-ui.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
 // See lib/scoring.js for the two order/timezone hazards documented at the top.
@@ -321,12 +322,77 @@ import {
             return this.request(`/workouts/${id}`, { method: "GET" });
         }
 
-        coachAnalyze(mode) {
-            return this.request("/ai/coach/analyze", { method: "POST", body: JSON.stringify({ mode }) });
+        // ---- Стрічка (feed, threads, notifications, reports, push) ----
+        fetchFeed(scope, cursor) {
+            const params = new URLSearchParams({ scope: scope || "team" });
+            if (cursor) {
+                params.set("cursor", cursor);
+            }
+            return this.request(`/feed?${params}`, { method: "GET" });
         }
 
-        coachChat(message, history) {
-            return this.request("/ai/coach/chat", { method: "POST", body: JSON.stringify({ message, history }) });
+        fetchPost(type, id) {
+            return this.request(`/feed/${type}/${id}`, { method: "GET" });
+        }
+
+        toggleFeedReaction(type, id) {
+            return this.request(`/feed/${type}/${id}/react`, { method: "POST" });
+        }
+
+        addFeedComment(type, id, payload) {
+            return this.request(`/feed/${type}/${id}/comments`, { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        editFeedComment(id, body) {
+            return this.request(`/feed/comments/${id}/update`, { method: "POST", body: JSON.stringify({ body }) });
+        }
+
+        deleteFeedComment(id) {
+            return this.request(`/feed/comments/${id}/delete`, { method: "POST" });
+        }
+
+        reportContent(payload) {
+            return this.request("/feed/report", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        fetchReports() {
+            return this.request("/feed/reports", { method: "GET" });
+        }
+
+        fetchReportCount() {
+            return this.request("/feed/reports/count", { method: "GET" });
+        }
+
+        resolveReport(id, action) {
+            return this.request(`/feed/reports/${id}/resolve`, { method: "POST", body: JSON.stringify({ action }) });
+        }
+
+        fetchNotifications(cursor) {
+            return this.request(`/feed/notifications${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { method: "GET" });
+        }
+
+        fetchUnreadCount() {
+            return this.request("/feed/notifications/unread", { method: "GET" });
+        }
+
+        markNotificationsRead(ids) {
+            return this.request("/feed/notifications/read", { method: "POST", body: JSON.stringify({ ids }) });
+        }
+
+        fetchPushKey() {
+            return this.request("/feed/push/key", { method: "GET" });
+        }
+
+        pushSubscribe(payload) {
+            return this.request("/feed/push/subscribe", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        pushUnsubscribe(endpoint) {
+            return this.request("/feed/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) });
+        }
+
+        syncAchievements(items) {
+            return this.request("/feed/achievements/sync", { method: "POST", body: JSON.stringify({ items }) });
         }
 
         impersonate(userId) {
@@ -1153,6 +1219,8 @@ import {
         renderShell();
         handleRoute();
         preloadAvatars();
+        refreshUnreadCount();
+        setTimeout(syncAchievementsToFeed, 2500);
         requestAnimationFrame(maybeShowWhatsNew);
         // Toast achievements unlocked since the last visit (e.g. an idea marked
         // "done" while away); the very first run seeds silently.
@@ -1530,26 +1598,42 @@ import {
     // Desktop sidebar: a curated, ordered subset (exercises / stats / changelog /
     // settings intentionally live only in the Панель «Розділи» hub or the profile
     // buttons, to keep the rail short). Order mirrors the «Розділи» hub.
-    const SIDEBAR_ORDER = ["dashboard", "workout", "calendar", "coach", "levels", "users", "rankings", "feedback", "subscription", "moderation", "admin", "aistats", "profile"];
+    // Grouped desktop rail. A flat 12-item list reads as one undifferentiated wall;
+    // splitting it into "what I do now" / "the team" / "admin" makes the shape of the
+    // app visible at a glance. Groups with no visible items disappear entirely.
+    const SIDEBAR_GROUPS = [
+        { label: "", items: ["dashboard", "workout", "calendar", "feed", "exercises", "stats"] },
+        { label: "Спільнота", items: ["users", "rankings", "levels", "feedback"] },
+        { label: "Адмін", items: ["moderation", "admin", "aistats"] },
+        { label: "", items: ["subscription", "profile"] }
+    ];
+
+    function sectionVisible(id) {
+        if (id === "admin" || id === "moderation" || id === "aistats") {
+            return isAdmin();
+        }
+        if (id === "subscription") {
+            return !hasUnlimited();
+        }
+        return true;
+    }
+
+    function sidebarNavGroups() {
+        return SIDEBAR_GROUPS
+            .map((group) => ({
+                label: group.label,
+                items: group.items.filter(sectionVisible).map((id) => sectionItems.find((item) => item.id === id)).filter(Boolean)
+            }))
+            .filter((group) => group.items.length);
+    }
 
     function sidebarNavItems() {
-        return SIDEBAR_ORDER
-            .map((id) => sectionItems.find((item) => item.id === id))
-            .filter(Boolean)
-            .filter((item) => {
-                if (item.id === "admin" || item.id === "moderation" || item.id === "aistats") {
-                    return isAdmin();
-                }
-                if (item.id === "subscription") {
-                    return !hasUnlimited();
-                }
-                return true;
-            });
+        return sidebarNavGroups().flatMap((group) => group.items);
     }
 
     function renderShell() {
         renderImpersonationBar();
-        renderNavigation("sidebarNavigation", sidebarNavItems());
+        renderNavigation("sidebarNavigation", sidebarNavGroups());
         renderMobileNavigation();
         renderCurrentUserButton();
         renderSidebarProfile();
@@ -1561,7 +1645,7 @@ import {
     function renderMobileNavigation() {
         const container = element("mobileNavigation");
         const activeWorkout = activeWorkoutFor(currentUser().id);
-        const order = ["dashboard", "calendar", "workout", "stats", "profile"];
+        const order = ["dashboard", "calendar", "workout", "feed", "profile"];
         const mobileLabels = { workout: "Тренування" };
         container.innerHTML = order.map((id) => {
             const item = sectionItems.find((section) => section.id === id);
@@ -1708,12 +1792,18 @@ import {
         const activeWorkout = activeWorkoutFor(currentUser().id);
         const newFb = isAdmin() ? newFeedbackCount() : 0;
         const container = element(containerId);
-        container.innerHTML = items.map((item) => {
+        // Accepts either a flat item list or [{label, items}] groups.
+        const groups = Array.isArray(items) && items.length && items[0] && Array.isArray(items[0].items)
+            ? items
+            : [{ label: "", items: items || [] }];
+        const renderItem = (item) => {
             let badge = "";
             if (item.id === "workout" && activeWorkout) {
                 badge = `<strong class="nav-badge">Активне</strong>`;
             } else if (item.id === "feedback" && newFb > 0) {
                 badge = `<strong class="nav-badge">${newFb}</strong>`;
+            } else if (item.id === "feed" && feedState.notifications.unread > 0) {
+                badge = `<strong class="nav-badge">${feedState.notifications.unread > 99 ? "99+" : feedState.notifications.unread}</strong>`;
             } else if (item.id === "moderation" && isAdmin() && pendingExercises().length > 0) {
                 badge = `<strong class="nav-badge">${pendingExercises().length}</strong>`;
             }
@@ -1722,7 +1812,8 @@ import {
                 <span><i data-lucide="${item.icon}"></i><span class="nav-label">${escapeHtml(item.title)}</span></span>
                 ${badge}
             </button>`;
-        }).join("");
+        };
+        container.innerHTML = groups.map((group) => `${group.label ? `<p class="nav-group-label">${escapeHtml(group.label)}</p>` : ""}${group.items.map(renderItem).join("")}`).join("");
     }
 
     function renderCurrentUserButton() {
@@ -1786,7 +1877,11 @@ import {
             state.section = "dashboard";
         }
         renderShell();
-        const item = sectionItems.find((section) => section.id === state.section) || sectionItems[0];
+        // Detail routes ("post", "user") are reachable but are not nav entries, so they
+        // have no sectionItems row — without this they would inherit "Панель".
+        const detailTitles = { post: "Пост", user: "Профіль учасника" };
+        const item = sectionItems.find((section) => section.id === state.section)
+            || (detailTitles[state.section] ? { id: state.section, title: detailTitles[state.section], icon: "file-text" } : sectionItems[0]);
         element("sectionEyebrow").textContent = "Gym Progress OS";
         if (state.section === "user") {
             const viewedUser = userById(state.viewUserId);
@@ -1794,7 +1889,7 @@ import {
         } else {
             element("sectionTitle").textContent = item.title;
         }
-        const renderers = { dashboard, workout, calendar, exercises, stats, coach: coachSection, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
+        const renderers = { dashboard, workout, calendar, exercises, stats, feed, notifications, post: postSection, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         (renderers[state.section] || dashboard)();
         iconsIn(element("pageContent")); // shell icons already converted in renderShell()
         // Subtle enter animation only when the section actually changes (not on
@@ -1909,7 +2004,7 @@ import {
                 aiBlock = `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>`;
             }
         }
-        return `${aiBlock}${coachCta()}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}${aiInlineButton}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
+        return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}${aiInlineButton}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
     }
 
     // ===== AI-тренування (PRO + admin) ==========================================
@@ -3208,7 +3303,7 @@ import {
         const catalogCard = `<section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button></div></section>`;
         const aboutCard = `<section class="card span-6"><h2>Про застосунок</h2><div class="list-row" style="margin-top:6px;"><div><div class="profile-name">GymOS</div><div class="profile-meta">Версія v${APP_VERSION}</div></div></div></section>`;
         const logoutCard = `<section class="card span-12 settings-logout"><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти з акаунта</button></section>`;
-        content(`<div class="grid dashboard-grid">${appearanceCard}${workoutDefaultsCard}${exportCard}${catalogCard}${aboutCard}${logoutCard}</div>`);
+        content(`<div class="grid dashboard-grid">${appearanceCard}${workoutDefaultsCard}${pushSettingsSection()}${exportCard}${catalogCard}${aboutCard}${logoutCard}</div>`);
     }
 
     function changelog() {
@@ -3386,13 +3481,6 @@ import {
         if (collapseButton) {
             collapseButton.addEventListener("click", toggleSidebar);
         }
-        // Enter sends, Shift+Enter makes a new line — chat muscle memory.
-        document.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" && !event.shiftKey && event.target && event.target.id === "coachInput") {
-                event.preventDefault();
-                sendCoachMessage();
-            }
-        });
         setupTooltips();
         setupPullToRefresh();
         setupExerciseReorder();
@@ -4045,11 +4133,21 @@ import {
             "start-existing-workout": () => startExistingWorkout(actionElement.dataset.workoutId),
             "apply-weekday-workout": () => applyWeekdayWorkout(actionElement.dataset.workoutId),
             "copy-workout-start": () => copyWorkoutAndStart(actionElement.dataset.workoutId),
-            "coach-analyze": () => startCoach(actionElement.dataset.mode),
-            "coach-send": () => sendCoachMessage(),
-            "coach-ask": () => sendCoachMessage(actionElement.dataset.text),
-            "coach-clear": clearCoachThread,
-            "save-coach-onboarding": saveCoachOnboarding,
+            "feed-scope": () => setFeedScope(actionElement.dataset.scope),
+            "feed-retry": () => loadFeed(feedState.scope, false),
+            "feed-more": () => loadFeed(feedState.scope, true),
+            "feed-react": () => toggleFeedReaction(actionElement.dataset.type, actionElement.dataset.id, actionElement),
+            "open-post": () => openPost(actionElement.dataset.type, actionElement.dataset.id),
+            "post-comment": submitComment,
+            "reply-comment": () => replyToComment(actionElement.dataset.commentId, actionElement.dataset.name),
+            "edit-comment": () => editCommentPrompt(actionElement.dataset.commentId),
+            "delete-comment": () => removeComment(actionElement.dataset.commentId),
+            "open-report": () => openReportModal(actionElement.dataset.type, actionElement.dataset.id),
+            "submit-report": () => submitReport(actionElement.dataset.type, actionElement.dataset.id),
+            "resolve-report": () => resolveReport(actionElement.dataset.reportId, actionElement.dataset.resolve),
+            "mark-all-read": markAllNotificationsRead,
+            "enable-push": enablePush,
+            "disable-push": disablePush,
             "impersonate-user": () => impersonateUser(actionElement.dataset.userId),
             "stop-impersonation": stopImpersonation,
             "delete-workout": () => deleteWorkout(actionElement.dataset.workoutId),
@@ -4204,6 +4302,10 @@ import {
 
             if (actionElement.dataset.action === "set-feedback-status") {
                 await updateFeedbackStatus(actionElement.dataset.feedbackId, actionElement.value);
+            }
+
+            if (actionElement.dataset.action === "push-toggle") {
+                togglePushCategory(actionElement.dataset.key, actionElement.checked);
             }
 
             if (actionElement.dataset.action === "set-pref-select") {
@@ -4475,15 +4577,16 @@ import {
         }
     }
 
-    const routableSections = new Set([...sectionItems.map((item) => item.id), "user"]);
+    const routableSections = new Set([...sectionItems.map((item) => item.id), "user", "post"]);
 
     function parseRoute() {
         const raw = String(window.location.hash || "").replace(/^#\/?/, "");
-        const [section, param] = raw.split("/");
+        const [section, ...rest] = raw.split("/");
+        const params = rest.filter(Boolean).map((part) => decodeURIComponent(part));
         if (section && routableSections.has(section)) {
-            return { section, param: param ? decodeURIComponent(param) : null };
+            return { section, param: params[0] || null, params };
         }
-        return { section: "dashboard", param: null };
+        return { section: "dashboard", param: null, params: [] };
     }
 
     function handleRoute() {
@@ -4497,6 +4600,10 @@ import {
         }
         if (section === "user") {
             state.viewUserId = param || null;
+        }
+        if (section === "post") {
+            const { params } = parseRoute();
+            state.postTarget = params.length >= 2 ? { type: params[0], id: params[1] } : null;
         }
         closeOverlay();
         renderSection();
@@ -6006,355 +6113,743 @@ import {
         }
     }
 
-    // ===== AI-тренер (аналіз + чат) =============================================
-    // The server does the analysis; this side owns the conversation. The thread lives
-    // in localStorage per user, so a reload keeps the discussion but nothing personal
-    // is stored server-side.
-    const coachState = {
-        thread: [],
-        status: "idle", // idle | loading
+
+    // ===== Стрічка: feed, threads, notifications, reports, push ================
+    // The feed replaces the old "Усі" history tab and the team screen's activity
+    // role. Everything is paged with the server's opaque cursors, and every
+    // interaction is optimistic — a like or a comment lands instantly and reconciles
+    // with the server's answer, because waiting a round-trip to see your own tap is
+    // what makes a social surface feel dead.
+    const feedState = {
+        scope: "team",
+        items: [],
+        cursor: null,
+        loading: false,
+        loadingMore: false,
         error: null,
-        meta: null,
-        loaded: false
+        loaded: false,
+        post: null,
+        postLoading: false,
+        postError: null,
+        notifications: { items: [], unread: 0, cursor: null, loading: false, loaded: false },
+        reports: { items: [], loading: false, loaded: false },
+        pushKey: null
     };
 
-    // Proactive entry point (P3): right after a session it offers to break THAT
-    // workout down; otherwise, once a week, it offers the weekly digest. Silent when
-    // there is nothing to say, so it never becomes noise.
-    function coachCta() {
-        const me = currentUser();
-        const own = state.database.workouts.filter((item) => item.userId === me.id && item.status === "completed");
-        if (!own.length) {
-            return "";
-        }
-        const today = dateInput(new Date());
-        const finishedToday = own.some((item) => String(item.date).slice(0, 10) === today);
-        const lastRun = Number(storage.readSetting(`coach-last-${me.id}`) || 0);
-        const weekPassed = !lastRun || Date.now() - lastRun > 7 * 24 * 60 * 60 * 1000;
-        if (!finishedToday && !weekPassed) {
-            return "";
-        }
-        const mode = finishedToday ? "workout" : "weekly";
-        const title = finishedToday ? "Розібрати сьогоднішнє тренування?" : "Тиждень позаду — зробити підсумок?";
-        const caption = finishedToday
-            ? "AI-тренер порівняє його з твоєю нормою й скаже, що ставити наступного разу."
-            : "Подивимось, що змінилось за тиждень, і що варто підправити.";
-        return `<section class="card coach-cta"><span class="coach-badge"><i data-lucide="brain"></i></span><div class="coach-cta-text"><strong>${title}</strong><p class="card-caption">${caption}</p></div><button class="button button-primary compact" type="button" data-action="coach-analyze" data-mode="${mode}"><i data-lucide="sparkles"></i>Розібрати</button></section>`;
+    function feedApiReady() {
+        return storage.mode === "api" && storage.apiClient.hasBaseUrl();
     }
 
-    function coachThreadKey() {
-        return `coach-thread-${currentUser().id}`;
-    }
-
-    function loadCoachThread() {
-        if (coachState.loaded) {
+    // ---- Feed list --------------------------------------------------------
+    async function loadFeed(scope, append) {
+        if (!feedApiReady()) {
+            feedState.error = "Стрічка доступна лише онлайн.";
+            feedState.loaded = true;
+            renderFeedList();
             return;
         }
-        coachState.loaded = true;
-        try {
-            const raw = storage.readSetting(coachThreadKey());
-            const parsed = raw ? JSON.parse(raw) : [];
-            coachState.thread = Array.isArray(parsed) ? parsed.slice(-40) : [];
-        } catch (error) {
-            coachState.thread = [];
-        }
-    }
-
-    function saveCoachThread() {
-        try {
-            storage.writeSetting(coachThreadKey(), JSON.stringify(coachState.thread.slice(-40)));
-        } catch (error) {
-            // a full quota must never break the chat itself
-        }
-    }
-
-    // The coach reasons about recovery and strength standards, both of which need
-    // body data. Ask once, up front, instead of silently giving worse advice.
-    function coachOnboardingMissing() {
-        const user = currentUser();
-        const missing = [];
-        if (!Number(user.bodyweight)) {
-            missing.push("bodyweight");
-        }
-        if (!Number(user.height)) {
-            missing.push("height");
-        }
-        if (!Number(user.birthYear)) {
-            missing.push("birthYear");
-        }
-        return missing;
-    }
-
-    function openCoachOnboarding(nextAction) {
-        const user = currentUser();
-        const thisYear = new Date().getFullYear();
-        coachState.pendingAction = nextAction || null;
-        openModal(`<div class="modal-header"><div><p class="eyebrow">AI-тренер</p><h2>Кілька цифр — і почнемо</h2><p class="card-caption">Вага, зріст і рік народження потрібні, щоб тренер рахував навантаження, відновлення та нормативи саме під тебе. Це займе 10 секунд.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>
-            <div class="field-grid three">
-                <div class="field"><label>Вага, кг</label><input id="onbBodyweight" type="number" inputmode="decimal" step="0.1" min="20" max="300" value="${Number(user.bodyweight) || ""}" placeholder="82"></div>
-                <div class="field"><label>Зріст, см</label><input id="onbHeight" type="number" inputmode="numeric" step="1" min="80" max="240" value="${Number(user.height) || ""}" placeholder="180"></div>
-                <div class="field"><label>Рік народження</label><input id="onbBirthYear" type="number" inputmode="numeric" step="1" min="1920" max="${thisYear}" value="${Number(user.birthYear) || ""}" placeholder="1998"></div>
-            </div>
-            <p class="input-hint" style="margin-top:10px;"><i data-lucide="lock"></i>Дані видно лише тобі — вони не показуються в команді.</p>
-            <div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Пізніше</button><button class="button button-primary" type="button" data-action="save-coach-onboarding"><i data-lucide="check"></i>Зберегти й почати</button></div>`);
-    }
-
-    async function saveCoachOnboarding() {
-        const bodyweight = numberValue("onbBodyweight", 0);
-        const height = Math.round(numberValue("onbHeight", 0));
-        const birthYear = Math.round(numberValue("onbBirthYear", 0));
-        const thisYear = new Date().getFullYear();
-        if (!(bodyweight >= 20 && bodyweight <= 300)) {
-            toast("Перевір вагу", "Вкажи вагу від 20 до 300 кг.");
-            return;
-        }
-        if (!(height >= 80 && height <= 240)) {
-            toast("Перевір зріст", "Вкажи зріст від 80 до 240 см.");
-            return;
-        }
-        if (!(birthYear >= 1920 && birthYear <= thisYear)) {
-            toast("Перевір рік", `Вкажи рік народження між 1920 і ${thisYear}.`);
-            return;
-        }
-        const user = currentUser();
-        user.bodyweight = round(bodyweight, 1);
-        user.height = height;
-        user.birthYear = birthYear;
-        user.updatedAt = new Date().toISOString();
-        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
-            try {
-                await storage.apiClient.updateProfile({ bodyweight: user.bodyweight, height, birthYear });
-            } catch (error) {
-                handleUserFacingError(error, "save-coach-onboarding");
-                return;
-            }
+        if (append) {
+            feedState.loadingMore = true;
         } else {
-            await persist({ silent: true });
+            feedState.loading = true;
+            feedState.error = null;
         }
-        closeOverlay();
+        renderFeedList();
+        try {
+            const answer = await storage.apiClient.fetchFeed(scope, append ? feedState.cursor : null);
+            feedState.items = append ? [...feedState.items, ...(answer.items || [])] : (answer.items || []);
+            feedState.cursor = answer.nextCursor || null;
+            feedState.error = null;
+        } catch (error) {
+            feedState.error = friendlyError(error);
+        } finally {
+            feedState.loading = false;
+            feedState.loadingMore = false;
+            feedState.loaded = true;
+            renderFeedList();
+        }
+    }
+
+    function setFeedScope(scope) {
+        if (feedState.scope === scope) {
+            return;
+        }
+        feedState.scope = scope;
+        feedState.items = [];
+        feedState.cursor = null;
+        feedState.loaded = false;
         renderSection();
-        const next = coachState.pendingAction;
-        coachState.pendingAction = null;
-        if (next === "analyze") {
-            runCoachAnalyze("full");
-        }
+        loadFeed(scope, false);
     }
 
-    // Every coach entry point funnels through here so onboarding can never be skipped.
-    function startCoach(mode) {
-        if (coachOnboardingMissing().length) {
-            openCoachOnboarding("analyze");
-            return;
-        }
-        // Any analysis satisfies the weekly nudge and takes the user to the coach.
-        storage.writeSetting(`coach-last-${currentUser().id}`, String(Date.now()));
-        if (state.section !== "coach") {
-            navigate("coach");
-        }
-        runCoachAnalyze(mode || "full");
-    }
-
-    async function runCoachAnalyze(mode) {
-        if (coachState.status === "loading") {
-            return;
-        }
-        loadCoachThread();
-        coachState.status = "loading";
-        coachState.error = null;
-        coachState.thread.push({ role: "user", text: coachModeLabel(mode), kind: "action" });
-        renderCoachThread();
-        try {
-            const answer = await storage.apiClient.coachAnalyze(mode || "full");
-            coachState.meta = answer.meta || null;
-            coachState.thread.push({ role: "coach", summary: answer.summary, blocks: answer.blocks || [], followUps: answer.followUps || [] });
-        } catch (error) {
-            coachState.error = coachError(error);
-            coachState.thread.pop();
-        } finally {
-            coachState.status = "idle";
-            saveCoachThread();
-            renderCoachThread();
-        }
-    }
-
-    async function sendCoachMessage(preset) {
-        const input = element("coachInput");
-        const text = String(preset || (input ? input.value : "")).trim();
-        if (!text || coachState.status === "loading") {
-            return;
-        }
-        if (coachOnboardingMissing().length) {
-            openCoachOnboarding(null);
-            return;
-        }
-        loadCoachThread();
-        if (input) {
-            input.value = "";
-        }
-        coachState.status = "loading";
-        coachState.error = null;
-        coachState.thread.push({ role: "user", text });
-        renderCoachThread();
-        // Only the plain-text tail is replayed — blocks are rendering data, not context.
-        const history = coachState.thread
-            .filter((entry) => entry.role === "user" || entry.summary)
-            .slice(-10)
-            .map((entry) => ({ role: entry.role === "coach" ? "coach" : "user", text: entry.role === "coach" ? String(entry.summary || "") : String(entry.text || "") }))
-            .filter((entry) => entry.text);
-        try {
-            const answer = await storage.apiClient.coachChat(text, history.slice(0, -1));
-            coachState.meta = answer.meta || null;
-            coachState.thread.push({ role: "coach", summary: answer.summary, blocks: answer.blocks || [], followUps: answer.followUps || [] });
-        } catch (error) {
-            coachState.error = coachError(error);
-        } finally {
-            coachState.status = "idle";
-            saveCoachThread();
-            renderCoachThread();
-        }
-    }
-
-    function coachError(error) {
-        const code = error?.payload?.code || "";
-        const messages = {
-            AI_FORBIDDEN: "AI-тренер доступний у тарифі PRO.",
-            AI_DAILY_LIMIT: "Ліміт AI-тренера на сьогодні вичерпано. Спробуй завтра.",
-            GEMINI_NOT_CONFIGURED: "AI-тренер поки не налаштований.",
-            EMPTY_RESULT: "Ще замало даних — заверши хоча б одне тренування, і я зможу його розібрати.",
-            TIMEOUT: "Аналіз тривав задовго. Спробуй ще раз.",
-            RATE_LIMIT: "Забагато запитів поспіль. Дай пару секунд."
-        };
-        return messages[code] || friendlyError(error);
-    }
-
-    function coachModeLabel(mode) {
-        return ({ full: "Проаналізуй мої тренування", workout: "Розбери моє останнє тренування", weekly: "Підсумок за тиждень" })[mode] || "Проаналізуй мої тренування";
-    }
-
-    function clearCoachThread() {
-        coachState.thread = [];
-        coachState.error = null;
-        saveCoachThread();
-        renderCoachThread();
-    }
-
-    function coachSection() {
-        loadCoachThread();
-        const quota = coachState.meta && coachState.meta.dailyRemaining !== null && coachState.meta.dailyRemaining !== undefined
-            ? `<span class="chip">Залишилось ${coachState.meta.dailyRemaining} з ${coachState.meta.dailyLimit}</span>`
-            : hasUnlimited() ? `<span class="chip"><i data-lucide="infinity"></i>Без ліміту</span>` : "";
-        const starters = [
-            ["full", "Повний аналіз", "sparkles"],
-            ["workout", "Останнє тренування", "dumbbell"],
-            ["weekly", "Підсумок тижня", "calendar-check"]
-        ].map(([mode, label, icon]) => `<button class="button ${mode === "full" ? "button-primary" : "button-secondary"} compact" type="button" data-action="coach-analyze" data-mode="${mode}"><i data-lucide="${icon}"></i>${label}</button>`).join("");
-
+    function feed() {
+        const unread = feedState.notifications.unread;
         content(`<div class="grid dashboard-grid">
-            <section class="card span-12 coach-head">
-                <div class="card-header">
-                    <div class="coach-title"><span class="coach-badge"><i data-lucide="brain"></i></span><div><p class="eyebrow">AI-тренер</p><h2>Розбір твоїх тренувань</h2><p class="card-caption">Аналізую все, що ти залогував: обсяг, прогрес по вправах, баланс груп мʼязів, відновлення — і кажу, що робити далі.</p></div></div>
-                    <div class="inline-actions wrap">${quota}${coachState.thread.length ? `<button class="icon-button" type="button" title="Очистити чат" data-action="coach-clear"><i data-lucide="eraser"></i></button>` : ""}</div>
+            <section class="card span-12 feed-head">
+                <div class="feed-head-row">
+                    <div>
+                        <h2>Стрічка</h2>
+                        <p class="card-caption">Тренування, рекорди й досягнення команди.</p>
+                    </div>
+                    <button class="icon-button feed-bell" type="button" data-action="navigate" data-section="notifications" aria-label="Повідомлення"><i data-lucide="bell"></i>${unread ? `<span class="feed-bell-badge">${unread > 99 ? "99+" : unread}</span>` : ""}</button>
                 </div>
-                <div class="coach-starters">${starters}</div>
+                <div class="feed-tabs">${FEED_SCOPE_TABS.map(([value, label]) => `<button class="feed-tab ${feedState.scope === value ? "active" : ""}" type="button" data-action="feed-scope" data-scope="${value}">${label}</button>`).join("")}</div>
             </section>
-            <section class="card span-12 coach-panel">
-                <div id="coachThread" class="coach-thread"></div>
-                <div class="coach-composer">
-                    <textarea id="coachInput" rows="1" class="coach-input" placeholder="Запитай тренера: «чому жим стоїть?», «як додавати вагу?», «склади план на 4 тижні»" data-action="coach-input"></textarea>
-                    <button class="button button-primary coach-send" type="button" data-action="coach-send" aria-label="Надіслати"><i data-lucide="send-horizontal"></i></button>
-                </div>
-            </section>
+            <section class="span-12"><div id="feedList" class="feed-list"></div></section>
         </div>`);
-        renderCoachThread();
+        renderFeedList();
+        if (!feedState.loaded && !feedState.loading) {
+            loadFeed(feedState.scope, false);
+        }
     }
 
-    function renderCoachThread() {
-        const host = element("coachThread");
+    function renderFeedList() {
+        const host = element("feedList");
         if (!host) {
             return;
         }
-        const empty = !coachState.thread.length && !coachState.error && coachState.status !== "loading";
-        host.innerHTML = empty
-            ? `<div class="coach-empty"><span class="coach-badge lg"><i data-lucide="brain"></i></span><h3>Готовий подивитись на твій прогрес</h3><p class="card-caption">Натисни «Повний аналіз» — і отримаєш розбір: що працює, що застопорилось і що змінити в наступних тренуваннях.</p></div>`
-            : coachState.thread.map(coachMessage).join("")
-                + (coachState.status === "loading" ? `<div class="coach-msg coach"><div class="coach-bubble coach-loading"><span class="pixel-loader">${Array.from({ length: 5 }, (_, index) => `<span style="--cell:${index}"></span>`).join("")}</span>Аналізую твої дані…</div></div>` : "")
-                + (coachState.error ? `<div class="coach-msg coach"><div class="coach-bubble coach-error"><i data-lucide="alert-triangle"></i>${escapeHtml(coachState.error)}</div></div>` : "");
-        iconsIn(host);
-        renderCoachCharts();
-        host.scrollTop = host.scrollHeight;
-    }
-
-    function coachMessage(entry, index) {
-        if (entry.role === "user") {
-            return `<div class="coach-msg user"><div class="coach-bubble user">${escapeHtml(entry.text)}</div></div>`;
-        }
-        const follow = (entry.followUps || []).length
-            ? `<div class="coach-follow">${entry.followUps.map((question) => `<button class="chip coach-chip" type="button" data-action="coach-ask" data-text="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}</div>`
-            : "";
-        return `<div class="coach-msg coach"><div class="coach-bubble">
-            ${entry.summary ? `<p class="coach-summary">${escapeHtml(entry.summary)}</p>` : ""}
-            ${(entry.blocks || []).map((block, blockIndex) => coachBlock(block, `${index}-${blockIndex}`)).join("")}
-            ${follow}
-        </div></div>`;
-    }
-
-    // Blocks render with the app's own components — the model never emits markup.
-    function coachBlock(block, id) {
-        const title = block.title ? `<h4 class="coach-block-title">${escapeHtml(block.title)}</h4>` : "";
-        if (block.kind === "callout") {
-            const icons = { win: "trophy", warning: "alert-triangle", insight: "lightbulb", neutral: "info" };
-            const tone = block.tone || "insight";
-            return `<div class="coach-callout tone-${escapeHtml(tone)}"><span class="coach-callout-ico"><i data-lucide="${icons[tone] || "lightbulb"}"></i></span><div>${block.title ? `<strong>${escapeHtml(block.title)}</strong>` : ""}${block.text ? `<p>${escapeHtml(block.text)}</p>` : ""}</div></div>`;
-        }
-        if (block.kind === "table") {
-            return `${title}<div class="coach-table-wrap"><table class="coach-table"><thead><tr>${(block.columns || []).map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${(block.rows || []).map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
-        }
-        if (block.kind === "chart") {
-            return `${title}<div class="coach-chart"><canvas id="coachChart-${escapeHtml(id)}" height="180"></canvas></div>`;
-        }
-        if (block.kind === "plan" || block.kind === "exercise") {
-            return `${title}<div class="coach-plan">${(block.items || []).map((item) => {
-                const exercise = exerciseByName(item.exercise);
-                const media = exercise ? exerciseMedia(exercise) : "";
-                const thumb = media
-                    ? `<div class="wd-thumb"><img src="${escapeHtml(media)}" alt="" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="this.closest('.wd-thumb')?.remove()"></div>`
-                    : `<div class="wd-thumb wd-thumb-fallback"><i data-lucide="dumbbell"></i></div>`;
-                return `<div class="coach-plan-item">${thumb}<div class="coach-plan-text"><strong>${escapeHtml(item.exercise)}</strong><span class="coach-plan-detail">${escapeHtml(item.detail)}</span>${item.why ? `<span class="coach-plan-why">${escapeHtml(item.why)}</span>` : ""}</div></div>`;
-            }).join("")}</div>`;
-        }
-        return block.text ? `${title}<p class="coach-text">${escapeHtml(block.text)}</p>` : "";
-    }
-
-    // Charts are drawn after the HTML lands, with the app's existing Chart.js helpers.
-    function renderCoachCharts() {
-        const pending = [];
-        coachState.thread.forEach((entry, index) => {
-            (entry.blocks || []).forEach((block, blockIndex) => {
-                if (block.kind === "chart" && element(`coachChart-${index}-${blockIndex}`)) {
-                    pending.push({ id: `coachChart-${index}-${blockIndex}`, block });
-                }
-            });
-        });
-        if (!pending.length) {
+        if (feedState.loading) {
+            host.innerHTML = feedSkeleton(3);
             return;
         }
-        ensureChartLib().then(() => {
-            if (!window.Chart) {
-                return;
+        if (feedState.error) {
+            host.innerHTML = `<div class="feed-state feed-state-error">
+                <span class="feed-state-ico"><i data-lucide="wifi-off"></i></span>
+                <h3>Стрічка не завантажилась</h3>
+                <p class="card-caption">${escapeHtml(feedState.error)} Твоє тренування працює офлайн і синхронізується автоматично.</p>
+                <div class="action-row" style="justify-content:center;margin-top:14px;"><button class="button button-primary compact" type="button" data-action="feed-retry"><i data-lucide="refresh-cw"></i>Спробувати ще</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="workout">До тренування</button></div>
+            </div>`;
+            iconsIn(host);
+            return;
+        }
+        if (!feedState.items.length) {
+            host.innerHTML = feedEmptyState();
+            iconsIn(host);
+            return;
+        }
+        host.innerHTML = feedState.items.map(feedCard).join("")
+            + (feedState.cursor
+                ? `<div class="action-row" style="justify-content:center;margin-top:6px;"><button class="button button-secondary compact" type="button" data-action="feed-more" ${feedState.loadingMore ? "disabled" : ""}>${feedState.loadingMore ? "Вантажу…" : "Показати більше"}</button></div>`
+                : "");
+        iconsIn(host);
+    }
+
+    function feedEmptyState() {
+        const copy = {
+            team: ["Поки тихо", "Ніхто з команди ще не публікував сесій. Почни ти — і твоє тренування побачить уся команда."],
+            records: ["Рекордів ще немає", "Заверши робочий підхід із новою вагою — і він зʼявиться тут."],
+            achievements: ["Досягнень ще немає", "Вони відкриваються самі, коли ти тренуєшся. Загляни в «Прокачку»."],
+            mine: ["Тут будуть твої пости", "Заверши тренування — воно одразу зʼявиться у стрічці."]
+        }[feedState.scope] || ["Порожньо", ""];
+        return `<div class="feed-state">
+            <span class="feed-state-ico"><i data-lucide="users"></i></span>
+            <h3>${escapeHtml(copy[0])}</h3>
+            <p class="card-caption">${escapeHtml(copy[1])}</p>
+            <div class="action-row" style="justify-content:center;margin-top:14px;">${startWorkoutButton(null, { compact: true })}<button class="button button-secondary compact" type="button" data-action="navigate" data-section="users">Хто в команді</button></div>
+        </div>`;
+    }
+
+    function feedSkeleton(count) {
+        return Array.from({ length: count }, () => `<article class="feed-card skeleton-card"><div class="feed-card-head"><span class="skeleton-dot"></span><span class="skeleton-line" style="width:38%"></span></div><span class="skeleton-line" style="width:100%;height:52px;border-radius:12px;"></span><span class="skeleton-line" style="width:52%"></span></article>`).join("");
+    }
+
+    function feedAuthor(item) {
+        const author = item.author || { displayName: "Учасник", avatarInitials: "", avatarColor: "#333" };
+        const local = author.id ? userById(author.id) : null;
+        const avatarUser = local || { displayName: author.displayName, avatarInitials: initialsOf(author.displayName), avatarColor: "#2f3a44", avatarUrl: author.avatarUrl };
+        return `<button class="feed-author" type="button" data-action="open-user" data-user-id="${escapeHtml(author.id || "")}">${avatar(avatarUser, "tiny")}<span class="feed-author-text"><strong>${escapeHtml(author.displayName || "Учасник")}</strong><span class="feed-meta">${timeAgo(item.createdAt)}${item.workoutType ? ` · ${workoutTypeLabel(item.workoutType)}` : ""}</span></span></button>`;
+    }
+
+    function initialsOf(name) {
+        return String(name || "?").trim().slice(0, 2).toUpperCase();
+    }
+
+    function feedCard(item) {
+        const key = `${item.type}:${item.id}`;
+        const liked = item.reactions && item.reactions.mine;
+        const likeCount = (item.reactions && item.reactions.count) || 0;
+        const actions = `<div class="feed-actions">
+            <button class="feed-act ${liked ? "liked" : ""}" type="button" data-action="feed-react" data-type="${item.type}" data-id="${item.id}"><i data-lucide="thumbs-up"></i><span data-like-count="${escapeHtml(key)}">${likeCount}</span></button>
+            <button class="feed-act" type="button" data-action="open-post" data-type="${item.type}" data-id="${item.id}"><i data-lucide="message-circle"></i><span>${item.commentCount || 0}</span></button>
+            <button class="icon-button feed-more" type="button" title="Ще" data-action="open-report" data-type="${item.type}" data-id="${item.id}"><i data-lucide="more-horizontal"></i></button>
+        </div>`;
+
+        if (item.type === "record") {
+            return `<article class="feed-card feed-record" data-action="open-post" data-type="record" data-id="${item.id}">
+                ${feedAuthor(item)}
+                <div class="feed-body feed-record-body"><span class="feed-record-ico"><i data-lucide="flame"></i></span><div><strong>Новий рекорд · ${escapeHtml(item.exercise || "")}</strong><p class="card-caption">${number(item.weightKg)} кг${item.repetitions ? ` × ${item.repetitions}` : ""}${item.estimatedOneRepMax ? ` · 1ПМ ${number(item.estimatedOneRepMax)} кг` : ""}</p></div></div>
+                ${actions}
+            </article>`;
+        }
+        if (item.type === "achievement") {
+            return `<article class="feed-card feed-achievement" data-action="open-post" data-type="achievement" data-id="${item.id}">
+                ${feedAuthor(item)}
+                <div class="feed-body feed-ach-body"><span class="feed-ach-ico"><i data-lucide="award"></i></span><div><strong>Досягнення «${escapeHtml(item.title || "")}»</strong><p class="card-caption">${escapeHtml(item.description || "")}</p></div></div>
+                ${actions}
+            </article>`;
+        }
+        const preview = (item.exercises || []).map((exercise) => `<span class="feed-ex">${escapeHtml(exercise.name)}<em>${exercise.sets}</em></span>`).join("");
+        return `<article class="feed-card" data-action="open-post" data-type="workout" data-id="${item.id}">
+            ${feedAuthor(item)}
+            <div class="feed-body">
+                <div class="feed-stats">
+                    <span><strong>${number(item.volumeKg)}</strong><em>кг</em></span>
+                    <span><strong>${item.setCount}</strong><em>підходів</em></span>
+                    <span><strong>${item.exerciseCount}</strong><em>вправ</em></span>
+                    ${item.durationMinutes ? `<span><strong>${item.durationMinutes}</strong><em>хв</em></span>` : ""}
+                    ${item.cardioMinutes ? `<span><strong>${item.cardioMinutes}</strong><em>хв кардіо</em></span>` : ""}
+                </div>
+                ${preview ? `<div class="feed-ex-row">${preview}${item.exerciseCount > (item.exercises || []).length ? `<span class="feed-ex more">ще ${item.exerciseCount - (item.exercises || []).length}</span>` : ""}</div>` : ""}
+            </div>
+            ${actions}
+        </article>`;
+    }
+
+    // Optimistic: flip the button and the count immediately, then reconcile with the
+    // server's authoritative number. A failure rolls the UI back and says so.
+    async function toggleFeedReaction(type, id, button) {
+        if (!feedApiReady()) {
+            return;
+        }
+        const key = `${type}:${id}`;
+        const counters = [...document.querySelectorAll(`[data-like-count="${CSS.escape(key)}"]`)];
+        const target = button || document.querySelector(`[data-action="feed-react"][data-id="${CSS.escape(id)}"]`);
+        const wasLiked = target ? target.classList.contains("liked") : false;
+        const optimistic = Math.max(0, Number(counters[0]?.textContent || 0) + (wasLiked ? -1 : 1));
+        if (target) {
+            target.classList.toggle("liked", !wasLiked);
+        }
+        counters.forEach((node) => { node.textContent = String(optimistic); });
+        try {
+            const answer = await storage.apiClient.toggleFeedReaction(type, id);
+            counters.forEach((node) => { node.textContent = String(answer.count); });
+            if (target) {
+                target.classList.toggle("liked", Boolean(answer.mine));
             }
-            pending.forEach(({ id, block }) => {
-                if (!element(id)) {
-                    return;
-                }
-                if (block.chartType === "bar") {
-                    barChart(id, block.labels, block.values, block.valueLabel || "");
-                } else if (block.chartType === "doughnut") {
-                    doughnutChart(id, block.labels, block.values);
-                } else {
-                    lineChart(id, block.labels, block.values, block.valueLabel || "");
-                }
+            const item = feedState.items.find((entry) => entry.type === type && entry.id === id);
+            if (item) {
+                item.reactions = { count: answer.count, mine: answer.mine };
+            }
+            if (feedState.post && feedState.post.id === id) {
+                feedState.post.reactions = { count: answer.count, mine: answer.mine };
+            }
+        } catch (error) {
+            if (target) {
+                target.classList.toggle("liked", wasLiked);
+            }
+            counters.forEach((node) => { node.textContent = String(Math.max(0, optimistic + (wasLiked ? 1 : -1))); });
+            toast("Не вдалося", friendlyError(error));
+        }
+    }
+
+    // ---- Post detail ------------------------------------------------------
+    function openPost(type, id) {
+        window.location.hash = `#/post/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
+    }
+
+    function postSection() {
+        const target = state.postTarget;
+        if (!target) {
+            content(emptyInline("Пост не знайдено", "Повернись до стрічки."));
+            return;
+        }
+        content(`<div class="grid dashboard-grid"><section class="span-12"><div id="postView"></div></section></div>`);
+        renderPostView();
+        if (!feedState.post || feedState.post.id !== target.id) {
+            loadPost(target.type, target.id);
+        }
+    }
+
+    async function loadPost(type, id) {
+        if (!feedApiReady()) {
+            feedState.postError = "Пост доступний лише онлайн.";
+            renderPostView();
+            return;
+        }
+        feedState.postLoading = true;
+        feedState.postError = null;
+        renderPostView();
+        try {
+            feedState.post = await storage.apiClient.fetchPost(type, id);
+        } catch (error) {
+            feedState.postError = friendlyError(error);
+        } finally {
+            feedState.postLoading = false;
+            renderPostView();
+        }
+    }
+
+    function renderPostView() {
+        const host = element("postView");
+        if (!host) {
+            return;
+        }
+        if (feedState.postLoading) {
+            host.innerHTML = feedSkeleton(1);
+            return;
+        }
+        if (feedState.postError) {
+            host.innerHTML = `<section class="card">${emptyInline("Не вдалося відкрити пост", feedState.postError)}<div class="action-row" style="justify-content:center;"><button class="button button-secondary compact" type="button" data-action="navigate" data-section="feed">До стрічки</button></div></section>`;
+            iconsIn(host);
+            return;
+        }
+        const post = feedState.post;
+        if (!post) {
+            return;
+        }
+        const liked = post.reactions && post.reactions.mine;
+        const roots = threadComments(post.comments || []);
+        host.innerHTML = `
+            <section class="card post-head">
+                <div class="post-head-row">
+                    <button class="icon-button" type="button" data-action="navigate" data-section="feed" aria-label="Назад"><i data-lucide="chevron-left"></i></button>
+                    <div class="post-title"><h2>${escapeHtml(post.title || "Пост")}</h2><p class="card-caption">${escapeHtml(post.author?.displayName || "")} · ${post.date ? formatDate(post.date) : timeAgo(post.createdAt)}${post.workoutType ? ` · ${workoutTypeLabel(post.workoutType)}` : ""}</p></div>
+                    <button class="icon-button" type="button" title="Поскаржитись" data-action="open-report" data-type="${post.type}" data-id="${post.id}"><i data-lucide="more-vertical"></i></button>
+                </div>
+                ${post.type === "workout" ? `<div class="post-stats">
+                    <span><strong>${number(post.volumeKg)}</strong><em>кг</em></span>
+                    <span><strong>${post.setCount}</strong><em>підходів</em></span>
+                    <span><strong>${post.exerciseCount}</strong><em>вправ</em></span>
+                    ${post.durationMinutes ? `<span><strong>${post.durationMinutes}</strong><em>хв</em></span>` : ""}
+                </div>
+                <div class="post-exercises">${(post.exercises || []).map((exercise) => `<div class="post-ex"><span>${escapeHtml(exercise.name)}</span><span class="post-ex-sets">${exercise.sets} ${pluralUk(exercise.sets, "підхід", "підходи", "підходів")}${exercise.topWeightKg ? ` · до ${number(exercise.topWeightKg)} кг` : ""}</span></div>`).join("")}</div>` : ""}
+                <div class="post-react-row">
+                    <button class="feed-act big ${liked ? "liked" : ""}" type="button" data-action="feed-react" data-type="${post.type}" data-id="${post.id}"><i data-lucide="thumbs-up"></i><span data-like-count="${escapeHtml(`${post.type}:${post.id}`)}">${(post.reactions && post.reactions.count) || 0}</span></button>
+                    <button class="button button-secondary compact" type="button" data-action="copy-workout-start" data-workout-id="${post.id}"><i data-lucide="copy-plus"></i>Скопіювати</button>
+                </div>
+            </section>
+            <section class="card post-comments">
+                <div class="card-header"><div><h3>Коменти</h3><p class="card-caption">${(post.comments || []).length} ${pluralUk((post.comments || []).length, "коментар", "коментарі", "коментарів")}</p></div></div>
+                <div class="comment-list">${roots.length ? roots.map(commentNode).join("") : `<p class="card-caption">Ще ніхто не коментував. Будь першим.</p>`}</div>
+                <div class="comment-composer">
+                    <textarea id="commentInput" class="comment-input" rows="1" placeholder="Написати комент…"></textarea>
+                    <button class="button button-primary comment-send" type="button" data-action="post-comment" aria-label="Надіслати"><i data-lucide="arrow-right"></i></button>
+                </div>
+            </section>`;
+        iconsIn(host);
+    }
+
+    function commentNode(comment, isReply) {
+        const author = comment.author || {};
+        const local = author.id ? userById(author.id) : null;
+        const avatarUser = local || { displayName: author.displayName, avatarInitials: initialsOf(author.displayName), avatarColor: "#2f3a44", avatarUrl: author.avatarUrl };
+        const body = comment.body === null
+            ? `<p class="comment-body hidden-note"><i data-lucide="eye-off"></i>Коментар приховано модератором</p>`
+            : `<p class="comment-body">${escapeHtml(comment.body)}${comment.editedAt ? `<span class="comment-edited"> · змінено</span>` : ""}</p>`;
+        const controls = `<div class="comment-controls">
+            ${isReply ? "" : `<button class="comment-link" type="button" data-action="reply-comment" data-comment-id="${comment.id}" data-name="${escapeHtml(author.displayName || "")}">Відповісти</button>`}
+            ${comment.mine ? `<button class="comment-link" type="button" data-action="edit-comment" data-comment-id="${comment.id}">Змінити</button><button class="comment-link danger" type="button" data-action="delete-comment" data-comment-id="${comment.id}">Видалити</button>` : `<button class="comment-link" type="button" data-action="open-report" data-type="comment" data-id="${comment.id}">Поскаржитись</button>`}
+            ${comment.canModerate && !comment.mine ? `<button class="comment-link danger" type="button" data-action="delete-comment" data-comment-id="${comment.id}">Видалити (мод)</button>` : ""}
+        </div>`;
+        return `<article class="comment ${isReply ? "reply" : ""} ${comment.hidden ? "is-hidden" : ""}" data-comment-id="${comment.id}">
+            ${avatar(avatarUser, "tiny")}
+            <div class="comment-main">
+                <div class="comment-head"><strong>${escapeHtml(author.displayName || "Учасник")}</strong>${comment.mine ? `<span class="comment-you">ти</span>` : ""}<span class="comment-time">${timeAgo(comment.createdAt)}</span></div>
+                ${body}
+                ${controls}
+                ${(comment.replies || []).length ? `<div class="comment-replies">${comment.replies.map((reply) => commentNode(reply, true)).join("")}</div>` : ""}
+            </div>
+        </article>`;
+    }
+
+    // Optimistic comment: it appears immediately with a pending flag and is replaced
+    // by the server's row (real id, timestamps) when the request lands.
+    async function submitComment() {
+        const input = element("commentInput");
+        const post = feedState.post;
+        if (!input || !post) {
+            return;
+        }
+        const body = String(input.value || "").trim();
+        if (!body) {
+            return;
+        }
+        const parentId = input.dataset.parentId || undefined;
+        input.value = "";
+        delete input.dataset.parentId;
+        input.placeholder = "Написати комент…";
+        const me = currentUser();
+        const optimistic = {
+            id: `pending-${Date.now()}`,
+            parentId: parentId || null,
+            body,
+            hidden: false,
+            editedAt: null,
+            createdAt: new Date().toISOString(),
+            author: { id: me.id, displayName: me.displayName, avatarUrl: me.avatarUrl },
+            mine: true,
+            canModerate: isAdmin(),
+            pending: true
+        };
+        post.comments = [...(post.comments || []), optimistic];
+        renderPostView();
+        try {
+            const created = await storage.apiClient.addFeedComment(post.type, post.id, { body, parentId });
+            post.comments = post.comments.map((item) => (item.id === optimistic.id ? created : item));
+        } catch (error) {
+            post.comments = post.comments.filter((item) => item.id !== optimistic.id);
+            toast("Комент не надіслано", friendlyError(error));
+        } finally {
+            renderPostView();
+        }
+    }
+
+    function replyToComment(commentId, name) {
+        const input = element("commentInput");
+        if (!input) {
+            return;
+        }
+        input.dataset.parentId = commentId;
+        input.placeholder = `Відповідь ${name || "у тред"}…`;
+        input.focus();
+    }
+
+    async function editCommentPrompt(commentId) {
+        const post = feedState.post;
+        const comment = (post?.comments || []).find((item) => item.id === commentId);
+        if (!comment) {
+            return;
+        }
+        const next = await promptDialog("Змінити коментар", comment.body || "");
+        if (next === null) {
+            return;
+        }
+        const clean = String(next).trim();
+        if (!clean || clean === comment.body) {
+            return;
+        }
+        const previous = comment.body;
+        comment.body = clean;
+        comment.editedAt = new Date().toISOString();
+        renderPostView();
+        try {
+            await storage.apiClient.editFeedComment(commentId, clean);
+        } catch (error) {
+            comment.body = previous;
+            renderPostView();
+            toast("Не вдалося змінити", friendlyError(error));
+        }
+    }
+
+    async function removeComment(commentId) {
+        const post = feedState.post;
+        if (!post || !(await confirmDialog("Видалити цей коментар?", { confirmLabel: "Видалити" }))) {
+            return;
+        }
+        const snapshot = post.comments;
+        post.comments = post.comments.filter((item) => item.id !== commentId && item.parentId !== commentId);
+        renderPostView();
+        try {
+            await storage.apiClient.deleteFeedComment(commentId);
+        } catch (error) {
+            post.comments = snapshot;
+            renderPostView();
+            toast("Не вдалося видалити", friendlyError(error));
+        }
+    }
+
+    // ---- Reports ----------------------------------------------------------
+    function openReportModal(targetType, targetId) {
+        openModal(`<div class="modal-header"><div><h2>Поскаржитись</h2><p class="card-caption">Модератор побачить текст, автора й посилання.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>
+            <div class="report-reasons">${Object.entries(REPORT_REASON_LABELS).map(([value, label], index) => `<label class="report-reason"><input type="radio" name="reportReason" value="${value}" ${index === 0 ? "checked" : ""}><span>${escapeHtml(label)}</span></label>`).join("")}</div>
+            <div class="field" style="margin-top:12px;"><textarea id="reportDetails" rows="3" placeholder="Деталі (необовʼязково)"></textarea></div>
+            <div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-danger" type="button" data-action="submit-report" data-type="${escapeHtml(targetType)}" data-id="${escapeHtml(targetId)}"><i data-lucide="flag"></i>Надіслати скаргу</button></div>`);
+    }
+
+    async function submitReport(targetType, targetId) {
+        const checked = document.querySelector('input[name="reportReason"]:checked');
+        const reason = checked ? checked.value : "other";
+        const details = inputValue("reportDetails").trim();
+        try {
+            const answer = await storage.apiClient.reportContent({ targetType, targetId, reason, details: details || undefined });
+            closeOverlay();
+            toast(answer.duplicate ? "Скаргу вже надіслано" : "Скаргу надіслано", "Модератор перегляне найближчим часом.");
+        } catch (error) {
+            handleUserFacingError(error, "submit-report");
+        }
+    }
+
+    // ---- Notifications ----------------------------------------------------
+    async function loadNotifications() {
+        if (!feedApiReady()) {
+            return;
+        }
+        feedState.notifications.loading = true;
+        renderNotificationList();
+        try {
+            const answer = await storage.apiClient.fetchNotifications();
+            feedState.notifications.items = answer.items || [];
+            feedState.notifications.unread = answer.unread || 0;
+            feedState.notifications.cursor = answer.nextCursor || null;
+            feedState.notifications.loaded = true;
+        } catch (error) {
+            feedState.notifications.items = [];
+        } finally {
+            feedState.notifications.loading = false;
+            renderNotificationList();
+            renderShell();
+        }
+    }
+
+    // Cheap poll so the bell badge is right without a socket. Replaced by a live
+    // channel once the backend moves off serverless.
+    async function refreshUnreadCount() {
+        if (!feedApiReady()) {
+            return;
+        }
+        try {
+            const answer = await storage.apiClient.fetchUnreadCount();
+            if (answer.unread !== feedState.notifications.unread) {
+                feedState.notifications.unread = answer.unread || 0;
+                renderShell();
+            }
+        } catch (error) {
+            // a failed badge refresh is not worth surfacing
+        }
+    }
+
+    function notifications() {
+        content(`<div class="grid dashboard-grid">
+            <section class="card span-12 feed-head">
+                <div class="feed-head-row">
+                    <div><h2>Повідомлення</h2><p class="card-caption">Реакції, коменти й відповіді на твої пости.</p></div>
+                    <button class="button button-secondary compact" type="button" data-action="mark-all-read"><i data-lucide="check-check"></i>Прочитати все</button>
+                </div>
+            </section>
+            <section class="span-12"><div id="notificationList" class="notification-list"></div></section>
+            <section class="card span-12 push-card">
+                <div class="card-header"><div><h3>Що надсилати</h3><p class="card-caption">Пуші приходять, навіть коли застосунок закритий.</p></div><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштувати</button></div>
+            </section>
+        </div>`);
+        renderNotificationList();
+        if (!feedState.notifications.loaded) {
+            loadNotifications();
+        }
+    }
+
+    function renderNotificationList() {
+        const host = element("notificationList");
+        if (!host) {
+            return;
+        }
+        const items = feedState.notifications.items;
+        if (feedState.notifications.loading && !items.length) {
+            host.innerHTML = feedSkeleton(3);
+            return;
+        }
+        if (!items.length) {
+            host.innerHTML = `<div class="feed-state"><span class="feed-state-ico"><i data-lucide="inbox"></i></span><h3>Поки порожньо</h3><p class="card-caption">Тут зʼявляться реакції та коменти до твоїх тренувань.</p></div>`;
+            iconsIn(host);
+            return;
+        }
+        const buckets = { today: [], earlier: [] };
+        items.forEach((item) => buckets[notificationBucket(item.createdAt)].push(item));
+        host.innerHTML = ["today", "earlier"].map((bucket) => {
+            if (!buckets[bucket].length) {
+                return "";
+            }
+            return `<p class="notification-bucket">${bucket === "today" ? "Сьогодні" : "Раніше"}</p>${buckets[bucket].map(notificationRow).join("")}`;
+        }).join("");
+        iconsIn(host);
+    }
+
+    function notificationRow(item) {
+        const actor = item.actor || null;
+        const local = actor && actor.id ? userById(actor.id) : null;
+        const avatarUser = local || (actor ? { displayName: actor.displayName, avatarInitials: initialsOf(actor.displayName), avatarColor: "#2f3a44", avatarUrl: actor.avatarUrl } : null);
+        const clickable = item.targetType && item.targetId;
+        return `<article class="notification ${item.read ? "" : "unread"}" ${clickable ? `data-action="open-post" data-type="${escapeHtml(item.targetType)}" data-id="${escapeHtml(item.targetId)}"` : ""}>
+            <span class="notification-ico"><i data-lucide="${NOTIFICATION_ICONS[item.type] || "bell"}"></i></span>
+            ${avatarUser ? avatar(avatarUser, "tiny") : ""}
+            <div class="notification-main">
+                <p class="notification-text">${escapeHtml(item.preview || "Нова активність")}</p>
+                <span class="notification-time">${timeAgo(item.createdAt)}</span>
+            </div>
+            ${item.read ? "" : `<span class="notification-dot" aria-label="Непрочитане"></span>`}
+        </article>`;
+    }
+
+    async function markAllNotificationsRead() {
+        feedState.notifications.items = feedState.notifications.items.map((item) => ({ ...item, read: true }));
+        feedState.notifications.unread = 0;
+        renderNotificationList();
+        renderShell();
+        try {
+            await storage.apiClient.markNotificationsRead();
+        } catch (error) {
+            toast("Не вдалося оновити", friendlyError(error));
+        }
+    }
+
+    // ---- Moderation queue (admin) ----------------------------------------
+    async function loadReports() {
+        if (!feedApiReady() || !isAdmin()) {
+            return;
+        }
+        feedState.reports.loading = true;
+        try {
+            const answer = await storage.apiClient.fetchReports();
+            feedState.reports.items = answer.items || [];
+            feedState.reports.loaded = true;
+        } catch (error) {
+            feedState.reports.items = [];
+        } finally {
+            feedState.reports.loading = false;
+            renderSection();
+        }
+    }
+
+    function reportQueueSection() {
+        if (!isAdmin()) {
+            return "";
+        }
+        if (!feedState.reports.loaded && !feedState.reports.loading) {
+            loadReports();
+        }
+        const items = feedState.reports.items;
+        return `<section class="card span-12"><div class="card-header"><div><h2>Скарги на контент</h2><p class="card-caption">${items.length ? `${items.length} на розгляді` : "Нових скарг немає"}</p></div></div>
+            ${items.length ? `<div class="report-list">${items.map(reportCard).join("")}</div>` : `<p class="card-caption">Порожньо — команда поводиться добре.</p>`}</section>`;
+    }
+
+    function reportCard(report) {
+        const comment = report.comment;
+        return `<article class="report-card">
+            <div class="report-top"><span class="badge danger">Скарга</span><span class="card-caption">${escapeHtml(REPORT_REASON_LABELS[report.reason] || report.reason)} · ${report.reportCount} ${pluralUk(report.reportCount, "скаржник", "скаржники", "скаржників")} · ${timeAgo(report.createdAt)}</span></div>
+            ${comment ? `<blockquote class="report-quote">«${escapeHtml(comment.body || "")}»</blockquote><p class="card-caption">Автор: ${escapeHtml(comment.author?.displayName || "—")}${comment.hidden ? " · вже приховано" : ""}</p>` : `<p class="card-caption">Обʼєкт: ${escapeHtml(report.targetType)} ${escapeHtml(report.targetId)}</p>`}
+            ${report.details ? `<p class="card-caption report-details">${escapeHtml(report.details)}</p>` : ""}
+            <div class="action-row wrap" style="margin-top:12px;">
+                <button class="button button-secondary compact" type="button" data-action="resolve-report" data-report-id="${report.id}" data-resolve="keep">Залишити</button>
+                <button class="button button-warning compact" type="button" data-action="resolve-report" data-report-id="${report.id}" data-resolve="hide">Приховати</button>
+                <button class="button button-danger compact" type="button" data-action="resolve-report" data-report-id="${report.id}" data-resolve="delete">Видалити</button>
+            </div>
+        </article>`;
+    }
+
+    async function resolveReport(reportId, action) {
+        feedState.reports.items = feedState.reports.items.filter((item) => item.id !== reportId);
+        renderSection();
+        try {
+            await storage.apiClient.resolveReport(reportId, action);
+            toast("Готово", action === "keep" ? "Скаргу відхилено." : action === "hide" ? "Контент приховано." : "Контент видалено.");
+        } catch (error) {
+            feedState.reports.loaded = false;
+            loadReports();
+            toast("Не вдалося", friendlyError(error));
+        }
+    }
+
+    // ---- Web Push ---------------------------------------------------------
+    async function ensurePushKey() {
+        if (feedState.pushKey !== null) {
+            return feedState.pushKey;
+        }
+        try {
+            const answer = await storage.apiClient.fetchPushKey();
+            feedState.pushKey = answer.configured ? answer.publicKey : "";
+        } catch (error) {
+            feedState.pushKey = "";
+        }
+        return feedState.pushKey;
+    }
+
+    async function enablePush() {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+            toast("Не підтримується", "Цей браузер не вміє пуш-сповіщення.");
+            return false;
+        }
+        const key = await ensurePushKey();
+        if (!key) {
+            toast("Пуші вимкнено", "Ключі сповіщень ще не налаштовані на сервері.");
+            return false;
+        }
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+            toast("Дозвіл не надано", "Увімкни сповіщення в налаштуваннях браузера.");
+            return false;
+        }
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            const existing = await registration.pushManager.getSubscription();
+            const subscription = existing || await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(key)
             });
-        });
+            const raw = subscription.toJSON();
+            await storage.apiClient.pushSubscribe({ endpoint: subscription.endpoint, p256dh: raw.keys.p256dh, auth: raw.keys.auth });
+            setPref("pushEnabled", "1");
+            toast("Пуші увімкнено", "Сповіщатимемо про коменти й реакції на твої пости.");
+            renderSection();
+            return true;
+        } catch (error) {
+            toast("Не вдалося увімкнути", friendlyError(error));
+            return false;
+        }
+    }
+
+    async function disablePush() {
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            const subscription = await registration.pushManager.getSubscription();
+            if (subscription) {
+                await storage.apiClient.pushUnsubscribe(subscription.endpoint);
+                await subscription.unsubscribe();
+            }
+        } catch (error) {
+            // the server row is what matters; a stale browser subscription is pruned
+            // server-side on the first failed delivery
+        }
+        setPref("pushEnabled", "0");
+        renderSection();
+    }
+
+    function togglePushCategory(key, enabled) {
+        const current = readPushPrefs();
+        current[key] = enabled;
+        setPref("pushCategories", JSON.stringify(current));
+    }
+
+    function readPushPrefs() {
+        try {
+            const parsed = JSON.parse(getPref("pushCategories") || "{}");
+            return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    function pushSettingsSection() {
+        const enabled = getPref("pushEnabled") === "1";
+        const prefs = readPushPrefs();
+        return `<section class="card span-12"><div class="card-header"><div><h2>Сповіщення</h2><p class="card-caption">Що надсилати на цей пристрій. Пуші приходять, навіть коли застосунок закритий.</p></div><button class="button ${enabled ? "button-secondary" : "button-primary"} compact" type="button" data-action="${enabled ? "disable-push" : "enable-push"}"><i data-lucide="${enabled ? "bell-off" : "bell"}"></i>${enabled ? "Вимкнути пуші" : "Увімкнути пуші"}</button></div>
+            <div class="push-list ${enabled ? "" : "is-off"}">${PUSH_CATEGORIES.map((category) => {
+                const on = prefs[category.key] === undefined ? category.defaultOn : prefs[category.key] === true;
+                return `<label class="push-row"><span>${escapeHtml(category.label)}</span><input type="checkbox" data-action="push-toggle" data-key="${category.key}" ${on ? "checked" : ""} ${enabled ? "" : "disabled"}></label>`;
+            }).join("")}</div>
+            ${enabled ? "" : `<p class="input-hint" style="margin-top:10px;"><i data-lucide="info"></i>Увімкни пуші, щоб керувати категоріями.</p>`}</section>`;
+    }
+
+    // ---- Achievement bridge ----------------------------------------------
+    // Achievements are computed on this side; the server needs them to build the
+    // "Досягнення" scope. Fire-and-forget, deduped by the server.
+    async function syncAchievementsToFeed() {
+        if (!feedApiReady()) {
+            return;
+        }
+        try {
+            const unlocked = userAchievements(currentUser().id)
+                .filter((item) => item.unlockedAt)
+                .map((item) => ({
+                    key: item.id,
+                    title: item.title,
+                    description: item.caption || "",
+                    unlockedAt: new Date(item.unlockedAt).toISOString()
+                }));
+            if (unlocked.length) {
+                await storage.apiClient.syncAchievements(unlocked.slice(0, 60));
+            }
+        } catch (error) {
+            // best effort — the feed simply shows fewer achievement posts
+        }
     }
 
     // ---- Admin impersonation ("увійти як користувач") --------------------------
@@ -6893,7 +7388,7 @@ import {
             renderSection();
             return;
         }
-        content(`<div class="grid dashboard-grid">${approvalQueueCard()}${contributorCard()}</div>`);
+        content(`<div class="grid dashboard-grid">${reportQueueSection()}${approvalQueueCard()}${contributorCard()}</div>`);
     }
 
     function exerciseContributors() {
@@ -9136,6 +9631,32 @@ import {
             const layer = element("modalLayer2");
             let settled = false;
             const finish = (value) => {
+    // Small text prompt built on the same overlay plumbing as confirmDialog.
+    // Resolves the edited text, or null when dismissed.
+    function promptDialog(title, initialValue = "") {
+        return new Promise((resolve) => {
+            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><div class="field" style="margin-top:8px;"><textarea id="promptDialogInput" rows="3">${escapeHtml(initialValue)}</textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" id="promptCancelBtn">Скасувати</button><button class="button button-primary" type="button" id="promptOkBtn">Зберегти</button></div></div>`;
+            const stacked = !element("modalBackdrop").classList.contains("hidden");
+            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
+            let layer;
+            if (stacked) {
+                openSheet(html);
+                layer = element("modalLayer2");
+            } else {
+                clearTimeout(overlayCloseTimer);
+                const drawer = element("drawerLayer");
+                drawer.classList.add("hidden");
+                drawer.classList.remove("visible");
+                drawer.innerHTML = "";
+                layer = element("modalLayer");
+                layer.classList.remove("modal-fullscreen");
+                layer.innerHTML = html;
+                iconsIn(layer);
+                lockBackgroundScroll();
+                revealOverlay(layer);
+            }
+            let settled = false;
+            const finish = (result) => {
                 if (settled) {
                     return;
                 }
@@ -9384,6 +9905,24 @@ import {
             + `<span class="media-suggest-label">${escapeHtml(label)}</span>`
             + `<span class="media-suggest-meta">${escapeHtml(item?.sourceLabel || "")}</span>`
             + `</button>`;
+    }
+
+                backdrop.removeEventListener("click", onBackdrop);
+                if (stacked) {
+                    closeSheet();
+                } else {
+                    closeOverlay();
+                }
+                resolve(result);
+            };
+            const onBackdrop = () => finish(null);
+            backdrop.addEventListener("click", onBackdrop);
+            layer.querySelector("#promptOkBtn").addEventListener("click", () => finish(layer.querySelector("#promptDialogInput").value));
+            layer.querySelector("#promptCancelBtn").addEventListener("click", () => finish(null));
+            const input = layer.querySelector("#promptDialogInput");
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        });
     }
 
     function openDrawer(html, opts = {}) {
