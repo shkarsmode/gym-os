@@ -4431,6 +4431,13 @@ import {
             "focus-step",
             "focus-next-exercise",
             "focus-show-rest",
+            // Optimistic feed actions paint their own result immediately; routing them
+            // through the loader made setActionLoading restore the button's pre-click
+            // markup afterwards, silently putting the old like count back.
+            "feed-react",
+            "feed-scope",
+            "open-post",
+            "open-report",
             "close-overlay"
         ]).has(action);
     }
@@ -4471,7 +4478,6 @@ import {
 
         if (isLoading) {
             actionElement.dataset.busy = "true";
-            actionElement.dataset.originalHtml = actionElement.innerHTML;
             actionElement.classList.add("is-loading");
             actionElement.setAttribute("aria-busy", "true");
             if ("disabled" in actionElement) {
@@ -4479,6 +4485,10 @@ import {
             }
             const canUseInlineLoader = actionElement.classList.contains("button") || actionElement.classList.contains("icon-button");
             if (canUseInlineLoader) {
+                // Capture ONLY when we are about to overwrite. Capturing unconditionally
+                // meant the restore below reverted whatever the handler had painted in
+                // the meantime.
+                actionElement.dataset.originalHtml = actionElement.innerHTML;
                 const label = actionElement.classList.contains("icon-button") ? "" : `<span>${escapeHtml(actionElement.textContent.trim() || "Зачекай")}</span>`;
                 actionElement.innerHTML = `<span class="square-loader" aria-hidden="true"></span>${label}`;
             }
@@ -5792,24 +5802,13 @@ import {
         if (!workoutItem) {
             return;
         }
-        // If sets have data (weight/reps) but weren't ticked off, don't silently
-        // finish — offer to auto-mark them done, finish as-is, or cancel.
-        const pendingSets = workoutItem.exercises
-            .flatMap((exercise) => exercise.sets)
-            .filter((set) => !set.isCompleted && (Number(set.weight) > 0 || Number(set.repetitions) > 0));
-        if (pendingSets.length > 0) {
-            const choice = await choiceDialog(`${pendingSets.length} підходів із даними ще не позначені виконаними. Познач їх виконаними, щоб завершити.`, {
-                title: "Завершити тренування?",
-                closable: true,
-                choices: [
-                    { label: "Позначити всі виконаними", value: "complete", variant: "primary" }
-                ]
-            });
-            if (choice !== "complete") {
-                return; // dismissed — can't finish with pending sets; go tick them off
-            }
-            pendingSets.forEach((set) => { set.isCompleted = true; });
-        }
+        // Product rule: a finished session has no half-done sets. Everything the user
+        // wrote down counts as performed — no dialog, no exceptions. The server applies
+        // the same rule on save, so a session can never come back with "0 підходів"
+        // exercises in the feed or an under-counted volume.
+        workoutItem.exercises.forEach((exercise) => {
+            (exercise.sets || []).forEach((set) => { set.isCompleted = true; });
+        });
         workoutItem.status = "completed";
         workoutItem.finishedAt = new Date().toISOString();
         workoutItem.updatedAt = new Date().toISOString();
@@ -6328,31 +6327,27 @@ import {
                 node.classList.toggle("liked", liked);
             });
         };
-        const current = feedState.items.find((entry) => entry.type === type && entry.id === id)
-            || (feedState.post && feedState.post.id === id ? feedState.post : null);
+        // The same post can be held twice at once (a card in the list and the open post
+        // screen). Updating only one of them let the other re-render the stale count.
+        const holders = [
+            feedState.items.find((entry) => entry.type === type && entry.id === id),
+            feedState.post && feedState.post.id === id ? feedState.post : null
+        ].filter(Boolean);
+        const current = holders[0] || null;
         const button0 = button || document.querySelector(`[data-action="feed-react"][data-type="${CSS.escape(type)}"][data-id="${CSS.escape(id)}"]`);
         const wasLiked = current?.reactions ? Boolean(current.reactions.mine) : Boolean(button0 && button0.classList.contains("liked"));
         const baseCount = current?.reactions ? Number(current.reactions.count) || 0 : Number(button0?.querySelector("span")?.textContent) || 0;
         const optimistic = Math.max(0, baseCount + (wasLiked ? -1 : 1));
 
         // Update the model first so any re-render in flight already agrees with the UI.
-        if (current) {
-            current.reactions = { count: optimistic, mine: !wasLiked };
-        }
+        holders.forEach((holder) => { holder.reactions = { count: optimistic, mine: !wasLiked }; });
         paint(optimistic, !wasLiked);
         try {
             const answer = await storage.apiClient.toggleFeedReaction(type, id);
-            if (current) {
-                current.reactions = { count: answer.count, mine: Boolean(answer.mine) };
-            }
-            if (feedState.post && feedState.post.id === id) {
-                feedState.post.reactions = { count: answer.count, mine: Boolean(answer.mine) };
-            }
+            holders.forEach((holder) => { holder.reactions = { count: answer.count, mine: Boolean(answer.mine) }; });
             paint(answer.count, Boolean(answer.mine));
         } catch (error) {
-            if (current) {
-                current.reactions = { count: baseCount, mine: wasLiked };
-            }
+            holders.forEach((holder) => { holder.reactions = { count: baseCount, mine: wasLiked }; });
             paint(baseCount, wasLiked);
             toast("Не вдалося", friendlyError(error));
         }
@@ -7806,7 +7801,7 @@ import {
 
     function consistencyChart(id, userId) {
         const workouts = (userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-10);
-        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => item.exercises.length), "Вправи");
+        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => workoutExerciseCount(item)), "Вправи");
     }
 
     const chartPalette = ["#34d399", "#60a5fa", "#a78bfa", "#fbbf24", "#f472b6", "#22d3ee", "#fb923c", "#4ade80", "#f87171", "#c084fc", "#2dd4bf", "#facc15"];
@@ -8137,12 +8132,14 @@ import {
     }
 
     function usersForExercise(exerciseId) {
-        return [...new Set(state.database.workouts.filter((item) => item.exercises.some((exercise) => exercise.exerciseId === exerciseId)).map((item) => item.userId))].map(userById);
+        // state.database.workouts mixes own rows with PEER summaries that carry no
+        // exercises array — a summary simply cannot answer "did it contain this exercise".
+        return [...new Set(state.database.workouts.filter((item) => (item.exercises || []).some((exercise) => exercise.exerciseId === exerciseId)).map((item) => item.userId))].map(userById);
     }
 
     function lastUsed(exerciseId, userId = null) {
         const items = userId ? workoutsFor(userId) : state.database.workouts;
-        return items.filter((item) => item.exercises.some((exercise) => exercise.exerciseId === exerciseId)).sort(byDateDesc)[0]?.date || null;
+        return items.filter((item) => (item.exercises || []).some((exercise) => exercise.exerciseId === exerciseId)).sort(byDateDesc)[0]?.date || null;
     }
 
     // exerciseUsageMap and topMap come straight from the kernel — identical signatures.
