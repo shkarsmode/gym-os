@@ -9,7 +9,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 // evaluateAchievements is no longer called here — the kernel owns that. ACHIEVEMENTS
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
-import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES } from "./lib/feed-ui.js";
+import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
 // See lib/scoring.js for the two order/timezone hazards documented at the top.
@@ -6271,7 +6271,7 @@ import {
         const actions = `<div class="feed-actions">
             <button class="feed-act ${liked ? "liked" : ""}" type="button" data-action="feed-react" data-type="${item.type}" data-id="${item.id}"><i data-lucide="thumbs-up"></i><span data-like-count="${escapeHtml(key)}">${likeCount}</span></button>
             <button class="feed-act" type="button" data-action="open-post" data-type="${item.type}" data-id="${item.id}"><i data-lucide="message-circle"></i><span>${item.commentCount || 0}</span></button>
-            <button class="icon-button feed-more" type="button" title="Ще" data-action="open-report" data-type="${item.type}" data-id="${item.id}"><i data-lucide="more-horizontal"></i></button>
+            ${item.author && item.author.id === state.currentUserId ? "" : `<button class="icon-button feed-more" type="button" title="Поскаржитись" data-action="open-report" data-type="${item.type}" data-id="${item.id}"><i data-lucide="more-horizontal"></i></button>`}
         </div>`;
 
         if (item.type === "record") {
@@ -6726,9 +6726,11 @@ import {
         const comment = report.comment;
         return `<article class="report-card">
             <div class="report-top"><span class="badge danger">Скарга</span><span class="card-caption">${escapeHtml(REPORT_REASON_LABELS[report.reason] || report.reason)} · ${report.reportCount} ${pluralUk(report.reportCount, "скаржник", "скаржники", "скаржників")} · ${timeAgo(report.createdAt)}</span></div>
-            ${comment ? `<blockquote class="report-quote">«${escapeHtml(comment.body || "")}»</blockquote><p class="card-caption">Автор: ${escapeHtml(comment.author?.displayName || "—")}${comment.hidden ? " · вже приховано" : ""}</p>` : `<p class="card-caption">Обʼєкт: ${escapeHtml(report.targetType)} ${escapeHtml(report.targetId)}</p>`}
+            ${comment ? `<blockquote class="report-quote">«${escapeHtml(comment.body || "")}»</blockquote><p class="card-caption">Автор: ${escapeHtml(comment.author?.displayName || "—")}${comment.hidden ? " · вже приховано" : ""}</p>` : ""}
+            <p class="card-caption">Обʼєкт: ${escapeHtml(REPORT_TARGET_LABELS[report.targetType] || report.targetType)}</p>
             ${report.details ? `<p class="card-caption report-details">${escapeHtml(report.details)}</p>` : ""}
             <div class="action-row wrap" style="margin-top:12px;">
+                <button class="button button-secondary compact" type="button" data-action="open-post" data-type="${escapeHtml(report.postType || report.targetType)}" data-id="${escapeHtml(report.postId || report.targetId)}"><i data-lucide="external-link"></i>Відкрити</button>
                 <button class="button button-secondary compact" type="button" data-action="resolve-report" data-report-id="${report.id}" data-resolve="keep">Залишити</button>
                 <button class="button button-warning compact" type="button" data-action="resolve-report" data-report-id="${report.id}" data-resolve="hide">Приховати</button>
                 <button class="button button-danger compact" type="button" data-action="resolve-report" data-report-id="${report.id}" data-resolve="delete">Видалити</button>
