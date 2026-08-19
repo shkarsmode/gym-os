@@ -391,6 +391,10 @@ import {
             return this.request("/feed/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) });
         }
 
+        syncRecords(items) {
+            return this.request("/feed/records/sync", { method: "POST", body: JSON.stringify({ items }) });
+        }
+
         syncAchievements(items) {
             return this.request("/feed/achievements/sync", { method: "POST", body: JSON.stringify({ items }) });
         }
@@ -1221,6 +1225,7 @@ import {
         preloadAvatars();
         refreshUnreadCount();
         setTimeout(syncAchievementsToFeed, 2500);
+        setTimeout(syncRecordsToFeed, 4000);
         requestAnimationFrame(maybeShowWhatsNew);
         // Toast achievements unlocked since the last visit (e.g. an idea marked
         // "done" while away); the very first run seeds silently.
@@ -2782,6 +2787,13 @@ import {
     function workoutEditor(workoutItem) {
         const owner = userById(workoutItem.userId);
         const readonly = !canManage(workoutItem);
+        // An admin can open ANY workout here, including a teammate's row that is still a
+        // summary from the windowed payload. Everything below walks exercises/sets, so
+        // bail out to a read-only stub rather than throwing on a screen the user reached
+        // in one tap from the profile.
+        if (!isHydratedWorkout(workoutItem)) {
+            return `<section class="card workout-head"><div class="card-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption">${escapeHtml(owner ? owner.displayName : "Учасник")} · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)}</p></div></div>${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: workoutSetCount(workoutItem), label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }])}<div class="action-row" style="margin-top:14px;"><button class="button button-primary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="external-link"></i>Відкрити деталі</button></div></section>`;
+        }
         const completedSets = workoutItem.exercises.flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
         const active = activeWorkoutFor(currentUser().id);
         const dateBounds = workoutDateBounds();
@@ -2887,8 +2899,12 @@ import {
 
     function workoutExerciseEditor(workoutItem, workoutExercise, readonly, isFirstExercise) {
         const exercise = exerciseById(workoutExercise.exerciseId);
-        const lastSets = lastExerciseSets(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
-        const lastNote = lastExerciseNote(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
+        // Only the current user's own history is hydrated in the windowed payload; a
+        // peer's prior sessions are summaries, so there is nothing to show and asking
+        // for it used to throw.
+        const historyUserId = workoutItem.userId === state.database.currentUserId ? workoutItem.userId : null;
+        const lastSets = lastExerciseSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
+        const lastNote = lastExerciseNote(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastResults = lastSets && lastSets.sets.length
             ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set) => `<span class="chip">${number(set.weight)}×${set.repetitions}</span>`).join("")}</div></div>`
             : "";
@@ -5814,6 +5830,7 @@ import {
         workoutItem.updatedAt = new Date().toISOString();
         stopTimer();
         await persistWorkout(workoutItem);
+        invalidateFeed();
         renderSection();
         toast("Тренування завершено", "Статистику та рекорди перераховано.");
         checkAchievementUnlocks();
@@ -6137,6 +6154,7 @@ import {
         postError: null,
         notifications: { items: [], unread: 0, cursor: null, loading: false, loaded: false },
         reports: { items: [], loading: false, loaded: false },
+        loadedAt: 0,
         pushKey: null
     };
 
@@ -6145,7 +6163,28 @@ import {
     }
 
     // ---- Feed list --------------------------------------------------------
+
+    // How long a loaded page stays fresh. Without this the list was frozen for the whole
+    // session: finishing a workout, coming back from a post, switching tabs — nothing
+    // refetched, so a session you had just logged never appeared until a hard reload.
+    const FEED_TTL_MS = 60 * 1000;
+
+    function feedIsStale() {
+        return !feedState.loadedAt || Date.now() - feedState.loadedAt > FEED_TTL_MS;
+    }
+
+    // Called wherever something happens that the feed should show (finishing a session).
+    function invalidateFeed() {
+        feedState.loadedAt = 0;
+    }
+
     async function loadFeed(scope, append) {
+        // Two callers used to race here — setFeedScope fired one request and the section
+        // renderer's own guard fired an identical second — and both wrote items/cursor,
+        // last response wins.
+        if (append ? feedState.loadingMore : feedState.loading) {
+            return;
+        }
         if (!feedApiReady()) {
             feedState.error = "Стрічка доступна лише онлайн.";
             feedState.loaded = true;
@@ -6170,6 +6209,9 @@ import {
             feedState.loading = false;
             feedState.loadingMore = false;
             feedState.loaded = true;
+            if (!append && !feedState.error) {
+                feedState.loadedAt = Date.now();
+            }
             renderFeedList();
         }
     }
@@ -6182,8 +6224,10 @@ import {
         feedState.items = [];
         feedState.cursor = null;
         feedState.loaded = false;
+        feedState.loadedAt = 0;
+        // renderSection() runs feed(), whose own guard issues the request — calling it
+        // here too just sent the same page twice.
         renderSection();
-        loadFeed(scope, false);
     }
 
     function feed() {
@@ -6202,7 +6246,9 @@ import {
             <section class="span-12"><div id="feedList" class="feed-list"></div></section>
         </div>`);
         renderFeedList();
-        if (!feedState.loaded && !feedState.loading) {
+        // Paint what we have, then refetch page 1 when it has gone stale — the cached
+        // list stays on screen meanwhile, so revisiting the tab never flashes empty.
+        if ((!feedState.loaded || feedIsStale()) && !feedState.loading) {
             loadFeed(feedState.scope, false);
         }
     }
@@ -6844,6 +6890,34 @@ import {
     // ---- Achievement bridge ----------------------------------------------
     // Achievements are computed on this side; the server needs them to build the
     // "Досягнення" scope. Fire-and-forget, deduped by the server.
+    // Personal records are computed here, not on the server, so the "Рекорди" scope has
+    // nothing to show unless we push them up. Best effort and idempotent: the server keeps
+    // only an improvement, so replaying the whole list never walks a record backwards.
+    async function syncRecordsToFeed() {
+        if (!feedApiReady()) {
+            return;
+        }
+        try {
+            const own = currentUser().id;
+            const items = recordsFor(own).slice(0, 40).map((record) => ({
+                exerciseId: record.exerciseId,
+                weightKg: Number(record.weight) || 0,
+                repetitions: Number(record.repetitions) || undefined,
+                estimatedOneRepMax: Number(record.estimatedOneRepMax) || undefined,
+                workoutId: record.workoutId || undefined,
+                isEstimated: Boolean(record.isEstimated),
+                // The record belongs next to the session that set it — a bare date would
+                // land at midnight and tie with every achievement unlocked that day.
+                recordedAt: record.date ? new Date(`${String(record.date).slice(0, 10)}T20:00:00`).toISOString() : undefined
+            })).filter((item) => item.exerciseId && item.weightKg > 0);
+            if (items.length) {
+                await storage.apiClient.syncRecords(items);
+            }
+        } catch (error) {
+            // best effort — the feed simply shows fewer record posts
+        }
+    }
+
     async function syncAchievementsToFeed() {
         if (!feedApiReady()) {
             return;
@@ -7783,7 +7857,7 @@ import {
 
     function cardioChart(id, userId = currentUser().id) {
         const workouts = workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc).slice(-10);
-        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => item.cardioSessions.reduce((sum, session) => sum + session.durationMinutes, 0)), "Кардіо, хв");
+        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => workoutCardioMinutes(item)), "Кардіо, хв");
     }
 
     function progressChart(id, userId) {
@@ -7978,7 +8052,7 @@ import {
         const lastBench = lastUsed(bench.id, userId);
         const days = lastBench ? dayDiff(new Date(), new Date(lastBench)) : null;
         const bestLift = recordsFor(userId)[0] || null;
-        const chestSets = workoutsFor(userId).filter((item) => item.status === "completed" && new Date(item.date) >= startWeek(new Date())).flatMap((item) => item.exercises).filter((item) => exerciseById(item.exerciseId).primaryMuscleGroup === "Груди").flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
+        const chestSets = workoutsFor(userId).filter((item) => item.status === "completed" && isHydratedWorkout(item) && new Date(item.date) >= startWeek(new Date())).flatMap((item) => item.exercises).filter((item) => exerciseById(item.exerciseId).primaryMuscleGroup === "Груди").flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
         return [
             { title: `Робота на груди: ${chestSets} підходів`, caption: chestSets ? "Груди вже тренувалися цього тижня." : "Груди ще не тренувалися цього тижня." },
             { title: days === null ? "Жим ще не логували" : `Жим був ${days} дн. тому`, caption: "Корисно для частоти і відновлення." },
@@ -8076,11 +8150,20 @@ import {
         return rest ? `${hours} год ${rest} хв` : `${hours} год`;
     }
 
+    // A row from the windowed payload is either HYDRATED (own workout, carries
+    // exercises/sets) or a PEER SUMMARY (aggregates only, no exercises key). Every
+    // set-level walker below must drop the summaries — they cannot answer "which
+    // exercises were in this session", and reading .exercises on them is what threw
+    // "undefined is not an object (evaluating 'i.exercises.filter')".
+    function isHydratedWorkout(workoutItem) {
+        return Boolean(workoutItem) && Array.isArray(workoutItem.exercises);
+    }
+
     function previousPerformance(userId, exerciseId, excludedWorkoutId = null) {
         if (!userId) {
             return null;
         }
-        const entries = workoutsFor(userId).filter((item) => item.status === "completed" && item.id !== excludedWorkoutId).sort(byDateDesc).flatMap((workoutItem) => workoutItem.exercises.map((workoutExercise) => ({ workoutItem, workoutExercise }))).filter((item) => item.workoutExercise.exerciseId === exerciseId);
+        const entries = workoutsFor(userId).filter((item) => item.status === "completed" && item.id !== excludedWorkoutId && isHydratedWorkout(item)).sort(byDateDesc).flatMap((workoutItem) => workoutItem.exercises.map((workoutExercise) => ({ workoutItem, workoutExercise }))).filter((item) => item.workoutExercise.exerciseId === exerciseId);
         const latest = entries[0];
         if (!latest) {
             return null;
@@ -8095,7 +8178,7 @@ import {
             return [];
         }
         return workoutsFor(userId)
-            .filter((item) => item.id !== excludedWorkoutId)
+            .filter((item) => item.id !== excludedWorkoutId && isHydratedWorkout(item))
             .sort(byDateDesc)
             .flatMap((workoutItem) => workoutItem.exercises
                 .filter((workoutExercise) => workoutExercise.exerciseId === exerciseId)
@@ -8119,7 +8202,7 @@ import {
     }
 
     function progressData(userId, exerciseId) {
-        return workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc).map((workoutItem) => {
+        return workoutsFor(userId).filter((item) => item.status === "completed" && isHydratedWorkout(item)).sort(byDateAsc).map((workoutItem) => {
             const workoutExercise = workoutItem.exercises.find((item) => item.exerciseId === exerciseId);
             const value = workoutExercise ? exerciseOneRepMax(workoutExercise) : 0;
             return value ? { date: workoutItem.date, value } : null;
