@@ -8864,7 +8864,7 @@ html.compact-ui .chip {
 .media-suggest-meta {
     color: var(--color-faint);
     font-size: 11px;
-=======
+}
 /* ================= Стрічка: feed, posts, comments, notifications ================= */
 .feed-head { padding: 16px 18px; }
 .feed-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
