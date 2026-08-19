@@ -6276,7 +6276,7 @@ import {
         const actions = `<div class="feed-actions">
             <button class="feed-act ${liked ? "liked" : ""}" type="button" data-action="feed-react" data-type="${item.type}" data-id="${item.id}"><i data-lucide="thumbs-up"></i><span data-like-count="${escapeHtml(key)}">${likeCount}</span></button>
             <button class="feed-act" type="button" data-action="open-post" data-type="${item.type}" data-id="${item.id}"><i data-lucide="message-circle"></i><span>${item.commentCount || 0}</span></button>
-            ${item.author && item.author.id === state.currentUserId ? "" : `<button class="icon-button feed-more" type="button" title="Поскаржитись" data-action="open-report" data-type="${item.type}" data-id="${item.id}"><i data-lucide="more-horizontal"></i></button>`}
+            ${item.author && item.author.id === state.database.currentUserId ? "" : `<button class="icon-button feed-more" type="button" title="Поскаржитись" data-action="open-report" data-type="${item.type}" data-id="${item.id}"><i data-lucide="more-horizontal"></i></button>`}
         </div>`;
 
         if (item.type === "record") {
