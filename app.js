@@ -6312,32 +6312,43 @@ import {
             return;
         }
         const key = `${type}:${id}`;
-        const counters = [...document.querySelectorAll(`[data-like-count="${CSS.escape(key)}"]`)];
-        const target = button || document.querySelector(`[data-action="feed-react"][data-id="${CSS.escape(id)}"]`);
-        const wasLiked = target ? target.classList.contains("liked") : false;
-        const optimistic = Math.max(0, Number(counters[0]?.textContent || 0) + (wasLiked ? -1 : 1));
-        if (target) {
-            target.classList.toggle("liked", !wasLiked);
+        // Re-queried after every await, never cached: a feed refresh landing mid-flight
+        // replaces these nodes, and writing the server's count into a detached element
+        // is invisible — the tap then looks like it did nothing.
+        const paint = (count, liked) => {
+            document.querySelectorAll(`[data-like-count="${CSS.escape(key)}"]`).forEach((node) => {
+                node.textContent = String(count);
+            });
+            document.querySelectorAll(`[data-action="feed-react"][data-type="${CSS.escape(type)}"][data-id="${CSS.escape(id)}"]`).forEach((node) => {
+                node.classList.toggle("liked", liked);
+            });
+        };
+        const current = feedState.items.find((entry) => entry.type === type && entry.id === id)
+            || (feedState.post && feedState.post.id === id ? feedState.post : null);
+        const button0 = button || document.querySelector(`[data-action="feed-react"][data-type="${CSS.escape(type)}"][data-id="${CSS.escape(id)}"]`);
+        const wasLiked = current?.reactions ? Boolean(current.reactions.mine) : Boolean(button0 && button0.classList.contains("liked"));
+        const baseCount = current?.reactions ? Number(current.reactions.count) || 0 : Number(button0?.querySelector("span")?.textContent) || 0;
+        const optimistic = Math.max(0, baseCount + (wasLiked ? -1 : 1));
+
+        // Update the model first so any re-render in flight already agrees with the UI.
+        if (current) {
+            current.reactions = { count: optimistic, mine: !wasLiked };
         }
-        counters.forEach((node) => { node.textContent = String(optimistic); });
+        paint(optimistic, !wasLiked);
         try {
             const answer = await storage.apiClient.toggleFeedReaction(type, id);
-            counters.forEach((node) => { node.textContent = String(answer.count); });
-            if (target) {
-                target.classList.toggle("liked", Boolean(answer.mine));
-            }
-            const item = feedState.items.find((entry) => entry.type === type && entry.id === id);
-            if (item) {
-                item.reactions = { count: answer.count, mine: answer.mine };
+            if (current) {
+                current.reactions = { count: answer.count, mine: Boolean(answer.mine) };
             }
             if (feedState.post && feedState.post.id === id) {
-                feedState.post.reactions = { count: answer.count, mine: answer.mine };
+                feedState.post.reactions = { count: answer.count, mine: Boolean(answer.mine) };
             }
+            paint(answer.count, Boolean(answer.mine));
         } catch (error) {
-            if (target) {
-                target.classList.toggle("liked", wasLiked);
+            if (current) {
+                current.reactions = { count: baseCount, mine: wasLiked };
             }
-            counters.forEach((node) => { node.textContent = String(Math.max(0, optimistic + (wasLiked ? 1 : -1))); });
+            paint(baseCount, wasLiked);
             toast("Не вдалося", friendlyError(error));
         }
     }
