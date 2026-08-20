@@ -2221,8 +2221,12 @@ import {
         // The strip lived only on the dashboard and the feed. Its absence here IS the
         // missing entry point: this is the screen you are on while training, and it is
         // where seeing that somebody else is lifting right now actually matters.
-        renderPresenceStrip();
-        loadPresence();
+        // Only when there is no partner panel: with one, the strip repeats what the
+        // panel already says and pushes the actual workout further down the screen.
+        if (!partnerState.partnership) {
+            renderPresenceStrip();
+            loadPresence();
+        }
     }
 
     function workoutStarter() {
@@ -11766,6 +11770,72 @@ import {
     // refuse.
     const watchState = { workoutId: null, workout: null, previous: {}, token: null, timer: null, loading: false };
 
+    /**
+     * A floating way in and out of somebody else's session.
+     *
+     * The point is peeking BETWEEN sets: one tap to see what they are on, one tap back to
+     * your own screen exactly where you left it — not a navigation, which would lose your
+     * scroll position and your place in the workout.
+     *
+     * Bottom-LEFT because the collapsed rest timer owns bottom-right for most of a
+     * session and the centre belongs to the nav's own button. It only exists while there
+     * is something to peek at, so it is never a mystery control.
+     */
+    function syncWatchFab() {
+        const target = watchFabTarget();
+        let fab = document.getElementById("watchFab");
+        if (!target) {
+            fab?.remove();
+            return;
+        }
+        if (!fab) {
+            fab = document.createElement("button");
+            fab.id = "watchFab";
+            fab.type = "button";
+            fab.className = "watch-fab";
+            document.body.appendChild(fab);
+        }
+        const open = isWatching();
+        fab.dataset.action = open ? "close-watch" : "watch-workout";
+        fab.dataset.workoutId = target.workoutId;
+        fab.title = open ? "Повернутися до свого тренування" : `Подивитися тренування ${target.displayName}`;
+        fab.setAttribute("aria-label", fab.title);
+        fab.classList.toggle("is-open", open);
+        fab.innerHTML = open
+            ? `<i data-lucide="corner-up-left"></i><span>До свого</span>`
+            : `${avatar(userById(target.userId) || { displayName: target.displayName }, "tiny")}<span>${escapeHtml(firstName(target.displayName))}</span>`;
+        iconsIn(fab);
+    }
+
+    /**
+     * Whose session the button peeks at.
+     *
+     * A training partner first — that is the person you are deliberately alongside. Then
+     * whoever is already being watched, so the button can bring you back. Nobody
+     * otherwise: the strip is how you start watching someone you are not paired with.
+     */
+    function watchFabTarget() {
+        if (storage.mode !== "api" || !state.database?.currentUserId) {
+            return null;
+        }
+        const partner = partnerState.partnership?.status === "active" ? partnerState.partnership.partner : null;
+        if (partner) {
+            const live = liveState.presence.find((item) => !item.divider && item.userId === partner.id);
+            if (live) {
+                return { workoutId: live.workoutId, userId: partner.id, displayName: partner.displayName };
+            }
+        }
+        if (watchState.workoutId && watchState.workout) {
+            const owner = userById(watchState.workout.userId);
+            return {
+                workoutId: watchState.workoutId,
+                userId: watchState.workout.userId,
+                displayName: owner?.displayName || "учасника"
+            };
+        }
+        return null;
+    }
+
     function isWatching(workoutId) {
         return Boolean(watchState.workoutId) && (!workoutId || watchState.workoutId === workoutId);
     }
@@ -11794,6 +11864,7 @@ import {
         watchState.workout = null;
         watchState.previous = {};
         renderWatchLayer();
+        syncWatchFab();
         await loadWatched(workoutId);
         registerWatch();
     }
@@ -11840,6 +11911,7 @@ import {
             layer.remove();
         }
         document.body.classList.remove("is-watching");
+        syncWatchFab();
         if (token) {
             storage.apiClient.stopWatch(token).catch(() => undefined);
         }
@@ -11969,9 +12041,12 @@ import {
         if (!partner) {
             return;
         }
-        const live = liveState.presence.find((item) => item.userId === partner.id && item.state === "training");
+        // ANY state, not just "training". Waiting for their first ticked set was wrong:
+        // the session already exists, with every exercise and every planned set in it,
+        // and that is exactly what somebody training alongside wants to see — what is
+        // coming, not only what is done.
+        const live = liveState.presence.find((item) => !item.divider && item.userId === partner.id);
         if (!live) {
-            // They are not lifting yet. Not an error — the panel says so.
             partnerState.workout = null;
             renderPartnerPanel();
             return;
@@ -12044,7 +12119,7 @@ import {
         const workoutItem = partnerState.workout;
         const person = partnerState.partnership?.partner || {};
         if (!workoutItem) {
-            return `<p class="card-caption partner-idle">${escapeHtml(firstName(person.displayName))} ще не почав — щойно відмітить перший підхід, він зʼявиться тут.</p>`;
+            return `<p class="card-caption partner-idle">${escapeHtml(firstName(person.displayName))} ще не відкрив сьогоднішнє тренування.</p>`;
         }
         const next = nextUndoneSet(workoutItem);
         const done = partnerSetsOf(workoutItem).filter((set) => set.isCompleted).length;
@@ -12052,6 +12127,7 @@ import {
         return `<div class="partner-progress">
             <span class="partner-count">${done}/${total} підходів</span>
             <span class="partner-volume">${number(workoutVolume(workoutItem))} кг</span>
+            <button class="button button-primary compact partner-open" type="button" data-action="watch-workout" data-workout-id="${escapeHtml(workoutItem.id)}"><i data-lucide="eye"></i>Відкрити тренування</button>
         </div>
         ${next ? `<div class="partner-next">
             <span class="partner-next-label">Зараз</span>
@@ -12110,6 +12186,7 @@ import {
         }
         host.innerHTML = partnerPanelMarkup();
         iconsIn(host);
+        syncWatchFab();
     }
 
     /**
@@ -12488,10 +12565,10 @@ import {
         const elapsed = clock && !clock.overflow ? formatClock(clock.ms) : PRESENCE_WORDS[item.state] || "";
         const sent = liveState.sentEmoji.get(item.workoutId);
         const open = liveState.pickerFor === item.workoutId;
-        return `<div class="presence-person${open ? " is-picking" : ""}" data-presence="${escapeHtml(item.workoutId)}">
+        return `<div class="presence-person${open ? " is-picking" : ""}${item.partner ? " is-paired" : ""}" data-presence="${escapeHtml(item.workoutId)}">
             <button class="presence-face" type="button" data-action="open-user" data-user-id="${escapeHtml(item.userId)}" aria-label="${escapeHtml(item.displayName)}">${face}</button>
             <span class="presence-name">${escapeHtml(firstName(item.displayName))}</span>
-            ${item.partner ? `<span class="presence-pair" title="Тренується разом з ${escapeHtml(item.partner.displayName)}"><i data-lucide="users"></i>${escapeHtml(firstName(item.partner.displayName))}</span>` : ""}
+            ${item.partner ? `<span class="presence-pair" title="Тренується разом з ${escapeHtml(item.partner.displayName)}"><i data-lucide="link-2"></i>${escapeHtml(firstName(item.partner.displayName))}</span>` : ""}
             ${clock
                 ? `<button class="presence-clock is-watchable" type="button" data-action="watch-workout" data-workout-id="${escapeHtml(item.workoutId)}" data-presence-clock="${escapeHtml(item.workoutId)}" title="Подивитися тренування ${escapeHtml(item.displayName)}">${escapeHtml(elapsed)}</button>`
                 : `<span class="presence-clock is-word">${escapeHtml(elapsed)}</span>`}
@@ -12528,6 +12605,7 @@ import {
         iconsIn(host);
         syncPresenceClocks();
         syncCheerPicker();
+        syncWatchFab();
     }
 
     /**

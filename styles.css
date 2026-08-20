@@ -9898,14 +9898,19 @@ html.compact-ui .chip {
 .presence-invite svg { width: 13px; height: 13px; }
 .presence-invite:hover { color: var(--color-accent); border-color: var(--color-accent); }
 
-/* Who somebody is training with. Sits on its own short line under the name rather than
-   widening the cell — the strip's columns are already sized to the frame. */
+/* Who somebody is training with, drawn as a LINK rather than a caption: a chip with a
+   chain icon, on its own short line so no cell gets taller or wider than the others. */
 .presence-pair {
     display: inline-flex;
     align-items: center;
     gap: 3px;
     max-width: 84px;
-    font-size: 0.68rem;
+    padding: 1px 7px 1px 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-elevated));
+    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+    font-size: 0.66rem;
+    font-weight: 600;
     color: var(--color-accent);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -9913,6 +9918,19 @@ html.compact-ui .chip {
 }
 
 .presence-pair svg { width: 10px; height: 10px; flex: 0 0 auto; }
+
+/* A paired person's frame gets the same accent ring, so the two read as one unit at a
+   glance instead of two neighbours who happen to be next to each other. */
+.presence-person.is-paired .avatar-frame-wrap::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 1px dashed color-mix(in srgb, var(--color-accent) 55%, transparent);
+    pointer-events: none;
+}
+
+.presence-person.is-paired { position: relative; }
 
 /* ---- Дивитися чуже тренування ---------------------------------------------- */
 
@@ -10002,4 +10020,45 @@ html.compact-ui .chip {
 @media (prefers-reduced-motion: reduce) {
     .watch-sheet { animation: none; }
     .watch-live { animation: none; }
+}
+
+/* One tap to peek at the session you are training alongside, one tap back to your own
+   screen exactly where you left it. Bottom-LEFT: the collapsed rest timer owns
+   bottom-right for most of a session and the centre belongs to the nav's own button. */
+.watch-fab {
+    position: fixed;
+    left: 14px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    z-index: 2360;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px 6px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 18%, var(--color-elevated));
+    color: var(--color-text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+    transition: transform 120ms ease;
+}
+
+.watch-fab:active { transform: scale(0.94); }
+.watch-fab .avatar { width: 26px; height: 26px; font-size: 10px; }
+.watch-fab svg { width: 16px; height: 16px; }
+
+/* While the sheet is open it is the way back, so it says so rather than showing a face. */
+.watch-fab.is-open {
+    padding: 8px 14px;
+    background: var(--color-elevated);
+}
+
+/* Above the sheet's own backdrop, or the way back would be behind what it closes. */
+.watch-layer ~ .watch-fab { z-index: 2360; }
+
+@media (min-width: 921px) {
+    /* No mobile navigation bar to clear on a wide screen. */
+    .watch-fab { bottom: 24px; }
 }
