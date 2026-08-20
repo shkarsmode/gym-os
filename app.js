@@ -11845,9 +11845,16 @@ import {
         fab.title = open ? "Повернутися до свого тренування" : `Подивитися тренування ${target.displayName}`;
         fab.setAttribute("aria-label", fab.title);
         fab.classList.toggle("is-open", open);
+        // A circle, not a pill with a name in it: a round button is the shape a floating
+        // action has everywhere, it cannot be clipped by a long name, and it needs no
+        // width calculation to stay clear of the timer on the other side.
+        const person = userById(target.userId);
+        const face = imageUrl(person?.avatarUrl);
         fab.innerHTML = open
-            ? `<i data-lucide="corner-up-left"></i><span>До свого</span>`
-            : `${avatar(userById(target.userId) || { displayName: target.displayName }, "tiny")}<span>${escapeHtml(firstName(target.displayName))}</span>`;
+            ? `<i data-lucide="corner-up-left"></i>`
+            : face
+                ? `<img src="${escapeHtml(face)}" alt="" referrerpolicy="no-referrer" loading="eager" decoding="sync">`
+                : `<span class="watch-fab-initials">${escapeHtml((target.displayName || "?").slice(0, 1).toUpperCase())}</span>`;
         iconsIn(fab);
     }
 

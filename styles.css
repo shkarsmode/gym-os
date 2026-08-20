@@ -9998,69 +9998,60 @@ html.compact-ui .chip {
 @media (prefers-reduced-motion: reduce) {
     .watch-live { animation: none; }
 }
-}
 
 /* One tap to peek at the session you are training alongside, one tap back to your own
    screen exactly where you left it.
-   Positioned as the MIRROR of the collapsed rest timer: same vertical rail, opposite
-   side. Both use --mobile-nav-height, which the app already publishes, rather than a
-   guessed offset — that guess is what left it half behind the navigation bar. */
+   A CIRCLE, on the same rail as the collapsed rest timer but on the opposite side. The
+   pill-with-a-name it replaces had to reason about its own width to stay clear of the
+   timer and got clipped by a long name; a circle has one dimension and cannot. */
 .watch-fab {
     position: fixed;
-    left: calc(14px + env(safe-area-inset-left));
+    left: calc(16px + env(safe-area-inset-left));
     bottom: calc(var(--mobile-nav-height, 64px) + 22px);
-    /* Above the drawer and its backdrop, or the way back would sit behind what it
+    /* Above the drawer and its backdrop — the way back must never sit behind what it
        closes. The overlay stack tops out around 2400. */
     z-index: 2450;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    max-width: calc(50vw - 24px);
-    padding: 5px 14px 5px 5px;
-    border-radius: 999px;
-    border: 1px solid var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 22%, var(--color-elevated));
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid var(--color-accent);
+    background: var(--color-elevated);
     color: var(--color-text);
-    font-size: 0.85rem;
-    font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
     transition: transform 120ms ease;
 }
 
-.watch-fab:active { transform: scale(0.94); }
+.watch-fab:active { transform: scale(0.92); }
 
-.watch-fab span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.watch-fab img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
-/* Round inside a pill: the square avatar the rest of the app uses reads as a sticker
-   stuck on the button rather than part of it. */
-.watch-fab .avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 10px;
-    border-radius: 50%;
+.watch-fab-initials {
+    font-weight: 800;
+    font-size: 18px;
+    color: var(--color-accent);
 }
 
-.watch-fab svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.watch-fab svg { width: 22px; height: 22px; color: var(--color-accent); }
 
-/* While the sheet is open it is the way back, so it says so rather than showing a face. */
-.watch-fab.is-open {
-    padding: 8px 16px;
-    background: var(--color-elevated);
-}
+/* While the sheet is open it is the way back. */
+.watch-fab.is-open { background: var(--color-surface); }
 
 @media (min-width: 921px) {
     /* No navigation bar to clear on a wide screen. */
     .watch-fab {
         left: 24px;
         bottom: 24px;
-        max-width: 320px;
     }
-}
 }
 
 /* Said inside the scroller, not only in the sheet's header: the header scrolls away and
