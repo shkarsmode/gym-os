@@ -9254,3 +9254,12 @@ html.compact-ui .chip {
         display: none;
     }
 }
+
+/* The set you are currently on, marked in «Минулого разу». Border and colours only —
+   never padding, size or font — because the pill is sticky above the sets and any size
+   change would reflow the row under your thumb while you scroll. */
+.last-results-chips .chip.is-current {
+    border-color: var(--color-accent-border);
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-2));
+    color: var(--color-accent-strong);
+}

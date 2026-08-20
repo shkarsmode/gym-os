@@ -1979,6 +1979,7 @@ import {
         }
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
+        updateLastResultsFocus();
         syncGymClockTicker();
 
         if (pendingExerciseScrollId) {
@@ -2980,7 +2981,7 @@ import {
         const lastSets = lastExerciseSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastNote = lastExerciseNote(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastResults = lastSets && lastSets.sets.length
-            ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set) => `<span class="chip">${number(set.weight)}×${set.repetitions}</span>`).join("")}</div></div>`
+            ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => `<span class="chip" data-set-index="${setIndex}">${number(set.weight)}×${set.repetitions}</span>`).join("")}</div></div>`
             : "";
         const previousNote = lastNote
             ? `<div class="previous-note"><span class="previous-note-label"><i data-lucide="sticky-note"></i>Остання нотатка · ${formatDate(lastNote.date)}</span><p>${escapeHtml(lastNote.notes)}</p></div>`
@@ -3594,6 +3595,7 @@ import {
         document.addEventListener("input", handleInput);
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
+        window.addEventListener("scroll", updateLastResultsFocus, { passive: true });
         // The event can fire before the app finishes booting, in which case index.html's
         // dispatch lands on nobody — index.html sets the flag too, so re-check here.
         if (window.__gymosUpdateReady) {
@@ -4807,6 +4809,44 @@ import {
             handleRoute();
         } else {
             window.location.hash = target;
+        }
+    }
+
+    // Highlights the chip in «Минулого разу» that lines up with the set you are looking at.
+    //
+    // The pill is sticky, so its bottom edge is effectively the reading line: whichever set
+    // row's centre sits closest to that line is the one in front of you, and its previous
+    // result is the number you actually want to compare against.
+    function updateLastResultsFocus() {
+        const pills = document.querySelectorAll(".last-results");
+        for (const pill of pills) {
+            const card = pill.closest(".workout-exercise");
+            if (!card) {
+                continue;
+            }
+            const cardRect = card.getBoundingClientRect();
+            const chips = pill.querySelectorAll("[data-set-index]");
+            if (cardRect.bottom < 0 || cardRect.top > window.innerHeight) {
+                // Off screen: clear it, so scrolling back does not flash a stale chip.
+                chips.forEach((chip) => chip.classList.remove("is-current"));
+                continue;
+            }
+            const rows = card.querySelectorAll(".set-row");
+            if (!rows.length || !chips.length) {
+                continue;
+            }
+            const line = pill.getBoundingClientRect().bottom;
+            let best = 0;
+            let bestDistance = Infinity;
+            rows.forEach((row, index) => {
+                const rect = row.getBoundingClientRect();
+                const distance = Math.abs(rect.top + rect.height / 2 - line);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = index;
+                }
+            });
+            chips.forEach((chip, index) => chip.classList.toggle("is-current", index === best));
         }
     }
 
