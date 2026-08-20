@@ -1896,7 +1896,19 @@ import {
             element("sectionTitle").textContent = item.title;
         }
         const renderers = { dashboard, workout, calendar, exercises, stats, feed, notifications, post: postSection, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
+        // An in-place re-render (ticking a set, editing a field) must not move the page.
+        // Replacing #pageContent empties the document for an instant, the browser clamps
+        // scrollTop to the shorter height, and the view jumps to the top.
+        // Keyed on the target, not just the section: opening a DIFFERENT workout is a
+        // navigation and should start at the top, even though the section name is the same.
+        const viewKey = `${state.section}|${state.editingWorkoutId || ""}|${state.viewUserId || ""}`;
+        const keepScroll = renderSection.lastViewKey === viewKey;
+        renderSection.lastViewKey = viewKey;
+        const scrollBefore = window.scrollY;
         (renderers[state.section] || dashboard)();
+        if (keepScroll && window.scrollY !== scrollBefore) {
+            window.scrollTo(0, scrollBefore);
+        }
         iconsIn(element("pageContent")); // shell icons already converted in renderShell()
         // Subtle enter animation only when the section actually changes (not on
         // in-place data re-renders), so navigation feels smooth, edits don't flash.
@@ -2805,9 +2817,13 @@ import {
         const contextBanner = !readonly && workoutItem.status !== "active"
             ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutItem.status).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
             : isOtherThanActive ? `<div class="readonly-layer info">У вас є активне тренування. <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Відкрити активне</button></div>` : "";
-        const actionBar = readonly ? "" : `<div class="workout-actionbar">
+        const clockChip = readonly ? "" : gymClockChip(workoutItem);
+        // `has-clock` lets the CSS know whether the buttons have to share the row. Without
+        // it, a bar whose clock has not started yet kept the buttons pinned right, with
+        // dead space where the chip would eventually appear.
+        const actionBar = readonly ? "" : `<div class="workout-actionbar${clockChip ? " has-clock" : ""}">
                 <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong></div>
-                ${gymClockChip(workoutItem)}
+                ${clockChip}
                 <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
             </div>`;
         return `
@@ -4757,10 +4773,67 @@ import {
         if (stuck === bar.classList.contains("is-stuck")) {
             return;
         }
+        animateActionBarState(bar, stuck);
+    }
+
+    // Collapsing the bar changes flex-wrap, and neither a wrap change nor an auto height
+    // transitions in CSS — the buttons would snap onto the first row. So: measure, apply
+    // the class, measure again, then play the difference back as a transform (FLIP). The
+    // browser animates one transform per element, which is smooth on a phone and needs no
+    // layout work per frame.
+    function animateActionBarState(bar, stuck) {
+        const movers = [bar.querySelector(".workout-actionbar-actions"), bar.querySelector(".gym-clock")].filter(Boolean);
+        const before = movers.map((node) => node.getBoundingClientRect());
+        const heightBefore = bar.offsetHeight;
+
         bar.classList.toggle("is-stuck", stuck);
-        // Collapsing drops a row, and the sticky «Минулого разу» pill positions itself
-        // below the bar's MEASURED height.
+
+        const heightAfter = bar.offsetHeight;
+        const after = movers.map((node) => node.getBoundingClientRect());
+        // Publish the FINAL height straight away: the sticky «Минулого разу» pill sits
+        // below the bar and must land in its resting place, not chase the animation.
         updateTopbarOffset();
+
+        if (prefersReducedMotion() || heightBefore === heightAfter) {
+            return;
+        }
+
+        bar.style.height = `${heightBefore}px`;
+        movers.forEach((node, index) => {
+            const dx = before[index].left - after[index].left;
+            const dy = before[index].top - after[index].top;
+            node.style.transition = "none";
+            node.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`;
+        });
+
+        // Two frames: the first commits the inverted position, the second starts the play.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                bar.style.transition = "height 260ms cubic-bezier(0.4, 0, 0.2, 1), padding 260ms cubic-bezier(0.4, 0, 0.2, 1)";
+                bar.style.height = `${heightAfter}px`;
+                movers.forEach((node) => {
+                    node.style.transition = "transform 260ms cubic-bezier(0.4, 0, 0.2, 1)";
+                    node.style.transform = "";
+                });
+            });
+        });
+
+        // Always clean up, even if a transitionend never arrives (a backgrounded tab
+        // throttles rAF, and a leftover inline height would freeze the bar's size).
+        clearTimeout(animateActionBarState.cleanup);
+        animateActionBarState.cleanup = setTimeout(() => {
+            bar.style.height = "";
+            bar.style.transition = "";
+            movers.forEach((node) => {
+                node.style.transition = "";
+                node.style.transform = "";
+            });
+            updateTopbarOffset();
+        }, 420);
+    }
+
+    function prefersReducedMotion() {
+        return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     }
 
     function topbarHeight() {
@@ -8830,7 +8903,6 @@ import {
                 <div class="focus-topbar-text">
                     <span class="focus-eyebrow">Фокус-режим</span>
                     <strong>Вправа ${index + 1} з ${list.length}</strong>
-                    ${gymClockChip(context.workout)}
                 </div>
                 <button class="focus-timer-chip${chipVisible ? " visible" : ""}${state.timer.overtime ? " overtime" : ""}" type="button" data-action="focus-show-rest" id="focusTimerChip" title="Відкрити таймер відпочинку">
                     <i data-lucide="timer"></i><span id="focusTimerChipValue">${timerDisplayValue()}</span>

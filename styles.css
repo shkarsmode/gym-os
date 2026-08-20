@@ -1870,27 +1870,32 @@ body.is-impersonating .last-results {
         overflow: hidden;
     }
 
+    /* Labels collapse by max-width rather than display:none, so the buttons shrink
+       continuously into icons instead of snapping. The negative margin swallows the
+       icon-to-label gap as the text disappears. */
     .workout-actionbar .button span {
+        display: inline-block;
+        max-width: 7rem;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        opacity: 1;
+        transition: max-width 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 150ms ease, margin-left 260ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .workout-actionbar.is-stuck {
-        flex-wrap: nowrap;
-        justify-content: space-between;
         padding: 6px 8px;
     }
 
     .workout-actionbar.is-stuck .workout-actionbar-actions {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         justify-content: flex-end;
     }
 
-    /* Icon-only: the label is removed from the flow, not just hidden, so the buttons
-       shrink to squares instead of keeping their text width. */
     .workout-actionbar.is-stuck .button span {
-        display: none;
+        max-width: 0;
+        opacity: 0;
+        margin-left: -5px;
     }
 
     .workout-actionbar.is-stuck .button {
@@ -1902,11 +1907,29 @@ body.is-impersonating .last-results {
     .workout-actionbar.is-stuck > .gym-clock {
         margin-right: auto;
     }
+
+    /* No clock yet (nothing ticked): nothing is competing for the row, so the buttons
+       take the full width instead of huddling on the right. */
+    .workout-actionbar:not(.has-clock).is-stuck .workout-actionbar-actions {
+        flex: 1 1 100%;
+        justify-content: stretch;
+    }
+
+    .workout-actionbar:not(.has-clock).is-stuck .button {
+        flex: 1 1 0;
+    }
 }
 
-/* The bar animates between its two states. */
+/* The bar animates between its two states: height is driven from JS (auto heights do not
+   transition), the children glide with a FLIP transform, and padding rides along in CSS. */
 .workout-actionbar {
-    transition: padding 160ms ease;
+    transition: padding 260ms cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.workout-actionbar .button,
+.workout-actionbar > .gym-clock {
+    transition: padding 260ms cubic-bezier(0.4, 0, 0.2, 1), flex-basis 260ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .exercise-title-line {
