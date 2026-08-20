@@ -1843,14 +1843,21 @@ body.is-impersonating .last-results {
         margin-right: auto;
     }
 
+    /* The actions block owns whatever the clock leaves. `flex: 0 1 auto` left it at its
+       content width while `space-between` pushed it right — so once the clock appeared the
+       row was wider than the bar and «Завершити» hung off the screen. Growing to fill and
+       being allowed to shrink (min-width: 0) means it can never overflow. */
     .workout-actionbar-actions {
-        flex: 0 1 auto;
+        flex: 1 1 auto;
         min-width: 0;
         gap: 6px;
     }
 
+    /* grow: 1 with basis auto — each button keeps its natural width and only SHARES the
+       leftover space, so the buttons fill the bar when the clock is absent without the
+       longest label being squeezed into an ellipsis. */
     .workout-actionbar .button {
-        flex: 0 1 auto;
+        flex: 1 1 auto;
         width: auto;
         min-width: 0;
         padding-inline: 10px;
