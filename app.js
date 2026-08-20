@@ -11,7 +11,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
-import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead } from "./lib/realtime.js";
+import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
 // See lib/scoring.js for the two order/timezone hazards documented at the top.
@@ -1227,6 +1227,10 @@ import {
         reconcileWorkoutStatuses();
         renderShell();
         handleRoute();
+        // Open the live stream once there is a session and a payload to keep in step.
+        // Started here rather than at module load: before this point there is no token,
+        // and a stream opened without one just burns a reconnect cycle against a 401.
+        startLiveStream();
         preloadAvatars();
         refreshUnreadCount();
         setTimeout(syncAchievementsToFeed, 2500);
@@ -7472,6 +7476,10 @@ import {
     }
 
     async function logout() {
+        // Close the stream before the token goes: it is a long-lived authenticated
+        // request, and leaving it open would keep delivering this account's events into
+        // a tab that has already signed out.
+        stopLiveStream();
         try {
             localStorage.removeItem("gymos-auth-token");
         } catch (error) {
@@ -11531,12 +11539,200 @@ import {
         }
     }
 
+    // ---- Live stream -----------------------------------------------------------------
+    //
+    // A single server-sent-events connection carrying HINTS — "these workouts changed,
+    // here is the version" — never content. Acting on a hint means re-reading through the
+    // normal authorized route, so the stream can never show anything a plain refresh
+    // would not, and losing it degrades to exactly the previous behaviour.
+    //
+    // Read with fetch() rather than EventSource because EventSource cannot set an
+    // Authorization header, and the bearer token is this app's primary credential (the
+    // cookie is a fallback that iOS Safari drops on a cross-origin API). The alternative,
+    // a token in the query string, would be written into every proxy log on the way.
+    const liveStream = { controller: null, attempt: 0, timer: null, running: false };
+
+    function liveStreamSupported() {
+        return storage.mode === "api"
+            && storage.apiClient.hasBaseUrl()
+            && Boolean(authToken)
+            && typeof AbortController === "function"
+            && typeof TextDecoder === "function";
+    }
+
+    function stopLiveStream() {
+        liveStream.running = false;
+        clearTimeout(liveStream.timer);
+        liveStream.timer = null;
+        if (liveStream.controller) {
+            liveStream.controller.abort();
+            liveStream.controller = null;
+        }
+    }
+
+    function scheduleLiveStream() {
+        if (!liveStream.running) {
+            return;
+        }
+        clearTimeout(liveStream.timer);
+        liveStream.attempt += 1;
+        liveStream.timer = setTimeout(runLiveStream, backoffDelay(liveStream.attempt));
+    }
+
+    function startLiveStream() {
+        if (liveStream.running || !liveStreamSupported()) {
+            return;
+        }
+        liveStream.running = true;
+        liveStream.attempt = 0;
+        runLiveStream();
+    }
+
+    async function runLiveStream() {
+        if (!liveStream.running || !liveStreamSupported()) {
+            return;
+        }
+        const controller = new AbortController();
+        liveStream.controller = controller;
+        try {
+            const response = await fetch(storage.apiClient.baseUrl + "/live/stream", {
+                credentials: "include",
+                headers: { Accept: "text/event-stream", Authorization: "Bearer " + authToken },
+                signal: controller.signal
+            });
+            if (!response.ok || !response.body) {
+                // 401 means this token is finished; retrying cannot fix it and would just
+                // hammer the API until the tab is closed.
+                if (response.status === 401 || response.status === 403) {
+                    stopLiveStream();
+                    return;
+                }
+                throw new Error("live stream " + response.status);
+            }
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            for (;;) {
+                const { value, done } = await reader.read();
+                if (done) {
+                    break;
+                }
+                buffer += decoder.decode(value, { stream: true });
+                const parsed = parseSseFrames(buffer);
+                buffer = parsed.rest;
+                for (const frame of parsed.events) {
+                    // Reaching a real frame proves the connection works end to end, so
+                    // the next drop starts its backoff from scratch.
+                    liveStream.attempt = 0;
+                    await handleLiveEvent(frame);
+                }
+            }
+        } catch (error) {
+            // AbortError is this code closing the stream on purpose.
+            if (error && error.name !== "AbortError") {
+                console.debug("live stream dropped", error);
+            }
+        }
+        if (liveStream.controller === controller) {
+            liveStream.controller = null;
+        }
+        scheduleLiveStream();
+    }
+
+    async function handleLiveEvent(frame) {
+        const payload = (frame && frame.data) || {};
+        if (frame.name === "workout.deleted") {
+            for (const workoutId of (payload.ids || [])) {
+                applyRemoteWorkoutDeletion(workoutId);
+            }
+            renderSection();
+            return;
+        }
+        if (frame.name !== "workout.changed") {
+            return;
+        }
+        let changed = false;
+        for (const workoutId of (payload.ids || [])) {
+            if (await applyRemoteWorkoutChange(workoutId, payload.version)) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            renderSection();
+        }
+    }
+
+    function workoutSaverBusy(workoutId) {
+        const saver = workoutSavers.get(workoutId);
+        return Boolean(saver && (saver.running || saver.timer || saver.dirty));
+    }
+
+    async function applyRemoteWorkoutChange(workoutId, version) {
+        const held = state.database.workouts.find((item) => item.id === workoutId);
+        if (!shouldApplyRemote({ version, held: (held && held.serverVersion) || null, busy: workoutSaverBusy(workoutId) })) {
+            return false;
+        }
+        let fresh = null;
+        try {
+            fresh = await storage.apiClient.fetchWorkout(workoutId);
+        } catch (error) {
+            return false;
+        }
+        if (!fresh || !Array.isArray(fresh.exercises)) {
+            return false;
+        }
+        // Re-check after the await: the fetch can easily outlive the conditions that
+        // allowed it. The user can have started editing this very workout while it was in
+        // flight, in which case adopting the answer would wipe what they just typed.
+        if (workoutSaverBusy(workoutId)) {
+            return false;
+        }
+        const target = state.database.workouts.find((item) => item.id === workoutId);
+        if (!target) {
+            // A workout created on another device. Nothing local to protect.
+            fresh.serverVersion = serverVersionOf(fresh);
+            state.database.workouts.push(fresh);
+            return true;
+        }
+        if (!shouldApplyRemote({ version: serverVersionOf(fresh), held: target.serverVersion || null, busy: false })) {
+            return false;
+        }
+        const localTouchedAt = target.updatedAt;
+        Object.assign(target, fresh);
+        target.serverVersion = serverVersionOf(fresh);
+        target.updatedAt = localTouchedAt || target.updatedAt;
+        // A refused detail read is remembered; a row that just arrived is proof it is
+        // readable again, so the flag must not survive.
+        delete target.detailUnavailable;
+        return true;
+    }
+
+    function applyRemoteWorkoutDeletion(workoutId) {
+        // Cancel BEFORE removing: a pending save still holding this workout would
+        // recreate it on the server, because saving upserts on the client-supplied id.
+        cancelWorkoutSave(workoutId);
+        const index = state.database.workouts.findIndex((item) => item.id === workoutId);
+        if (index !== -1) {
+            state.database.workouts.splice(index, 1);
+        }
+    }
+
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
             flushPendingWorkoutSaves();
+            // A backgrounded tab holding an open stream keeps the radio busy for events
+            // it cannot show anyone. Phones suspend the connection anyway; closing it
+            // deliberately means the reconnect happens on returning, not at some
+            // arbitrary moment decided by the OS.
+            stopLiveStream();
+        } else {
+            startLiveStream();
         }
     });
-    window.addEventListener("pagehide", flushPendingWorkoutSaves);
+    window.addEventListener("pagehide", () => {
+        flushPendingWorkoutSaves();
+        stopLiveStream();
+    });
 })();
 
 // Branded DevTools console banner + self-XSS warning. Pure client-side UX, no
