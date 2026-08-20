@@ -390,6 +390,18 @@ import {
             return this.request(`/access/requests/${encodeURIComponent(grantId)}/${action}`, { method: "POST" });
         }
 
+        watchWorkout(workoutId) {
+            return this.request(`/workouts/${encodeURIComponent(workoutId)}/watch`, { method: "GET" });
+        }
+
+        registerWatch(token, workoutId) {
+            return this.request("/live/watch", { method: "POST", body: JSON.stringify({ token, workoutId }) });
+        }
+
+        stopWatch(token) {
+            return this.request("/live/watch/stop", { method: "POST", body: JSON.stringify({ token }) });
+        }
+
         fetchPartner() {
             return this.request("/live/partner", { method: "GET" });
         }
@@ -2201,11 +2213,16 @@ import {
 
     function workout() {
         const workoutItem = editWorkout();
-        content(`<div class="workout-stack"><div id="partnerPanel"></div>${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
+        content(`<div class="workout-stack"><div id="presenceStrip"></div><div id="partnerPanel"></div>${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
         // Painted from whatever is already held, then refreshed in the background, so
         // switching to this screen never flashes an empty panel.
         renderPartnerPanel();
         loadPartnerState().then(renderPartnerPanel);
+        // The strip lived only on the dashboard and the feed. Its absence here IS the
+        // missing entry point: this is the screen you are on while training, and it is
+        // where seeing that somebody else is lifting right now actually matters.
+        renderPresenceStrip();
+        loadPresence();
     }
 
     function workoutStarter() {
@@ -3123,7 +3140,11 @@ import {
         // peer's prior sessions are summaries, so there is nothing to show and asking
         // for it used to throw.
         const historyUserId = workoutItem.userId === state.database.currentUserId ? workoutItem.userId : null;
-        const lastSets = lastExerciseSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
+        // For a session being watched the owner's own previous performance comes from the
+        // server — the client cannot compute it, because peers arrive as summaries with
+        // no sets, which is exactly why historyUserId is null for anybody but you.
+        const lastSets = watchedPrevious(workoutItem, workoutExercise.exerciseId)
+            || lastExerciseSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastNote = lastExerciseNote(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastResults = lastSets && lastSets.sets.length
             ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => `<span class="chip" data-set-index="${setIndex}">${number(set.weight)}×${set.repetitions}</span>`).join("")}</div></div>`
@@ -4433,6 +4454,8 @@ import {
             "cheer": () => cheerTapped(actionElement.dataset.workoutId),
             "set-privacy": () => setPrivacy(actionElement.dataset.value === "1"),
             "partner-invite": () => invitePartner(actionElement.dataset.userId),
+            "watch-workout": () => openWatch(actionElement.dataset.workoutId),
+            "close-watch": closeWatch,
             "partner-answer": () => answerPartner(actionElement.dataset.id, actionElement.dataset.decision),
             "request-access": () => requestAccess(actionElement.dataset.ownerId),
             "access-decide": () => decideAccess(actionElement.dataset.grantId, actionElement.dataset.decision),
@@ -11734,6 +11757,182 @@ import {
         }
     }
 
+    // ---- Watching somebody's session live ------------------------------------------------
+    //
+    // The SAME workout screen, in the read-only mode it already supports — not a bespoke
+    // panel and not focus mode. What makes it live is a hint from the server saying the
+    // session moved; the sets themselves are re-read through GET /workouts/:id, which is
+    // authorized on its own, so watching can never show something a plain request would
+    // refuse.
+    const watchState = { workoutId: null, workout: null, previous: {}, token: null, timer: null, loading: false };
+
+    function isWatching(workoutId) {
+        return Boolean(watchState.workoutId) && (!workoutId || watchState.workoutId === workoutId);
+    }
+
+    /**
+     * The peer's own previous performance, supplied by the server.
+     *
+     * The client cannot work this out for itself: peers arrive in the boot payload as
+     * summaries with no sets at all, which is why `historyUserId` in the editor is null
+     * for anyone but you. Consulted by lastExerciseSets when the workout being rendered
+     * is the one being watched.
+     */
+    function watchedPrevious(workoutItem, exerciseId) {
+        if (!workoutItem || workoutItem.id !== watchState.workoutId) {
+            return null;
+        }
+        const entry = watchState.previous?.[exerciseId];
+        return entry && entry.sets?.length ? entry : null;
+    }
+
+    async function openWatch(workoutId) {
+        if (!workoutId || storage.mode !== "api") {
+            return;
+        }
+        watchState.workoutId = workoutId;
+        watchState.workout = null;
+        watchState.previous = {};
+        renderWatchLayer();
+        await loadWatched(workoutId);
+        registerWatch();
+    }
+
+    async function loadWatched(workoutId) {
+        if (watchState.loading) {
+            return;
+        }
+        watchState.loading = true;
+        try {
+            const answer = await storage.apiClient.watchWorkout(workoutId);
+            // Guard against a stale response: the viewer may have closed this and opened
+            // another session while the request was in flight.
+            if (watchState.workoutId !== workoutId) {
+                return;
+            }
+            watchState.workout = answer?.workout || null;
+            watchState.previous = answer?.previous || {};
+            watchState.error = null;
+        } catch (error) {
+            if (watchState.workoutId !== workoutId) {
+                return;
+            }
+            watchState.workout = null;
+            watchState.error = Number(error?.status) === 403 && error?.payload?.code === "WORKOUT_PRIVATE"
+                ? { privateOwnerId: error.payload.ownerId }
+                : { message: friendlyError(error) };
+        } finally {
+            watchState.loading = false;
+            renderWatchBody();
+        }
+    }
+
+    function closeWatch() {
+        const token = watchState.token;
+        watchState.workoutId = null;
+        watchState.workout = null;
+        watchState.previous = {};
+        watchState.error = null;
+        clearTimeout(watchState.timer);
+        watchState.timer = null;
+        const layer = document.getElementById("watchLayer");
+        if (layer) {
+            layer.remove();
+        }
+        document.body.classList.remove("is-watching");
+        if (token) {
+            storage.apiClient.stopWatch(token).catch(() => undefined);
+        }
+    }
+
+    /**
+     * Tell the server this connection is watching.
+     *
+     * The token identifies the CONNECTION, not the account, so a phone and a desktop can
+     * watch different sessions and closing one does not tear down the other. Re-asserted
+     * on every hello frame, because a reconnect gets a new connection and the old
+     * registration died with the old one — without that the panel comes back looking live
+     * and never updates again.
+     */
+    function registerWatch() {
+        if (!watchState.workoutId || !watchState.token) {
+            return;
+        }
+        storage.apiClient.registerWatch(watchState.token, watchState.workoutId).catch(() => undefined);
+    }
+
+    // Coalesced, because a save fires per autosave and the server already rate-limits its
+    // fan-out; this collapses whatever still arrives together into one re-read.
+    function scheduleWatchRefresh() {
+        if (!watchState.workoutId) {
+            return;
+        }
+        clearTimeout(watchState.timer);
+        watchState.timer = setTimeout(() => {
+            watchState.timer = null;
+            loadWatched(watchState.workoutId);
+        }, 400);
+    }
+
+    // ---- The layer ----------------------------------------------------------------------
+
+    function renderWatchLayer() {
+        let layer = document.getElementById("watchLayer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.id = "watchLayer";
+            layer.className = "watch-layer";
+            document.body.appendChild(layer);
+        }
+        const owner = watchState.workout ? userById(watchState.workout.userId) : null;
+        layer.innerHTML = `<div class="watch-sheet" role="dialog" aria-label="Тренування учасника">
+            <div class="watch-head">
+                <div class="watch-who">
+                    <span class="watch-live" aria-hidden="true"></span>
+                    <strong>${escapeHtml(owner ? owner.displayName : "Тренування")}</strong>
+                    <span class="card-caption">наживо · лише перегляд</span>
+                </div>
+                <button class="icon-button" type="button" data-action="close-watch" aria-label="Закрити"><i data-lucide="x"></i></button>
+            </div>
+            <div class="watch-body" id="watchBody">${watchBodyMarkup()}</div>
+        </div>`;
+        document.body.classList.add("is-watching");
+        iconsIn(layer);
+    }
+
+    /**
+     * Repaint only the body.
+     *
+     * The body is the scroller, so re-rendering the whole layer on every hint would send
+     * the viewer back to the top and recreate every exercise thumbnail — once per set the
+     * person they are watching ticks.
+     */
+    function renderWatchBody() {
+        const host = document.getElementById("watchBody");
+        if (!host) {
+            return;
+        }
+        const anchor = host.scrollTop;
+        host.innerHTML = watchBodyMarkup();
+        iconsIn(host);
+        host.scrollTop = anchor;
+    }
+
+    function watchBodyMarkup() {
+        if (watchState.error?.privateOwnerId) {
+            return privateWorkoutPanel(watchState.error.privateOwnerId);
+        }
+        if (watchState.error) {
+            return emptyInline("Не вдалося відкрити", watchState.error.message);
+        }
+        if (!watchState.workout) {
+            return emptyInline("Завантажуємо", "Підтягуємо тренування.");
+        }
+        // The workout screen's own renderer, in the read-only mode it already supports:
+        // same cards, same set rows, same «Минулого разу» — just nothing to press.
+        return `<div class="workout-stack">${workoutEditor(watchState.workout)}</div>`;
+    }
+
     // ---- Training together --------------------------------------------------------------
     //
     // Two people, watching each other's sets as they happen. Read-only in both
@@ -12293,7 +12492,9 @@ import {
             <button class="presence-face" type="button" data-action="open-user" data-user-id="${escapeHtml(item.userId)}" aria-label="${escapeHtml(item.displayName)}">${face}</button>
             <span class="presence-name">${escapeHtml(firstName(item.displayName))}</span>
             ${item.partner ? `<span class="presence-pair" title="Тренується разом з ${escapeHtml(item.partner.displayName)}"><i data-lucide="users"></i>${escapeHtml(firstName(item.partner.displayName))}</span>` : ""}
-            <span class="presence-clock${clock ? "" : " is-word"}"${clock ? ` data-presence-clock="${escapeHtml(item.workoutId)}"` : ""}>${escapeHtml(elapsed)}</span>
+            ${clock
+                ? `<button class="presence-clock is-watchable" type="button" data-action="watch-workout" data-workout-id="${escapeHtml(item.workoutId)}" data-presence-clock="${escapeHtml(item.workoutId)}" title="Подивитися тренування ${escapeHtml(item.displayName)}">${escapeHtml(elapsed)}</button>`
+                : `<span class="presence-clock is-word">${escapeHtml(elapsed)}</span>`}
             ${partnerInviteButton(item)}
             <button class="presence-cheer${sent ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">${escapeHtml(sent || "💪")}</button>
         </div>`;
@@ -12739,6 +12940,14 @@ import {
                     // Reaching a real frame proves the connection works end to end, so
                     // the next drop starts its backoff from scratch.
                     liveStream.attempt = 0;
+                    if (frame.name === "hello") {
+                        // Identifies THIS connection. A reconnect gets a new one, and the
+                        // old watch registration died with the old connection — so it has
+                        // to be re-asserted or the panel comes back looking live and never
+                        // updates again.
+                        watchState.token = frame.data?.token || null;
+                        registerWatch();
+                    }
                     if (frame.name === "hello" && liveStream.reconnected) {
                         // The connection had dropped; anything sent during that window
                         // was delivered to nobody. Go and collect it.
@@ -12779,6 +12988,15 @@ import {
             // session announces both), and acting on each one separately repainted the
             // screen once per event.
             scheduleTeamRefresh(payload.touches);
+            return;
+        }
+        if (frame.name === "workout.watch") {
+            scheduleWatchRefresh();
+            return;
+        }
+        if (frame.name === "workout.deleted" && isWatching(payload.ids?.[0])) {
+            closeWatch();
+            toast("Тренування видалено", "Сесія, яку ти дивився, більше не існує");
             return;
         }
         if (frame.name === "partner.changed") {
@@ -12892,8 +13110,13 @@ import {
             return;
         }
         // An open dialog owns the screen; rebuilding underneath it is both pointless and
-        // a good way to lose whatever is half-typed in it.
+        // a good way to lose whatever is half-typed in it. The watch sheet counts too —
+        // it is a fixed layer of its own rather than part of the drawer stack, so the
+        // check above is blind to it.
         if (document.querySelector(".modal-layer, .drawer-layer")?.childElementCount) {
+            return;
+        }
+        if (document.getElementById("watchLayer")) {
             return;
         }
         renderSection();

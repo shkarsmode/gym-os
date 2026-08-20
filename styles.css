@@ -9913,3 +9913,93 @@ html.compact-ui .chip {
 }
 
 .presence-pair svg { width: 10px; height: 10px; flex: 0 0 auto; }
+
+/* ---- Дивитися чуже тренування ---------------------------------------------- */
+
+/* The clock is the tap target: it is already drawn only for somebody actually lifting,
+   and as a button at the same size it adds no row to the cell. */
+.presence-clock.is-watchable {
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    color: var(--color-accent);
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+
+.presence-clock.is-watchable:hover { color: var(--color-text); }
+
+/* A bottom sheet rather than a full-bleed drawer: watching somebody must not cover your
+   own action bar and nav — the point is a glance between sets. Above the drawer stack
+   but below the cheer layer, which is meant to fly over everything. */
+.watch-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2350;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.watch-sheet {
+    width: min(760px, 100%);
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+    animation: watch-in 200ms ease-out;
+    /* The sheet's own bottom padding respects the phone's home indicator. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+@keyframes watch-in {
+    from { transform: translateY(24px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.watch-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--color-border);
+    flex: 0 0 auto;
+}
+
+.watch-who {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.watch-live {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    align-self: center;
+    flex: 0 0 auto;
+    animation: presence-pulse 2s ease-out infinite;
+}
+
+/* The scroller. Repainted on its own so a hint never scrolls the viewer back to the top. */
+.watch-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px;
+    flex: 1 1 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .watch-sheet { animation: none; }
+    .watch-live { animation: none; }
+}
