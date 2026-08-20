@@ -390,6 +390,13 @@ import {
             return this.request(`/access/requests/${encodeURIComponent(grantId)}/${action}`, { method: "POST" });
         }
 
+        updatePartnerSet(workoutId, workoutExerciseId, setId, patch) {
+            return this.request(
+                `/workouts/${encodeURIComponent(workoutId)}/exercises/${encodeURIComponent(workoutExerciseId)}/sets/${encodeURIComponent(setId)}/update`,
+                { method: "POST", body: JSON.stringify(patch) }
+            );
+        }
+
         watchWorkout(workoutId) {
             return this.request(`/workouts/${encodeURIComponent(workoutId)}/watch`, { method: "GET" });
         }
@@ -408,6 +415,10 @@ import {
 
         invitePartner(userId) {
             return this.request("/live/partner/invite", { method: "POST", body: JSON.stringify({ userId }) });
+        }
+
+        setPartnerEditRight(id, allow) {
+            return this.request(`/live/partner/${encodeURIComponent(id)}/edit-right`, { method: "POST", body: JSON.stringify({ allow }) });
         }
 
         answerPartner(id, action) {
@@ -4467,6 +4478,7 @@ import {
             "watch-workout": () => openWatch(actionElement.dataset.workoutId),
             "close-watch": closeWatch,
             "partner-answer": () => answerPartner(actionElement.dataset.id, actionElement.dataset.decision),
+            "partner-edit-right": () => setPartnerEditRight(actionElement.dataset.id, actionElement.checked),
             "request-access": () => requestAccess(actionElement.dataset.ownerId),
             "access-decide": () => decideAccess(actionElement.dataset.grantId, actionElement.dataset.decision),
             "cheer-pick": () => sendCheer(actionElement.dataset.workoutId, actionElement.dataset.emoji),
@@ -4541,7 +4553,9 @@ import {
             "react-exercise": () => reactToExercise(actionElement.dataset.exerciseId, actionElement.dataset.reaction),
             "open-user": () => goToUser(actionElement.dataset.userId),
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
-            "toggle-set": () => toggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
+            "toggle-set": () => isWatchedTarget(actionElement)
+                ? editWatchedSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, { isCompleted: !watchedSet(actionElement)?.isCompleted })
+                : toggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
             "delete-set": () => deleteSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
             "finish-workout": () => finishWorkout(actionElement.dataset.workoutId),
             "open-cardio-modal": () => openCardioModal(actionElement.dataset.workoutId, actionElement.dataset.cardioId || null),
@@ -4624,7 +4638,17 @@ import {
 
         await runChangeAction(actionElement, async () => {
             if (actionElement.dataset.action === "set-field") {
-                await updateSetField(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field, actionElement.value);
+                if (isWatchedTarget(actionElement)) {
+                    // A partner's set: through the narrow route, never the local saver,
+                    // which would try to replace their whole workout with our copy.
+                    const field = actionElement.dataset.field;
+                    const raw = actionElement.value;
+                    await editWatchedSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, {
+                        [field]: field === "type" ? raw : Number(raw) || 0
+                    });
+                } else {
+                    await updateSetField(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field, actionElement.value);
+                }
             }
 
             if (actionElement.dataset.action === "edit-workout-meta") {
@@ -11322,10 +11346,18 @@ import {
             // key is dropped for a workout that has never been saved.
             baseUpdatedAt: workoutItem.serverVersion || undefined,
             exercises: (workoutItem.exercises || []).map((exercise, index) => ({
+                // Send the ids this client already mints. The server keeps them, so a set
+                // survives a save with the same identity — which is what makes it
+                // possible to name one in a realtime event, or to edit exactly it rather
+                // than whatever happens to be in that position by the time the request
+                // lands. undefined (not null) so the key is dropped for a row that has
+                // none yet.
+                id: exercise.id || undefined,
                 exerciseId: exercise.exerciseId,
                 order: exercise.order || index + 1,
                 notes: exercise.notes || "",
                 sets: (exercise.sets || []).map((set) => ({
+                    id: set.id || undefined,
                     type: set.type || "working",
                     weight: Number(set.weight) || 0,
                     repetitions: Number(set.repetitions) || 0,
@@ -11983,6 +12015,58 @@ import {
         }, 400);
     }
 
+    /** Whether the thing just clicked belongs to the session being watched. */
+    /** The set behind a control inside the watch sheet. */
+    function watchedSet(node) {
+        const exercise = (watchState.workout?.exercises || [])
+            .find((item) => item.id === node?.dataset?.workoutExerciseId);
+        return exercise?.sets.find((item) => item.id === node?.dataset?.setId) || null;
+    }
+
+    function isWatchedTarget(node) {
+        return Boolean(watchState.workoutId) && Boolean(node?.closest?.("#watchBody"));
+    }
+
+    function canEditWatched() {
+        const link = partnerState.partnership;
+        return Boolean(
+            link
+            && link.status === "active"
+            && link.iCanEditTheirs
+            && watchState.workout
+            && link.partner?.id === watchState.workout.userId
+        );
+    }
+
+    /**
+     * Change one set of the session being watched.
+     *
+     * Through the NARROW route, never the full save: that one deletes the workout's whole
+     * tree and recreates it from the payload, and with status "active" also closes every
+     * other session its owner has open — so pointing it at somebody else's workout would
+     * be handing over "erase this person's session", not "tick their set".
+     *
+     * Painted optimistically and then re-read, because the person doing this is standing
+     * next to the barbell and a round trip is not a thing they should watch.
+     */
+    async function editWatchedSet(workoutExerciseId, setId, patch) {
+        const exercise = (watchState.workout?.exercises || []).find((item) => item.id === workoutExerciseId);
+        const set = exercise?.sets.find((item) => item.id === setId);
+        if (!set) {
+            return;
+        }
+        const before = { ...set };
+        Object.assign(set, patch);
+        renderWatchBody();
+        try {
+            await storage.apiClient.updatePartnerSet(watchState.workoutId, workoutExerciseId, setId, patch);
+        } catch (error) {
+            Object.assign(set, before);
+            renderWatchBody();
+            toast("Не вдалося змінити", friendlyError(error), "error");
+        }
+    }
+
     // ---- The layer ----------------------------------------------------------------------
 
     /**
@@ -12045,13 +12129,14 @@ import {
         // Said inside the scroller, not only in the header, because the header scrolls
         // out of sight and the screen below it is pixel-for-pixel your own workout
         // screen. Confusing the two is the failure mode worth spending a banner on.
-        const banner = `<div class="watch-banner">
-            <i data-lucide="eye"></i>
-            <span>Це тренування <strong>${escapeHtml(name)}</strong> · лише перегляд</span>
+        const editable = canEditWatched();
+        const banner = `<div class="watch-banner${editable ? " can-edit" : ""}">
+            <i data-lucide="${editable ? "pencil" : "eye"}"></i>
+            <span>Це тренування <strong>${escapeHtml(name)}</strong> · ${editable ? "ти можеш редагувати" : "лише перегляд"}</span>
         </div>`;
         // The workout screen's own renderer, in the read-only mode it already supports:
         // same cards, same set rows, same «Минулого разу» — just nothing to press.
-        return `${banner}<div class="workout-stack is-watched">${workoutEditor(watchState.workout, { forceReadonly: true })}</div>`;
+        return `${banner}<div class="workout-stack is-watched">${workoutEditor(watchState.workout, { forceReadonly: !canEditWatched() })}</div>`;
     }
 
     // ---- Training together --------------------------------------------------------------
@@ -12133,6 +12218,32 @@ import {
         }
     }
 
+    /**
+     * Open or close YOUR OWN session to the person you are training with.
+     *
+     * Phrased in the panel as what the person in front of it controls — "X may edit MY
+     * workout" — because the mirror right belongs to the other person and no switch here
+     * can or should reach it.
+     */
+    async function setPartnerEditRight(id, allow) {
+        try {
+            await storage.apiClient.setPartnerEditRight(id, allow);
+            if (partnerState.partnership) {
+                partnerState.partnership.partnerCanEditMine = allow;
+            }
+            toast(
+                allow ? "Дозволено редагувати" : "Редагування закрито",
+                allow
+                    ? "Партнер може відмічати й міняти підходи у твоєму тренуванні"
+                    : "Тепер він тільки дивиться"
+            );
+        } catch (error) {
+            await loadPartnerState();
+            renderPartnerPanel();
+            toast("Не вдалося змінити", friendlyError(error), "error");
+        }
+    }
+
     // ---- The panel ----------------------------------------------------------------------
 
     function partnerPanelMarkup() {
@@ -12170,6 +12281,13 @@ import {
                     : `<span class="card-caption partner-idle">${name} ще не відкрив сьогоднішнє тренування</span>`}
                 <button class="button button-secondary compact" type="button" data-action="partner-answer" data-id="${escapeHtml(link.id)}" data-decision="leave">Завершити</button>
             </div>
+            <label class="partner-right">
+                <input type="checkbox" data-action="partner-edit-right" data-id="${escapeHtml(link.id)}" ${link.partnerCanEditMine ? "checked" : ""}>
+                <span>${name} може редагувати моє тренування</span>
+            </label>
+            ${link.iCanEditTheirs
+                ? `<p class="card-caption partner-granted"><i data-lucide="pencil"></i>${name} дозволив тобі редагувати своє</p>`
+                : ""}
         </section>`;
     }
 
