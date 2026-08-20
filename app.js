@@ -4924,12 +4924,25 @@ import {
 
     // Folding back on blur is what keeps the layout honest: open a note, think better of
     // it, and the screen returns to what it was.
+    //
+    // Deferred, because blur fires BEFORE the click that caused it. Re-rendering
+    // immediately would tear down the button the user is in the middle of pressing and
+    // swallow the tap — so wait for that click to land, then re-check: still empty, still
+    // not focused, still there.
     function closeEmptyNote(key, value) {
         if (!key || String(value || "").trim()) {
             return;
         }
-        state.openNotes.delete(key);
-        renderSection();
+        setTimeout(() => {
+            const live = document.querySelector(`textarea[data-note-key="${CSS.escape(key)}"]`);
+            if (live && (live.value.trim() || document.activeElement === live)) {
+                return;
+            }
+            if (!state.openNotes.delete(key)) {
+                return;
+            }
+            renderSection();
+        }, 180);
     }
 
     function topbarHeight() {
