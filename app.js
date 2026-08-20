@@ -1984,6 +1984,12 @@ import {
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
         updateLastResultsFocus();
+        // A re-render replaces the cards, so the remembered context key is stale.
+        const topbarEl = document.querySelector(".topbar");
+        if (topbarEl) {
+            delete topbarEl.dataset.ctxKey;
+        }
+        updateTopbarContext();
         syncGymClockTicker();
 
         if (pendingNoteFocus) {
@@ -3617,6 +3623,7 @@ import {
             }
         }, true);
         window.addEventListener("scroll", updateLastResultsFocus, { passive: true });
+        window.addEventListener("scroll", updateTopbarContext, { passive: true });
         // The event can fire before the app finishes booting, in which case index.html's
         // dispatch lands on nobody — index.html sets the flag too, so re-check here.
         if (window.__gymosUpdateReady) {
@@ -4944,6 +4951,73 @@ import {
             renderSection();
         }, 180);
     }
+
+    // As you scroll a workout, the sticky header stops being "Поточне тренування" and
+    // becomes the exercise it is currently covering — name in the title, its thumbnail
+    // where the avatar sits. Once that exercise scrolls past, the next one takes over, and
+    // back at the top the header returns to normal.
+    //
+    // Everything is read from the DOM and applied only on a real change: this runs on every
+    // scroll event, and rewriting the avatar's innerHTML each time would make it blink.
+    function updateTopbarContext() {
+        const topbar = document.querySelector(".topbar");
+        if (!topbar) {
+            return;
+        }
+        const eyebrow = element("sectionEyebrow");
+        const title = element("sectionTitle");
+        const avatar = element("openUserSwitcherButton");
+        const line = topbar.getBoundingClientRect().bottom;
+
+        let current = null;
+        for (const card of document.querySelectorAll(".workout-exercise")) {
+            const rect = card.getBoundingClientRect();
+            // The card the header is sitting on top of right now.
+            if (rect.top <= line && rect.bottom > line) {
+                current = card;
+            }
+        }
+
+        const key = current ? current.dataset.workoutExerciseId : "";
+        if (topbar.dataset.ctxKey === key) {
+            return;
+        }
+        topbar.dataset.ctxKey = key;
+
+        if (!current) {
+            topbar.classList.remove("is-context");
+            eyebrow.textContent = topbarContextBase.eyebrow;
+            title.textContent = topbarContextBase.title;
+            renderCurrentUserButton(true);
+            return;
+        }
+
+        // Remember what the header said before the first takeover, so restoring cannot
+        // invent a title.
+        if (!topbar.classList.contains("is-context")) {
+            topbarContextBase = { eyebrow: eyebrow.textContent, title: title.textContent };
+        }
+        topbar.classList.add("is-context");
+        const name = current.querySelector(".we-head-text h3");
+        const muscle = current.querySelector(".we-head-text .chip");
+        eyebrow.textContent = muscle ? muscle.textContent.trim() : "Вправа";
+        title.textContent = name ? name.textContent.trim() : "Вправа";
+
+        const source = current.querySelector(".wd-thumb img");
+        const shown = avatar.querySelector("img");
+        if (source && shown && shown.src === source.src) {
+            return;
+        }
+        avatar.innerHTML = source
+            ? `<img src="${escapeHtml(source.getAttribute("src"))}" alt="" loading="eager" decoding="sync">`
+            : `<i data-lucide="dumbbell"></i>`;
+        delete avatar.dataset.avatarSig;
+        if (!source) {
+            iconsIn(avatar);
+        }
+    }
+
+    let topbarContextBase = { eyebrow: "Gym Progress OS", title: "GymOS" };
 
     function topbarHeight() {
         const topbar = document.querySelector(".topbar");

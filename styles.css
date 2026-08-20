@@ -561,11 +561,27 @@ body.is-impersonating .sidebar {
     z-index: 20;
     margin: -24px -28px 22px;
     padding: 20px 28px 16px;
-    background: linear-gradient(180deg, var(--color-page) 62%, transparent);
+    /* Opaque for its whole height, then a short fade at the very bottom edge. The old
+       gradient went transparent at 62%, so an exercise card scrolling underneath was
+       legible straight through the header. */
+    background: linear-gradient(180deg, var(--color-page) 0%, var(--color-page) 88%, transparent 100%);
+    backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+}
+
+/* When the header has taken over an exercise's identity, the title is a name that must
+   not wrap the header onto a second line. */
+.topbar.is-context h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.topbar > div:first-child {
+    min-width: 0;
 }
 
 .eyebrow {
@@ -3889,6 +3905,12 @@ ul {
     }
 
     .topbar-actions .button {
+        display: none;
+    }
+
+    /* The auth gate empties this nav but the element stays in the layout, leaving a bare
+       rounded bar floating at the bottom of the sign-in screen. */
+    .mobile-navigation:empty {
         display: none;
     }
 
