@@ -1819,7 +1819,15 @@ body.is-impersonating .last-results {
 }
 
 @media (max-width: 560px) {
+    /* Two states on a phone.
+       AT REST (top of the page): the bar wraps, so the clock and all three buttons keep
+       their labels and nothing is clipped — four readable targets over two rows.
+       STUCK (as soon as you scroll): it collapses to a single row of icons. The labels
+       are what made «Завершити» run off the right edge, and once you are deep in the sets
+       you already know what the three buttons do — you need the row thin, not wordy. */
     .workout-actionbar {
+        flex-wrap: wrap;
+        justify-content: flex-start;
         padding: 8px;
         gap: 8px;
     }
@@ -1831,8 +1839,12 @@ body.is-impersonating .last-results {
         display: none;
     }
 
+    .workout-actionbar > .gym-clock {
+        flex: 0 0 auto;
+    }
+
     .workout-actionbar-actions {
-        flex: 1 1 auto;
+        flex: 1 1 100%;
         min-width: 0;
         gap: 6px;
     }
@@ -1851,6 +1863,45 @@ body.is-impersonating .last-results {
         text-overflow: ellipsis;
         white-space: nowrap;
     }
+
+    .workout-actionbar.is-stuck {
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        padding: 6px 8px;
+    }
+
+    .workout-actionbar.is-stuck .workout-actionbar-actions {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+    }
+
+    /* Icon-only: the label is removed from the flow, not just hidden, so the buttons
+       shrink to squares instead of keeping their text width. */
+    .workout-actionbar.is-stuck .button span {
+        display: none;
+    }
+
+    .workout-actionbar.is-stuck .button {
+        flex: 0 0 auto;
+        padding-inline: 11px;
+    }
+
+    /* The clock keeps its digits — a stopwatch with no number is not a stopwatch. */
+    .workout-actionbar.is-stuck > .gym-clock {
+        margin-right: auto;
+    }
+}
+
+/* The bar animates between the two states; the sentinel above it is what detects the
+   transition, and has no size of its own. */
+.workout-actionbar {
+    transition: padding 160ms ease;
+}
+
+.wab-sentinel {
+    height: 1px;
+    margin-bottom: -1px;
+    pointer-events: none;
 }
 
 .exercise-title-line {
@@ -9102,5 +9153,89 @@ html.compact-ui .chip {
         margin-left: 0;
         padding: 2px 7px;
         font-size: 0.72rem;
+    }
+}
+
+/* "A new version is ready" bar. Deliberately not a modal: it must never block a set the
+   athlete is in the middle of logging, and it must survive being ignored. Sits above the
+   mobile nav and inside the safe area. */
+.update-banner {
+    position: fixed;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: min(520px, calc(100vw - 24px));
+    padding: 11px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-elevated);
+    box-shadow: var(--shadow-strong, 0 18px 40px -20px rgba(0, 0, 0, 0.9));
+    transform: translate(-50%, 14px);
+    opacity: 0;
+    transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.update-banner.visible {
+    transform: translate(-50%, 0);
+    opacity: 1;
+}
+
+.update-banner-ico {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    color: var(--color-accent);
+}
+
+.update-banner-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.update-banner-text strong {
+    font-size: 0.92rem;
+}
+
+.update-banner-text span {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+}
+
+.update-banner .button.button-primary {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+.update-banner-close {
+    flex: 0 0 auto;
+}
+
+@media (min-width: 721px) {
+    /* No mobile nav to clear on desktop. */
+    .update-banner {
+        left: auto;
+        right: 20px;
+        bottom: 20px;
+        transform: translate(0, 14px);
+    }
+
+    .update-banner.visible {
+        transform: translate(0, 0);
+    }
+}
+
+@media (max-width: 560px) {
+    .update-banner-text span {
+        display: none;
     }
 }

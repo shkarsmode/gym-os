@@ -1914,6 +1914,7 @@ import {
         }
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
+        watchActionBarStuck();
         syncGymClockTicker();
 
         if (pendingExerciseScrollId) {
@@ -2810,6 +2811,7 @@ import {
                 <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
             </div>`;
         return `
+            ${readonly ? "" : `<div class="wab-sentinel" aria-hidden="true"></div>`}
             ${actionBar}
             <section class="card workout-head">
                 <div class="card-header">
@@ -3463,6 +3465,51 @@ import {
         applySidebarState();
     }
 
+    // ---- Update prompt ----------------------------------------------------
+    //
+    // A deployed build only reaches an open tab on reload. index.html watches the service
+    // worker and fires "gymos:update-ready"; this shows a quiet bar rather than reloading,
+    // because a forced reload mid-set would throw away whatever the athlete was typing.
+    // Dismissing hides it for the session — the next visit picks the new build up anyway.
+    let updateBannerShown = false;
+
+    function showUpdateBanner() {
+        if (updateBannerShown || document.getElementById("updateBanner")) {
+            return;
+        }
+        updateBannerShown = true;
+        const node = document.createElement("div");
+        node.id = "updateBanner";
+        node.className = "update-banner";
+        node.innerHTML = `<span class="update-banner-ico"><i data-lucide="sparkles"></i></span>
+            <div class="update-banner-text"><strong>Є нова версія GymOS</strong><span>Онови, щоб отримати останні зміни.</span></div>
+            <button class="button button-primary compact" type="button" data-action="apply-update"><i data-lucide="refresh-cw"></i>Оновити</button>
+            <button class="icon-button update-banner-close" type="button" data-action="dismiss-update" aria-label="Пізніше"><i data-lucide="x"></i></button>`;
+        document.body.appendChild(node);
+        iconsIn(node);
+        requestAnimationFrame(() => node.classList.add("visible"));
+    }
+
+    function dismissUpdateBanner() {
+        const node = document.getElementById("updateBanner");
+        if (!node) {
+            return;
+        }
+        node.classList.remove("visible");
+        setTimeout(() => node.remove(), 260);
+    }
+
+    async function applyUpdate() {
+        // Flush anything the debounced saver is still holding, or reloading loses the
+        // last set the user ticked.
+        try {
+            flushPendingWorkoutSaves();
+        } catch (error) {
+            // nothing pending
+        }
+        window.location.reload();
+    }
+
     function bindEvents() {
         // Run-once. initialize() became re-entrant when renderLoadFailure gained a
         // "retry-load" action, and the named handlers below dedupe per the DOM spec
@@ -3479,6 +3526,12 @@ import {
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
         window.addEventListener("hashchange", handleRoute);
+        window.addEventListener("gymos:update-ready", showUpdateBanner);
+        // The event can fire before the app finishes booting, in which case index.html's
+        // dispatch lands on nobody — index.html sets the flag too, so re-check here.
+        if (window.__gymosUpdateReady) {
+            showUpdateBanner();
+        }
         // Moved here from initialize() so the run-once guard above covers it too —
         // it is an anonymous listener and would otherwise stack on every retry.
         window.addEventListener("online", () => flushOfflineQueue());
@@ -4289,6 +4342,8 @@ import {
             "ai-stats-refresh": () => loadAiStats(),
             reset: resetData,
             "close-overlay": closeOverlay,
+            "apply-update": applyUpdate,
+            "dismiss-update": dismissUpdateBanner,
             "close-sheet": closeSheet
         };
 
@@ -4686,6 +4741,34 @@ import {
         } else {
             window.location.hash = target;
         }
+    }
+
+    let actionBarObserver = null;
+
+    function watchActionBarStuck() {
+        if (actionBarObserver) {
+            actionBarObserver.disconnect();
+            actionBarObserver = null;
+        }
+        const sentinel = document.querySelector(".wab-sentinel");
+        const bar = document.querySelector(".workout-actionbar");
+        if (!sentinel || !bar || typeof IntersectionObserver !== "function") {
+            return;
+        }
+        // rootMargin pulls the trigger line down to just under the topbar, so the bar
+        // collapses exactly when it starts overlapping content rather than a moment later.
+        actionBarObserver = new IntersectionObserver(([entry]) => {
+            bar.classList.toggle("is-stuck", !entry.isIntersecting);
+            // Collapsing removes a row, so the measured height the sticky pill depends on
+            // has to be republished.
+            updateTopbarOffset();
+        }, { rootMargin: `-${Math.round(topbarHeight()) + 8}px 0px 0px 0px`, threshold: 0 });
+        actionBarObserver.observe(sentinel);
+    }
+
+    function topbarHeight() {
+        const topbar = document.querySelector(".topbar");
+        return topbar ? topbar.offsetHeight : 64;
     }
 
     function updateTopbarOffset() {

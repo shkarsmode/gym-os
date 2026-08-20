@@ -87,9 +87,48 @@
     <script type="module" src="/app.js"></script>
     <script>
         // PWA service worker — installable app + offline shell (network-first).
+        //
+        // The worker calls skipWaiting() on install, so a deploy takes over the cache
+        // immediately — but an already-open tab keeps running the OLD bundle until it
+        // reloads. Left alone that means someone can sit on a stale build for days and
+        // report bugs that were fixed. So: notice the swap, tell the app, let the app ask.
+        // Never reload on its own — that would wipe a set the user is mid-way through
+        // typing.
         if ("serviceWorker" in navigator) {
             window.addEventListener("load", () => {
-                navigator.serviceWorker.register("/sw.js").catch(() => {});
+                navigator.serviceWorker.register("/sw.js").then((registration) => {
+                    if (!registration) {
+                        return;
+                    }
+                    const announce = () => {
+                        // Flag as well as event: the update can land before app.js has
+                        // attached its listener, and a missed event means a stale tab.
+                        window.__gymosUpdateReady = true;
+                        window.dispatchEvent(new CustomEvent("gymos:update-ready"));
+                    };
+                    const watch = (worker) => {
+                        if (!worker) {
+                            return;
+                        }
+                        worker.addEventListener("statechange", () => {
+                            // A controller already exists → this is an UPDATE, not the
+                            // very first install (which must stay silent).
+                            if (worker.state === "installed" && navigator.serviceWorker.controller) {
+                                announce();
+                            }
+                        });
+                    };
+                    watch(registration.waiting);
+                    registration.addEventListener("updatefound", () => watch(registration.installing));
+                    // A tab left open all day never re-checks on its own.
+                    const poll = () => registration.update().catch(() => {});
+                    setInterval(poll, 15 * 60 * 1000);
+                    document.addEventListener("visibilitychange", () => {
+                        if (document.visibilityState === "visible") {
+                            poll();
+                        }
+                    });
+                }).catch(() => {});
             });
         }
     </script>
