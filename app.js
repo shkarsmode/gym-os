@@ -11,6 +11,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
+import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
 // See lib/scoring.js for the two order/timezone hazards documented at the top.
@@ -1286,7 +1287,24 @@ import {
         if (problem) {
             throw new Error(problem);
         }
+        adoptServerVersions(loaded.workouts);
         return loaded;
+    }
+
+    // Remember which server revision each workout came from.
+    //
+    // Kept in its OWN field rather than reusing `updatedAt`: that one is a local "when
+    // did I last touch this" marker, written by every mutation site from the device's own
+    // clock, so it is never behind and would make the staleness check useless. This is
+    // the value the server minted, and the only thing worth sending back as the base of
+    // the next save.
+    function adoptServerVersions(rows) {
+        for (const row of (Array.isArray(rows) ? rows : [])) {
+            const version = serverVersionOf(row);
+            if (version) {
+                row.serverVersion = version;
+            }
+        }
     }
 
     function createEmptyDatabase() {
@@ -6436,7 +6454,12 @@ import {
             return;
         }
         if (full && Array.isArray(full.exercises)) {
+            const localTouchedAt = workoutItem.updatedAt;
             Object.assign(workoutItem, full);
+            // Object.assign would otherwise let the server's timestamp masquerade as the
+            // local one and vice versa; keep the two meanings apart.
+            workoutItem.serverVersion = serverVersionOf(full) || workoutItem.serverVersion || null;
+            workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
         } else {
             workoutItem.detailUnavailable = true;
         }
@@ -11050,6 +11073,12 @@ import {
             durationOverride: (workoutItem.durationOverride === undefined || workoutItem.durationOverride === null || workoutItem.durationOverride === "") ? undefined : Math.round(Number(workoutItem.durationOverride)),
             firstSetAt: workoutItem.firstSetAt || undefined,
             lastSetAt: workoutItem.lastSetAt || undefined,
+            // The revision this payload was built from. The server refuses the write if
+            // the row has moved on since — without it, saving from a device holding an
+            // old copy silently deletes whatever another device added in the meantime,
+            // because this endpoint replaces the whole tree. undefined (not null) so the
+            // key is dropped for a workout that has never been saved.
+            baseUpdatedAt: workoutItem.serverVersion || undefined,
             exercises: (workoutItem.exercises || []).map((exercise, index) => ({
                 exerciseId: exercise.exerciseId,
                 order: exercise.order || index + 1,
@@ -11276,10 +11305,17 @@ import {
         let ok = false;
         try {
             workoutItem.updatedAt = new Date().toISOString();
-            await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem));
+            const ack = await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem));
+            // The revision this save produced becomes the base of the next one. Without
+            // adopting it, the second save of a session would announce a version the
+            // server had already moved past and be refused as stale.
+            if (ack && ack.updatedAt) {
+                workoutItem.serverVersion = ack.updatedAt;
+            }
             storage.backendStatus = "online";
             ok = true;
             saver.retries = 0;
+            saver.conflictRetries = 0;
         } catch (error) {
             saver.lastError = error;
             console.error(error);
@@ -11287,6 +11323,18 @@ import {
                 saver.running = false;
                 handleUserFacingError(error, "save-workout");
                 return;
+            }
+            // The row moved on somewhere else — most often this account's other device.
+            // This endpoint replaces the whole tree, so the payload just refused would
+            // have deleted whatever the other device added. Reconcile instead.
+            if (isStaleConflict(error)) {
+                saver.conflictRetries = (saver.conflictRetries || 0) + 1;
+                // Two devices saving in a tight loop could ping-pong forever; after a
+                // couple of rounds stop and let the user see what happened.
+                if (saver.conflictRetries <= 2 && await reconcileStaleWorkout(workoutItem, error)) {
+                    saver.dirty = true;
+                    saver.lastError = null;
+                }
             }
             // Network loss (gym basement mode): park the save in the offline queue
             // instead of burning retries — it syncs when the connection returns.
@@ -11320,6 +11368,60 @@ import {
                 showSyncIndicator("error", friendlyError(saver.lastError));
             }
         }
+    }
+
+    // Decide what to do when the server refuses a save because the row moved on.
+    //
+    // Returns true when the caller should retry the save, false when the local copy was
+    // replaced by the server's and there is nothing left to send.
+    //
+    // The conflict has two very different shapes and they need opposite handling:
+    //
+    //  - This device is merely BEHIND — it holds an older revision but nothing the newer
+    //    one has is missing from it (the usual case: a second tab, or a phone that was
+    //    idle while the desktop did nothing but bump the row). Re-sending is safe, so
+    //    re-base on the server's revision and retry silently.
+    //
+    //  - Both copies contain training the other lacks. Re-sending would delete the other
+    //    device's work, and no automatic rule can pick a winner honestly. Take the
+    //    server's copy — it is the one holding what this device has not seen — and say so
+    //    out loud, because a set that vanishes without a word is the exact failure this
+    //    whole mechanism exists to prevent.
+    async function reconcileStaleWorkout(workoutItem, error) {
+        let fresh = null;
+        try {
+            fresh = await storage.apiClient.fetchWorkout(workoutItem.id);
+        } catch (fetchError) {
+            fresh = null;
+        }
+        if (!fresh || !Array.isArray(fresh.exercises)) {
+            // Could not read the other side; adopt the version the refusal named so the
+            // retry at least carries a current base, and let the normal retry path run.
+            const named = conflictVersion(error);
+            if (named) {
+                workoutItem.serverVersion = named;
+                return true;
+            }
+            return false;
+        }
+        if (localIsAhead(workoutItem, fresh)) {
+            workoutItem.serverVersion = serverVersionOf(fresh) || conflictVersion(error) || workoutItem.serverVersion;
+            return true;
+        }
+        const localTouchedAt = workoutItem.updatedAt;
+        Object.assign(workoutItem, fresh);
+        workoutItem.serverVersion = serverVersionOf(fresh);
+        workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
+        renderSection();
+        // Deliberately loud. The local edit that triggered this save did not land, and a
+        // set disappearing without a word is the exact failure the version check exists
+        // to prevent — so it is said out loud rather than logged.
+        toast(
+            "Тренування змінилось на іншому пристрої",
+            "Показано свіжу версію. Перевір останній підхід — можливо, його треба відмітити ще раз.",
+            "error"
+        );
+        return false;
     }
 
     function cancelWorkoutSave(workoutId) {
