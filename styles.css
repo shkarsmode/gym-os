@@ -4068,7 +4068,9 @@ ul {
     /* Date + duration are short enough to share a row even on a phone, and stacking them
        left a conspicuous empty half beside the date. `.two` opts back in explicitly. */
     .field-grid.two {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        /* Not equal halves: "20 серп. 2026 р." is a longer string than "1 год 30 хв" and
+           was ellipsised at 50/50. */
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
         gap: 8px;
     }
 
