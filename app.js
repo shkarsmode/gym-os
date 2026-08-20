@@ -2883,10 +2883,10 @@ import {
             ${actionBar}
             <section class="card workout-head">
                 <div class="card-header">
-                    <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button></div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
+                    <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button></div><div class="workout-title-line"><h2>${escapeHtml(workoutLabel(workoutItem))}</h2>${readonly ? `<span class="chip">${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span>` : `<button class="chip chip-button workout-type-chip" type="button" data-action="open-workout-type" data-workout-id="${workoutItem.id}" title="Змінити тип тренування"><span>${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span><i data-lucide="chevron-down"></i></button>`}</div><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
                 </div>
                 ${contextBanner}
-                ${readonly ? "" : `<div class="field-grid three" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div><div class="field"><label>Тип</label><gym-select data-action="edit-workout-meta" data-field="workoutType" data-workout-id="${workoutItem.id}">${Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${workoutItem.workoutType === value ? "selected" : ""}>${label}</option>`).join("")}</gym-select></div></div>`}
+                ${readonly ? "" : `<div class="field-grid two" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div></div>`}
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
             </section>
@@ -4412,6 +4412,7 @@ import {
             reset: resetData,
             "close-overlay": closeOverlay,
             "apply-update": applyUpdate,
+            "open-workout-type": () => openWorkoutTypePicker(actionElement.dataset.workoutId),
             "dismiss-update": dismissUpdateBanner,
             "close-sheet": closeSheet
         };
@@ -4836,17 +4837,38 @@ import {
                 continue;
             }
             const line = pill.getBoundingClientRect().bottom;
+            // A set hands over to the next one as soon as ~30% of it has passed the line —
+            // by then you are reading the row below, and waiting for the halfway point made
+            // the highlight feel a beat late.
             let best = 0;
-            let bestDistance = Infinity;
             rows.forEach((row, index) => {
                 const rect = row.getBoundingClientRect();
-                const distance = Math.abs(rect.top + rect.height / 2 - line);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    best = index;
+                if (rect.top + rect.height * 0.3 <= line) {
+                    best = Math.min(rows.length - 1, index + 1);
                 }
             });
             chips.forEach((chip, index) => chip.classList.toggle("is-current", index === best));
+        }
+    }
+
+    // The workout type lives in the title now, so changing it is a one-tap sheet rather
+    // than a select buried under the fold.
+    async function openWorkoutTypePicker(workoutId) {
+        const workoutItem = ownWorkout(workoutId);
+        if (!workoutItem || !canManage(workoutItem)) {
+            return;
+        }
+        const choice = await choiceDialog("Який це тип тренування?", {
+            title: "Тип тренування",
+            closable: true,
+            choices: Object.entries(workoutTypeLabels).map(([value, label]) => ({
+                label,
+                value,
+                variant: workoutItem.workoutType === value ? "primary" : "secondary"
+            }))
+        });
+        if (choice && choice !== workoutItem.workoutType) {
+            await updateWorkoutMeta(workoutId, "workoutType", choice);
         }
     }
 

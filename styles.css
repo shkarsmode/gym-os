@@ -1713,20 +1713,27 @@ body.is-reordering .we-drag-handle {
     cursor: grabbing;
 }
 
-/* While reordering, collapse every card down to grip + name + muscle group. The
-   whole list then fits on screen, so the drag is smooth on phones and every
-   exercise stays visible. The grip stays pinned to the left of the name. */
+/* While reordering, a card collapses to one line: grip, thumbnail, name, muscle group.
+   The whole list then fits on screen, so the drag is smooth on a phone and you can see
+   where the exercise is going.
+   Hiding `.we-body` wholesale rather than listing its children: the previous rule targeted
+   `.workout-exercise > .field`, but the notes live one level deeper inside .we-body-inner,
+   so every card stayed as tall as its notes textarea and only two fitted on screen. */
 .workout-exercise-list.reordering .workout-exercise {
-    padding: 12px 14px;
+    padding: 8px 10px;
     box-shadow: none;
 }
-.workout-exercise-list.reordering .wd-thumb,
 .workout-exercise-list.reordering .exercise-header .card-caption,
 .workout-exercise-list.reordering .inline-actions,
-.workout-exercise-list.reordering .last-results,
-.workout-exercise-list.reordering .set-list,
-.workout-exercise-list.reordering .workout-exercise > .field {
+.workout-exercise-list.reordering .we-body {
     display: none !important;
+}
+
+/* The picture is the fastest way to recognise an exercise mid-drag, so it stays — just
+   small enough not to make the row tall again. */
+.workout-exercise-list.reordering .wd-thumb {
+    width: 34px;
+    height: 34px;
 }
 .workout-exercise-list.reordering .we-dragging {
     box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.65);
@@ -9261,5 +9268,38 @@ html.compact-ui .chip {
 .last-results-chips .chip.is-current {
     border-color: var(--color-accent-border);
     background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-2));
+    color: var(--color-accent-strong);
+}
+
+/* The workout type sits beside the title as a chip you can tap. The chevron is what says
+   "this opens something" — a chip that only looked like a label got read as decoration. */
+.workout-title-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.workout-title-line h2 {
+    margin: 0;
+}
+
+.chip.chip-button.workout-type-chip {
+    gap: 4px;
+    padding-right: 6px;
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.chip.chip-button.workout-type-chip i,
+.chip.chip-button.workout-type-chip svg {
+    width: 13px;
+    height: 13px;
+    opacity: 0.7;
+}
+
+.chip.chip-button.workout-type-chip:hover {
+    border-color: var(--color-accent-border);
     color: var(--color-accent-strong);
 }
