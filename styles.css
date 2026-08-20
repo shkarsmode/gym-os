@@ -1831,10 +1831,13 @@ body.is-impersonating .last-results {
        «Завершити» used to be clipped because the buttons were forced to equal widths
        (flex: 1 1 0) and the longest label lost. Sized to their content they all fit on one
        row at 390px with room left for the clock. */
+    /* Every value here is trimmed to buy horizontal room: with the clock chip on screen
+       the three labels were 48px short of fitting at 373px and got ellipsised. Padding,
+       gaps and a slightly smaller label give that back, so «Завершити» stays a word. */
     .workout-actionbar {
         flex-wrap: nowrap;
-        padding: 8px;
-        gap: 8px;
+        padding: 7px 6px;
+        gap: 6px;
     }
 
     /* The title is right below in the head card; on a phone the row is worth more than
@@ -1847,16 +1850,22 @@ body.is-impersonating .last-results {
         flex: 0 0 auto;
         margin-left: 0;
         margin-right: auto;
+        padding: 2px 6px;
+        gap: 4px;
     }
 
     /* The actions block owns whatever the clock leaves. `flex: 0 1 auto` left it at its
        content width while `space-between` pushed it right — so once the clock appeared the
        row was wider than the bar and «Завершити» hung off the screen. Growing to fill and
        being allowed to shrink (min-width: 0) means it can never overflow. */
+    .workout-actionbar .button {
+        font-size: 13px;
+    }
+
     .workout-actionbar-actions {
         flex: 1 1 auto;
         min-width: 0;
-        gap: 6px;
+        gap: 4px;
     }
 
     /* grow: 1 with basis auto — each button keeps its natural width and only SHARES the
@@ -1866,8 +1875,8 @@ body.is-impersonating .last-results {
         flex: 1 1 auto;
         width: auto;
         min-width: 0;
-        padding-inline: 10px;
-        gap: 5px;
+        padding-inline: 7px;
+        gap: 4px;
     }
 
     .workout-actionbar .button span {
