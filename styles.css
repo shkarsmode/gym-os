@@ -9783,3 +9783,113 @@ html.compact-ui .chip {
     background: var(--color-border);
     flex: 0 0 auto;
 }
+
+/* ---- Спільна сесія --------------------------------------------------------- */
+
+.partner-card {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+}
+
+.partner-card.is-live {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 8%, var(--color-surface)), var(--color-surface));
+}
+
+.partner-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.partner-head > div { flex: 1 1 160px; min-width: 0; }
+.partner-head strong { display: block; }
+
+.partner-idle {
+    margin: 10px 0 0;
+}
+
+.partner-progress {
+    display: flex;
+    gap: 14px;
+    margin: 12px 0 8px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.partner-count, .partner-volume { font-variant-numeric: tabular-nums; }
+
+/* What they are on right now — the thing you actually look over at. */
+.partner-next {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--color-elevated);
+    border: 1px solid var(--color-border);
+}
+
+.partner-next-label {
+    display: block;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    margin-bottom: 2px;
+}
+
+.partner-done {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-muted);
+}
+
+.partner-done svg { width: 16px; height: 16px; }
+
+.partner-exercises { margin-top: 10px; }
+
+.partner-ex {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.85rem;
+}
+
+.partner-ex-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.partner-ex-sets { display: flex; gap: 3px; flex: 0 0 auto; }
+
+/* One dot per set, filled once it is done: readable at a glance from across a gym. */
+.pset {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-border);
+}
+
+.pset.is-done { background: var(--color-accent); }
+
+.partner-ex-count {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.presence-invite {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    border-radius: 999px;
+    padding: 2px 8px;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    line-height: 1;
+}
+
+.presence-invite svg { width: 13px; height: 13px; }
+.presence-invite:hover { color: var(--color-accent); border-color: var(--color-accent); }

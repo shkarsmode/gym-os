@@ -390,6 +390,18 @@ import {
             return this.request(`/access/requests/${encodeURIComponent(grantId)}/${action}`, { method: "POST" });
         }
 
+        fetchPartner() {
+            return this.request("/live/partner", { method: "GET" });
+        }
+
+        invitePartner(userId) {
+            return this.request("/live/partner/invite", { method: "POST", body: JSON.stringify({ userId }) });
+        }
+
+        answerPartner(id, action) {
+            return this.request(`/live/partner/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+        }
+
         fetchPresence() {
             return this.request("/live/presence", { method: "GET" });
         }
@@ -1281,6 +1293,11 @@ import {
         // Started here rather than at module load: before this point there is no token,
         // and a stream opened without one just burns a reconnect cycle against a 401.
         startLiveStream();
+        loadPartnerState().then(() => {
+            if (state.section === "workout") {
+                renderSection();
+            }
+        });
         loadAccessState().then(() => {
             if (state.section === "settings") {
                 renderSection();
@@ -2184,7 +2201,11 @@ import {
 
     function workout() {
         const workoutItem = editWorkout();
-        content(`<div class="workout-stack">${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
+        content(`<div class="workout-stack"><div id="partnerPanel"></div>${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
+        // Painted from whatever is already held, then refreshed in the background, so
+        // switching to this screen never flashes an empty panel.
+        renderPartnerPanel();
+        loadPartnerState().then(renderPartnerPanel);
     }
 
     function workoutStarter() {
@@ -4411,6 +4432,8 @@ import {
             "feed-scope": () => setFeedScope(actionElement.dataset.scope),
             "cheer": () => cheerTapped(actionElement.dataset.workoutId),
             "set-privacy": () => setPrivacy(actionElement.dataset.value === "1"),
+            "partner-invite": () => invitePartner(actionElement.dataset.userId),
+            "partner-answer": () => answerPartner(actionElement.dataset.id, actionElement.dataset.decision),
             "request-access": () => requestAccess(actionElement.dataset.ownerId),
             "access-decide": () => decideAccess(actionElement.dataset.grantId, actionElement.dataset.decision),
             "cheer-pick": () => sendCheer(actionElement.dataset.workoutId, actionElement.dataset.emoji),
@@ -6503,7 +6526,7 @@ import {
         // summary is told apart from a genuinely empty session (that one has []). Without
         // this the drawer claimed "Вправ ще немає" for a workout whose own chip said 6.
         const needsDetail = !Array.isArray(workoutItem.exercises) && !workoutItem.detailUnavailable;
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;"><button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" data-workout-detail="${workoutItem.id}" style="margin-top:14px;">${workoutDetailBody(workoutItem, needsDetail)}</div>`, { fullscreen: true });
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${partnerInviteCta(workoutItem, readonly)}<button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" data-workout-detail="${workoutItem.id}" style="margin-top:14px;">${workoutDetailBody(workoutItem, needsDetail)}</div>`, { fullscreen: true });
         if (needsDetail) {
             hydrateWorkoutDetail(workoutId);
         }
@@ -8171,7 +8194,7 @@ import {
         // see, rather than zeroing them — a zero would claim they had lifted nothing.
         // Their absence is the signal to draw a lock instead of a number.
         const hidden = !isCurrent && detailHiddenFor(user.id);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: isCurrent })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="badge unlocked">Це ви</span>` : ""}</div><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><div class="inline-actions wrap user-detail-actions">${subscribeButton(user, isCurrent)}${impersonateButton(user, isCurrent)}<button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></div>${achievementBadges(user.id)}</section><section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section>${hidden
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: isCurrent })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="badge unlocked">Це ви</span>` : ""}</div><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><div class="inline-actions wrap user-detail-actions">${partnerProfileCta(user, isCurrent)}${subscribeButton(user, isCurrent)}${impersonateButton(user, isCurrent)}<button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></div>${achievementBadges(user.id)}</section><section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section>${hidden
             ? `${metric("Тренування", summary.completedWorkouts ?? 0, "calendar-check", "Завершено", "span-3")}${metric("Серія", `${summary.trainingStreak ?? 0}`, "flame", "днів поспіль", "span-3")}${lockedMetric("Обсяг", "span-3")}${lockedMetric("Підходи", "span-3")}`
             : `${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}`}</div>`);
     }
@@ -11711,6 +11734,223 @@ import {
         }
     }
 
+    // ---- Training together --------------------------------------------------------------
+    //
+    // Two people, watching each other's sets as they happen. Read-only in both
+    // directions — see partner.service.ts for why editing a partner's session is not
+    // currently buildable honestly.
+    const partnerState = { partnership: null, workout: null, loading: false };
+
+    async function loadPartnerState() {
+        if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+            return;
+        }
+        try {
+            const answer = await storage.apiClient.fetchPartner();
+            partnerState.partnership = answer?.partnership || null;
+        } catch (error) {
+            partnerState.partnership = null;
+        }
+        if (!partnerState.partnership || partnerState.partnership.status !== "active") {
+            partnerState.workout = null;
+            return;
+        }
+        await refreshPartnerWorkout();
+    }
+
+    /**
+     * Re-read the partner's live session.
+     *
+     * Their sets are fetched through GET /workouts/:id like anyone else's — the stream
+     * only ever said "it moved". That is what keeps this from being a way to see
+     * something a plain request would refuse.
+     */
+    async function refreshPartnerWorkout() {
+        const partner = partnerState.partnership?.partner;
+        if (!partner) {
+            return;
+        }
+        const live = liveState.presence.find((item) => item.userId === partner.id && item.state === "training");
+        if (!live) {
+            // They are not lifting yet. Not an error — the panel says so.
+            partnerState.workout = null;
+            renderPartnerPanel();
+            return;
+        }
+        try {
+            const full = await storage.apiClient.fetchWorkout(live.workoutId);
+            partnerState.workout = full && Array.isArray(full.exercises) ? full : null;
+        } catch (error) {
+            partnerState.workout = null;
+        }
+        renderPartnerPanel();
+    }
+
+    async function invitePartner(userId) {
+        try {
+            await storage.apiClient.invitePartner(userId);
+            await loadPartnerState();
+            renderSection();
+            toast("Запрошення надіслано", "Щойно людина прийме — побачиш її підходи наживо");
+        } catch (error) {
+            toast("Не вдалося запросити", friendlyError(error), "error");
+        }
+    }
+
+    async function answerPartner(id, action) {
+        try {
+            await storage.apiClient.answerPartner(id, action);
+            await loadPartnerState();
+            renderSection();
+            if (action === "accept") {
+                toast("Тренуєте разом", "Ви бачите підходи одне одного наживо");
+            }
+        } catch (error) {
+            toast("Не вдалося", friendlyError(error), "error");
+        }
+    }
+
+    // ---- The panel ----------------------------------------------------------------------
+
+    function partnerPanelMarkup() {
+        const link = partnerState.partnership;
+        if (!link) {
+            return "";
+        }
+        const person = link.partner || {};
+        const name = escapeHtml(firstName(person.displayName));
+        if (link.status === "pending") {
+            return `<section class="card span-12 partner-card">
+                <div class="partner-head">${avatar(person, "tiny")}<div>
+                    <strong>${link.incoming ? `${name} кличе тренуватися разом` : `Чекаємо на ${name}`}</strong>
+                    <p class="card-caption">${link.incoming ? "Бачитимете підходи одне одного, поки триває сесія." : "Запрошення надіслано."}</p>
+                </div></div>
+                <div class="action-row">
+                    ${link.incoming ? `<button class="button button-primary compact" type="button" data-action="partner-answer" data-id="${escapeHtml(link.id)}" data-decision="accept"><i data-lucide="check"></i>Приєднатися</button>` : ""}
+                    <button class="button button-secondary compact" type="button" data-action="partner-answer" data-id="${escapeHtml(link.id)}" data-decision="leave">${link.incoming ? "Не зараз" : "Скасувати"}</button>
+                </div>
+            </section>`;
+        }
+        return `<section class="card span-12 partner-card is-live">
+            <div class="partner-head">
+                ${avatar(person, "tiny")}
+                <div><strong>Разом з ${name}</strong><p class="card-caption">Лише перегляд — редагувати чужі підходи не можна.</p></div>
+                <button class="button button-secondary compact" type="button" data-action="partner-answer" data-id="${escapeHtml(link.id)}" data-decision="leave">Завершити</button>
+            </div>
+            <div id="partnerBody">${partnerBodyMarkup()}</div>
+        </section>`;
+    }
+
+    function partnerBodyMarkup() {
+        const workoutItem = partnerState.workout;
+        const person = partnerState.partnership?.partner || {};
+        if (!workoutItem) {
+            return `<p class="card-caption partner-idle">${escapeHtml(firstName(person.displayName))} ще не почав — щойно відмітить перший підхід, він зʼявиться тут.</p>`;
+        }
+        const next = nextUndoneSet(workoutItem);
+        const done = partnerSetsOf(workoutItem).filter((set) => set.isCompleted).length;
+        const total = partnerSetsOf(workoutItem).length;
+        return `<div class="partner-progress">
+            <span class="partner-count">${done}/${total} підходів</span>
+            <span class="partner-volume">${number(workoutVolume(workoutItem))} кг</span>
+        </div>
+        ${next ? `<div class="partner-next">
+            <span class="partner-next-label">Зараз</span>
+            <strong>${escapeHtml(exerciseById(next.exerciseId)?.name || "Вправа")}</strong>
+            <span class="card-caption">Підхід ${next.index + 1} · ${number(next.set.weight)} кг × ${next.set.repetitions}</span>
+        </div>` : `<div class="partner-next partner-done"><i data-lucide="check-circle-2"></i><span>Усі підходи зроблені</span></div>`}
+        <div class="partner-exercises">${(workoutItem.exercises || []).map(partnerExerciseRow).join("")}</div>`;
+    }
+
+    function partnerExerciseRow(workoutExercise) {
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const sets = workoutExercise.sets || [];
+        const done = sets.filter((set) => set.isCompleted).length;
+        const dots = sets.map((set) => `<span class="pset ${set.isCompleted ? "is-done" : ""}"></span>`).join("");
+        return `<div class="partner-ex">
+            <span class="partner-ex-name">${escapeHtml(exercise?.name || "Вправа")}</span>
+            <span class="partner-ex-sets">${dots}</span>
+            <span class="partner-ex-count">${done}/${sets.length}</span>
+        </div>`;
+    }
+
+    /**
+     * The set the partner has not done yet — what "focus jumps to the next undone set"
+     * means when you are watching rather than lifting.
+     *
+     * The first incomplete set in order, which is the one they are on or about to be on.
+     */
+    function nextUndoneSet(workoutItem) {
+        for (const exercise of (workoutItem.exercises || [])) {
+            const sets = exercise.sets || [];
+            for (let index = 0; index < sets.length; index += 1) {
+                if (!sets[index].isCompleted) {
+                    return { exerciseId: exercise.exerciseId, set: sets[index], index };
+                }
+            }
+        }
+        return null;
+    }
+
+    function partnerSetsOf(workoutItem) {
+        return (workoutItem?.exercises || []).flatMap((exercise) => exercise.sets || []);
+    }
+
+    function renderPartnerPanel() {
+        const host = element("partnerPanel");
+        if (!host) {
+            return;
+        }
+        const body = element("partnerBody");
+        // Targeted update while the panel is already up: rebuilding it on every set the
+        // partner ticks would blink their avatar once per set.
+        if (body && partnerState.partnership?.status === "active") {
+            body.innerHTML = partnerBodyMarkup();
+            iconsIn(body);
+            return;
+        }
+        host.innerHTML = partnerPanelMarkup();
+        iconsIn(host);
+    }
+
+    /**
+     * "Train together" offered wherever you find out somebody is mid-session — the
+     * details of an unfinished workout, and their profile — not only the presence strip.
+     * Seeing that a session is running is the moment the offer makes sense; making the
+     * invitation live in one corner of one screen means it is never found there.
+     */
+    function partnerInviteCta(workoutItem, readonly) {
+        if (!readonly || storage.mode !== "api" || workoutItem.status !== "active") {
+            return "";
+        }
+        if (partnerState.partnership) {
+            return "";
+        }
+        return `<button class="button button-secondary compact" type="button" data-action="partner-invite" data-user-id="${escapeHtml(workoutItem.userId)}"><i data-lucide="users"></i>Тренуватися разом</button>`;
+    }
+
+    /** The same offer on a member's profile, when they are training right now. */
+    function partnerProfileCta(user, isCurrent) {
+        if (isCurrent || storage.mode !== "api" || partnerState.partnership) {
+            return "";
+        }
+        const training = liveState.presence.some((item) => item.userId === user.id);
+        if (!training) {
+            return "";
+        }
+        return `<button class="button button-secondary compact" type="button" data-action="partner-invite" data-user-id="${escapeHtml(user.id)}"><i data-lucide="users"></i>Тренуватися разом</button>`;
+    }
+
+    /** Offered on someone who is training right now, from the presence strip. */
+    function partnerInviteButton(item) {
+        const link = partnerState.partnership;
+        if (link) {
+            // Already in one, or waiting on an answer — no second invitation.
+            return "";
+        }
+        return `<button class="presence-invite" type="button" data-action="partner-invite" data-user-id="${escapeHtml(item.userId)}" title="Тренуватися разом"><i data-lucide="users"></i></button>`;
+    }
+
     // ---- Privacy and access requests ---------------------------------------------------
     //
     // A member can hide the detail behind their sessions. Everyone still sees their
@@ -12053,6 +12293,7 @@ import {
             <button class="presence-face" type="button" data-action="open-user" data-user-id="${escapeHtml(item.userId)}" aria-label="${escapeHtml(item.displayName)}">${face}</button>
             <span class="presence-name">${escapeHtml(firstName(item.displayName))}</span>
             <span class="presence-clock${clock ? "" : " is-word"}"${clock ? ` data-presence-clock="${escapeHtml(item.workoutId)}"` : ""}>${escapeHtml(elapsed)}</span>
+            ${partnerInviteButton(item)}
             <button class="presence-cheer${sent ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">${escapeHtml(sent || "💪")}</button>
         </div>`;
     }
@@ -12537,6 +12778,16 @@ import {
             // session announces both), and acting on each one separately repainted the
             // screen once per event.
             scheduleTeamRefresh(payload.touches);
+            return;
+        }
+        if (frame.name === "partner.changed") {
+            loadPartnerState().then(renderSection);
+            return;
+        }
+        if (frame.name === "partner.workout") {
+            // Their session moved. The sets are re-read through the normal authorized
+            // route — this only said that something changed.
+            refreshPartnerWorkout();
             return;
         }
         if (frame.name === "access.changed") {
