@@ -9081,16 +9081,25 @@ html.compact-ui .chip {
     font-weight: 500;
 }
 
+/* The chip is a DIRECT child of the action bar, never of .workout-actionbar-info —
+   that block is display:none below 560px, which hid the clock on exactly the device it
+   exists for. margin-right:auto keeps it hugging the title on wide screens while the
+   bar's space-between still pushes the buttons to the right. */
+.workout-actionbar > .gym-clock {
+    margin-left: 9px;
+    margin-right: auto;
+}
+
 /* In focus mode the topbar text column is narrow, so the chip drops onto its own line. */
 .focus-topbar-text .gym-clock {
     margin: 4px 0 0;
 }
 
-@media (max-width: 720px) {
-    /* The action bar already wraps to two rows on a narrow phone; keep the clock tight
-       so it does not force a third. */
-    .workout-actionbar-info .gym-clock {
-        margin-left: 7px;
+@media (max-width: 560px) {
+    /* The bar cannot wrap (no flex-wrap), so on a phone the clock has to stay small
+       enough to sit beside the buttons. */
+    .workout-actionbar > .gym-clock {
+        margin-left: 0;
         padding: 2px 7px;
         font-size: 0.72rem;
     }

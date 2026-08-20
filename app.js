@@ -2,7 +2,7 @@
 import "./components/datepicker.js";
 import { muscleIcons } from "./lib/muscle-icons.js";
 import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv, unique, imageUrl } from "./lib/format.js";
-import { sectionItems, mobileSectionIds, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
+import { sectionItems, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
 import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
 import { levelForXp, XP_REWARDS, LEVEL_COUNT } from "./lib/levels.js";
 import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_TIER_COUNT } from "./lib/frames.js";
@@ -38,7 +38,7 @@ import {
     ].map(([id, title, description, exerciseNames]) => ({ id, title, description, exerciseNames, type: id }));
 
     const state = {
-        section: "feed",
+        section: "dashboard",
         profileUserId: null,
         editingWorkoutId: null,
         // Cursor into the caller's own history under the windowed payload; null once
@@ -1880,7 +1880,7 @@ import {
     function renderSection() {
         destroyCharts();
         if ((state.section === "admin" || state.section === "moderation" || state.section === "aistats") && !isAdmin()) {
-            state.section = DEFAULT_SECTION;
+            state.section = defaultSection();
         }
         renderShell();
         // Detail routes ("post", "user") are reachable but are not nav entries, so they
@@ -2594,7 +2594,7 @@ import {
 
     function aiStats() {
         if (!isAdmin()) {
-            state.section = "dashboard";
+            state.section = defaultSection();
             renderSection();
             return;
         }
@@ -2805,7 +2805,8 @@ import {
             ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutItem.status).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
             : isOtherThanActive ? `<div class="readonly-layer info">У вас є активне тренування. <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Відкрити активне</button></div>` : "";
         const actionBar = readonly ? "" : `<div class="workout-actionbar">
-                <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong>${gymClockChip(workoutItem)}</div>
+                <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong></div>
+                ${gymClockChip(workoutItem)}
                 <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
             </div>`;
         return `
@@ -2888,6 +2889,8 @@ import {
             sets: (exercise.sets || []).map((set) => ({ ...set, id: createId("set"), isCompleted: false }))
         }));
         workoutItem.cardioSessions = (source.cardioSessions || []).map((session) => ({ ...session, id: createId("cardio") }));
+        // Fresh un-ticked sets — the clock must forget the session this was copied from.
+        touchGymClock(workoutItem);
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
@@ -4607,9 +4610,13 @@ import {
 
     const routableSections = new Set([...sectionItems.map((item) => item.id), "user", "post"]);
 
-    // Where the app lands with no route in the hash. Стрічка, so opening GymOS shows
-    // what the team has been doing rather than a screen you have to leave to find it.
-    const DEFAULT_SECTION = "feed";
+    // Where the app lands with no route in the hash: Стрічка, so opening GymOS shows what
+    // the team has been doing rather than a screen you have to leave to find it. The feed
+    // is API-only, though, so without a backend we fall back to Панель — a landing screen
+    // that renders from local data and cannot greet the user with an error card.
+    function defaultSection() {
+        return feedApiReady() ? "feed" : "dashboard";
+    }
 
     function parseRoute() {
         const raw = String(window.location.hash || "").replace(/^#\/?/, "");
@@ -4618,7 +4625,7 @@ import {
         if (section && routableSections.has(section)) {
             return { section, param: params[0] || null, params };
         }
-        return { section: DEFAULT_SECTION, param: null, params: [] };
+        return { section: defaultSection(), param: null, params: [] };
     }
 
     function handleRoute() {
@@ -5711,6 +5718,7 @@ import {
             return;
         }
         workoutItem.exercises = workoutItem.exercises.filter((item) => item.id !== workoutExerciseId);
+        touchGymClock(workoutItem);
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
@@ -5785,6 +5793,7 @@ import {
             return;
         }
         workoutExercise.sets = workoutExercise.sets.filter((set) => set.id !== setId);
+        touchGymClock(editWorkout());
         await persistWorkout(editWorkout());
         renderSection();
     }
@@ -5833,9 +5842,9 @@ import {
         workoutItem.exercises.forEach((exercise) => {
             (exercise.sets || []).forEach((set) => { set.isCompleted = true; });
         });
-        if (!workoutItem.firstSetAt) {
-            touchGymClock(workoutItem);
-        }
+        // Deliberately NOT touchGymClock here: a session closed from the calendar days
+        // later never had a first tick, and inventing one would show a 0:00 clock for a
+        // workout that was never timed.
         // The clock knows how long this actually took; offer it as the duration rather
         // than writing it silently. It is a suggestion because the timer can be wrong in
         // exactly the way the user described — a session left open overnight, or finished
@@ -7014,7 +7023,7 @@ import {
             }
             // Full reload: every cache, list and computed score in memory belongs to
             // the previous account. Re-booting is the only honest way to swap identity.
-            location.hash = "#/dashboard";
+            location.hash = "";
             location.reload();
         } catch (error) {
             toast("Не вдалося увійти", friendlyError(error));
@@ -7513,7 +7522,7 @@ import {
     // moderation queue no longer clutters the profile page.
     function moderation() {
         if (!isAdmin()) {
-            state.section = "dashboard";
+            state.section = defaultSection();
             renderSection();
             return;
         }
@@ -8674,6 +8683,15 @@ import {
             return;
         }
         state.focus = null;
+        // The layer keeps its markup while it fades; clear it afterwards so a live clock
+        // chip cannot outlive the overlay that owns it.
+        setTimeout(() => {
+            const layer = document.getElementById("focusLayer");
+            if (layer && !layer.classList.contains("visible")) {
+                layer.innerHTML = "";
+            }
+            syncGymClockTicker();
+        }, 320);
         const node = document.getElementById("focusLayer");
         if (node) {
             node.classList.remove("visible");
@@ -10943,30 +10961,48 @@ import {
     // every input the user is typing into.
     let gymClockTimer = null;
 
+    // Only chips that are actually on screen count. #focusLayer keeps its markup after
+    // the overlay is hidden, so an orphaned live chip in there used to keep the ticker
+    // alive — and each tick re-rendered the section, which re-armed the ticker, one new
+    // interval per second on every screen.
+    function liveClockValueNodes() {
+        return [...document.querySelectorAll("[data-gym-clock].live [data-gym-clock-value]")]
+            .filter((node) => {
+                const layer = node.closest(".focus-layer");
+                return !layer || layer.classList.contains("visible");
+            });
+    }
+
+    function stopGymClockTicker() {
+        clearInterval(gymClockTimer);
+        gymClockTimer = null;
+    }
+
     function syncGymClockTicker() {
-        const nodes = [...document.querySelectorAll("[data-gym-clock]")];
-        const needsTick = nodes.some((node) => node.classList.contains("live"));
-        if (!needsTick) {
-            clearInterval(gymClockTimer);
-            gymClockTimer = null;
+        if (!liveClockValueNodes().length) {
+            stopGymClockTicker();
             return;
         }
         if (gymClockTimer) {
             return;
         }
         gymClockTimer = setInterval(() => {
-            const workoutItem = editWorkout() || activeWorkoutFor(currentUser().id);
-            const clock = gymClockState(workoutItem);
-            const live = [...document.querySelectorAll("[data-gym-clock].live [data-gym-clock-value]")];
-            if (!clock || !clock.live || !live.length) {
-                clearInterval(gymClockTimer);
-                gymClockTimer = null;
-                if (live.length) {
-                    renderSection();
+            // A throw in here would NOT stop the interval, so everything is guarded and
+            // the ticker shuts itself down rather than erroring once a second forever
+            // (which is what logging out mid-workout used to do).
+            try {
+                const nodes = liveClockValueNodes();
+                const user = state.database ? currentUser() : null;
+                const workoutItem = user ? (editWorkout() || activeWorkoutFor(user.id)) : null;
+                const clock = gymClockState(workoutItem);
+                if (!nodes.length || !clock || !clock.live) {
+                    stopGymClockTicker();
+                    return;
                 }
-                return;
+                nodes.forEach((node) => { node.textContent = formatClock(clock.ms); });
+            } catch (error) {
+                stopGymClockTicker();
             }
-            live.forEach((node) => { node.textContent = formatClock(clock.ms); });
         }, 1000);
     }
 
