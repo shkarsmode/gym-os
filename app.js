@@ -1327,6 +1327,13 @@ import {
             throw new Error(problem);
         }
         adoptServerVersions(loaded.workouts);
+        // A refused detail read is a fact about one moment, not about the workout. It was
+        // being written onto the row and kept forever, so a session that became readable
+        // — because its owner granted access, or simply because it finished — still said
+        // "Деталі недоступні" until the cache was cleared by hand.
+        for (const row of (Array.isArray(loaded.workouts) ? loaded.workouts : [])) {
+            delete row.detailUnavailable;
+        }
         return loaded;
     }
 
