@@ -9427,22 +9427,25 @@ html.compact-ui .chip {
     100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 0%, transparent); }
 }
 
-/* Scrolls sideways rather than wrapping: a full gym should not push the feed down. */
+/* Wraps rather than scrolling sideways.
+   A horizontal scroller looked right until the avatars gained their level frames: a box
+   with overflow-x: auto also clips its VERTICAL overflow — there is no way to scroll one
+   axis and spill out of the other — so every frame's aura and corner decorations were
+   sliced off. With at most a handful of people in a gym at once, wrapping costs nothing
+   and clips nothing. */
 .presence-row {
     display: flex;
-    gap: 14px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    gap: 10px 16px;
 }
-
-.presence-row::-webkit-scrollbar { display: none; }
 
 .presence-person {
     display: grid;
     justify-items: center;
-    gap: 4px;
-    min-width: 64px;
+    gap: 2px;
+    /* Wide enough for the frame plus the widest shape decorations, so a neighbour never
+       crowds them. */
+    min-width: 84px;
     flex: 0 0 auto;
 }
 
@@ -9466,7 +9469,7 @@ html.compact-ui .chip {
 
 .presence-name {
     font-size: 0.78rem;
-    max-width: 64px;
+    max-width: 84px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

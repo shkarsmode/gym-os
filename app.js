@@ -11594,6 +11594,8 @@ import {
     // Mirrors CHEER_EMOJI on the server, which validates every one of these. Sending
     // anything else is a 400, so the two lists must not drift.
     const CHEER_CHOICES = ["💪", "🔥", "👏", "🚀", "🤘", "❤️"];
+    // What to show instead of a clock for somebody who has not started yet.
+    const PRESENCE_WORDS = { warmup: "розминається", planned: "збирається" };
     const PRESENCE_TTL_MS = 60000;
 
     function presenceIsStale() {
@@ -11648,16 +11650,19 @@ import {
         const face = user
             ? framedAvatar(user, "small")
             : `<span class="presence-initial">${escapeHtml((item.displayName || "?").slice(0, 1).toUpperCase())}</span>`;
-        // The clock the owner sees on their own screen, shown to whoever is watching:
-        // "training" reads very differently at four minutes and at ninety.
-        const clock = item.firstSetAt ? gymClockState({ firstSetAt: item.firstSetAt, status: "active", exercises: [] }) : null;
-        const elapsed = clock && !clock.overflow ? formatClock(clock.ms) : "";
+        // A clock only for somebody who has actually started: the other two states have
+        // no elapsed time to show, and a running timer next to them would be a number the
+        // app invented. They get a word instead.
+        const clock = item.state === "training" && item.firstSetAt
+            ? gymClockState({ firstSetAt: item.firstSetAt, status: "active", exercises: [] })
+            : null;
+        const elapsed = clock && !clock.overflow ? formatClock(clock.ms) : PRESENCE_WORDS[item.state] || "";
         const sent = liveState.sentEmoji.get(item.workoutId);
         const open = liveState.pickerFor === item.workoutId;
         return `<div class="presence-person${open ? " is-picking" : ""}" data-presence="${escapeHtml(item.workoutId)}">
             <button class="presence-face" type="button" data-action="open-user" data-user-id="${escapeHtml(item.userId)}" aria-label="${escapeHtml(item.displayName)}">${face}</button>
             <span class="presence-name">${escapeHtml(firstName(item.displayName))}</span>
-            <span class="presence-clock" data-presence-clock="${escapeHtml(item.workoutId)}">${escapeHtml(elapsed)}</span>
+            <span class="presence-clock${clock ? "" : " is-word"}"${clock ? ` data-presence-clock="${escapeHtml(item.workoutId)}"` : ""}>${escapeHtml(elapsed)}</span>
             <button class="presence-cheer${sent ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">${escapeHtml(sent || "💪")}</button>
         </div>`;
     }
@@ -11724,30 +11729,45 @@ import {
         }
     }
 
-    // Tapping the button sends the default straight away AND opens the other choices, so
-    // the common case stays one tap and picking something else stays discoverable.
+    // Tapping opens the choices; nothing is sent until one is picked. Sending on the
+    // first tap meant choosing anything else was always a second, redundant cheer.
     function cheerTapped(workoutId) {
+        if (liveState.pickerFor === workoutId) {
+            closeCheerPicker();
+            return;
+        }
         openCheerPicker(workoutId);
-        return sendCheer(workoutId, "💪");
     }
 
     function openCheerPicker(workoutId) {
         liveState.pickerFor = workoutId;
         clearTimeout(liveState.pickerTimer);
-        liveState.pickerTimer = setTimeout(() => {
-            liveState.pickerFor = null;
-            renderPresenceStrip();
-        }, 5000);
+        // Stays open long enough to send several — the picker closing under your finger
+        // after one tap is what makes a single emoji feel like the only option.
+        liveState.pickerTimer = setTimeout(closeCheerPicker, 12000);
+        renderPresenceStrip();
+    }
+
+    function closeCheerPicker() {
+        clearTimeout(liveState.pickerTimer);
+        liveState.pickerTimer = null;
+        liveState.pickerFor = null;
+        renderPresenceStrip();
     }
 
     async function sendCheer(workoutId, emoji) {
         const chosen = CHEER_CHOICES.includes(emoji) ? emoji : "💪";
         // The emoji flies across the RECIPIENT's screen — which is the point, and also
         // means the sender sees nothing at all unless it is shown here too. Burst it out
-        // of the button so a tap visibly does something on the screen being tapped.
-        burstFromButton(workoutId, chosen);
+        // of the chosen emoji so a tap visibly does something on the screen being tapped.
+        burstFromChoice(workoutId, chosen);
         liveState.sentEmoji.set(workoutId, chosen);
-        renderPresenceStrip();
+        // Keep the picker open and re-arm its timer: several in a row is the intended way
+        // to use this, and a picker that closed after one would forbid it.
+        if (liveState.pickerFor === workoutId) {
+            clearTimeout(liveState.pickerTimer);
+            liveState.pickerTimer = setTimeout(closeCheerPicker, 12000);
+        }
         try {
             await storage.apiClient.sendCheer({ workoutId, emoji: chosen });
         } catch (error) {
@@ -11759,8 +11779,9 @@ import {
 
     // A handful of copies of the emoji lifting off the button and fading. Anchored to the
     // button's real position so it reads as coming OUT of the thing that was pressed.
-    function burstFromButton(workoutId, emoji) {
-        const button = document.querySelector(`.presence-cheer[data-workout-id="${CSS.escape(workoutId)}"]`);
+    function burstFromChoice(workoutId, emoji) {
+        const button = document.querySelector(`.cheer-choice[data-workout-id="${CSS.escape(workoutId)}"][data-emoji="${CSS.escape(emoji)}"]`)
+            || document.querySelector(`.presence-cheer[data-workout-id="${CSS.escape(workoutId)}"]`);
         if (!button) {
             return;
         }
