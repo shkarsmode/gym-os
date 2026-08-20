@@ -5839,12 +5839,23 @@ import {
         // wrote down counts as performed — no dialog, no exceptions. The server applies
         // the same rule on save, so a session can never come back with "0 підходів"
         // exercises in the feed or an under-counted volume.
+        // The sweep completes whatever is left — those sets are being done RIGHT NOW, so
+        // the clock's end moves with them. Only when something actually changes, though:
+        // a session where every set was already ticked keeps the real last tick.
+        let sweptAny = false;
         workoutItem.exercises.forEach((exercise) => {
-            (exercise.sets || []).forEach((set) => { set.isCompleted = true; });
+            (exercise.sets || []).forEach((set) => {
+                if (!set.isCompleted) {
+                    set.isCompleted = true;
+                    sweptAny = true;
+                }
+            });
         });
-        // Deliberately NOT touchGymClock here: a session closed from the calendar days
-        // later never had a first tick, and inventing one would show a 0:00 clock for a
-        // workout that was never timed.
+        // Never invent a START, though: a session closed from the calendar days later was
+        // never timed, and a fabricated anchor would show a meaningless 0:00 clock.
+        if (sweptAny && workoutItem.firstSetAt) {
+            workoutItem.lastSetAt = new Date().toISOString();
+        }
         // The clock knows how long this actually took; offer it as the duration rather
         // than writing it silently. It is a suggestion because the timer can be wrong in
         // exactly the way the user described — a session left open overnight, or finished
