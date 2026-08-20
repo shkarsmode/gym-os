@@ -1504,6 +1504,12 @@ select option {
 
 /* Sticky quick-action bar for the active/edited workout (desktop + mobile) */
 .workout-actionbar {
+    /* It is a GRID item of .workout-stack, and a grid item defaults to min-width:auto —
+       i.e. it refuses to shrink below its own min-content. With the clock chip present the
+       row's min-content exceeded a phone's width, so the bar simply grew past the screen
+       and «Завершити» hung off the right edge, no matter what the inner flex rules said.
+       Everything inside can shrink; the bar itself has to be allowed to as well. */
+    min-width: 0;
     position: sticky;
     top: calc(var(--topbar-h, 64px) - 6px);
     z-index: 15;
