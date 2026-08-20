@@ -10836,6 +10836,12 @@ import {
     }
 
     function closeOverlay() {
+        // The watch sheet lives in this same drawer, so every way of dismissing it — the
+        // backdrop, Escape, the X, or another overlay replacing it — must release the
+        // registration too, or the server keeps sending hints to a closed screen.
+        if (watchState.workoutId) {
+            releaseWatch();
+        }
         // Unlock FIRST so a later DOM error can't skip it and leave scroll frozen.
         unlockBackgroundScroll();
         closeSheet(); // a nested sheet (muscle picker) closes with its parent
@@ -11774,7 +11780,7 @@ import {
     // session moved; the sets themselves are re-read through GET /workouts/:id, which is
     // authorized on its own, so watching can never show something a plain request would
     // refuse.
-    const watchState = { workoutId: null, workout: null, previous: {}, token: null, timer: null, loading: false };
+    const watchState = { workoutId: null, workout: null, previous: {}, token: null, timer: null, loading: false, opening: false, openTimer: null };
 
     /**
      * A floating way in and out of somebody else's session.
@@ -11869,6 +11875,16 @@ import {
         watchState.workoutId = workoutId;
         watchState.workout = null;
         watchState.previous = {};
+        // The sheet opens on a 260ms transform. Dropping a whole workout into it while
+        // that is still running — dozens of cards, and iconsIn() swapping every lucide
+        // placeholder for a sized SVG — is what made it judder and jump. The sheet itself
+        // appears instantly; the heavy content waits for the animation to finish.
+        watchState.opening = true;
+        clearTimeout(watchState.openTimer);
+        watchState.openTimer = setTimeout(() => {
+            watchState.opening = false;
+            renderWatchBody();
+        }, 300);
         renderWatchLayer();
         syncWatchFab();
         await loadWatched(workoutId);
@@ -11904,22 +11920,37 @@ import {
         }
     }
 
-    function closeWatch() {
+    /**
+     * Give up the registration and forget the session.
+     *
+     * Separate from closing the overlay so closeOverlay can call it without recursing —
+     * the sheet lives in the shared drawer, so it can be dismissed by routes that never
+     * go through closeWatch: the backdrop, Escape, or another overlay taking its place.
+     */
+    function releaseWatch() {
         const token = watchState.token;
+        const had = Boolean(watchState.workoutId);
         watchState.workoutId = null;
         watchState.workout = null;
         watchState.previous = {};
         watchState.error = null;
         clearTimeout(watchState.timer);
         watchState.timer = null;
-        const layer = document.getElementById("watchLayer");
-        if (layer) {
-            layer.remove();
-        }
-        document.body.classList.remove("is-watching");
+        clearTimeout(watchState.openTimer);
+        watchState.openTimer = null;
+        watchState.opening = false;
         syncWatchFab();
-        if (token) {
+        if (token && had) {
+            // Stop the server sending hints to a screen nobody is looking at.
             storage.apiClient.stopWatch(token).catch(() => undefined);
+        }
+    }
+
+    function closeWatch() {
+        const wasOpen = Boolean(watchState.workoutId);
+        releaseWatch();
+        if (wasOpen) {
+            closeOverlay();
         }
     }
 
@@ -11954,28 +11985,26 @@ import {
 
     // ---- The layer ----------------------------------------------------------------------
 
+    /**
+     * Opened through the app's OWN overlay system, not a layer of its own.
+     *
+     * The hand-rolled version showed the page through it and let the background scroll
+     * behind it — which is exactly what lockBackgroundScroll and the drawer's overscroll
+     * containment already solve here, along with the safe-area treatment on a phone and
+     * dismissing on the backdrop.
+     */
     function renderWatchLayer() {
-        let layer = document.getElementById("watchLayer");
-        if (!layer) {
-            layer = document.createElement("div");
-            layer.id = "watchLayer";
-            layer.className = "watch-layer";
-            document.body.appendChild(layer);
-        }
         const owner = watchState.workout ? userById(watchState.workout.userId) : null;
-        layer.innerHTML = `<div class="watch-sheet" role="dialog" aria-label="Тренування учасника">
-            <div class="watch-head">
+        openDrawer(`<div class="watch-head">
+                <span class="watch-live" aria-hidden="true"></span>
                 <div class="watch-who">
-                    <span class="watch-live" aria-hidden="true"></span>
                     <strong>${escapeHtml(owner ? owner.displayName : "Тренування")}</strong>
                     <span class="card-caption">наживо · лише перегляд</span>
                 </div>
                 <button class="icon-button" type="button" data-action="close-watch" aria-label="Закрити"><i data-lucide="x"></i></button>
             </div>
-            <div class="watch-body" id="watchBody">${watchBodyMarkup()}</div>
-        </div>`;
-        document.body.classList.add("is-watching");
-        iconsIn(layer);
+            <div class="watch-body" id="watchBody">${watchBodyMarkup()}</div>`, { fullscreen: true });
+        syncWatchFab();
     }
 
     /**
@@ -11988,6 +12017,11 @@ import {
     function renderWatchBody() {
         const host = document.getElementById("watchBody");
         if (!host) {
+            return;
+        }
+        // Still animating in. The deferred pass draws it once the transform has settled;
+        // inserting a whole workout mid-transition is what made the sheet judder.
+        if (watchState.opening) {
             return;
         }
         const anchor = host.scrollTop;
@@ -13157,7 +13191,7 @@ import {
         if (document.querySelector(".modal-layer, .drawer-layer")?.childElementCount) {
             return;
         }
-        if (document.getElementById("watchLayer")) {
+        if (watchState.workoutId) {
             return;
         }
         renderSection();

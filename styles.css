@@ -9949,77 +9949,55 @@ html.compact-ui .chip {
 
 .presence-clock.is-watchable:hover { color: var(--color-text); }
 
-/* A bottom sheet rather than a full-bleed drawer: watching somebody must not cover your
-   own action bar and nav — the point is a glance between sets. Above the drawer stack
-   but below the cheer layer, which is meant to fly over everything. */
-.watch-layer {
-    position: fixed;
-    inset: 0;
-    z-index: 2350;
-    background: rgba(0, 0, 0, 0.55);
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-}
-
-.watch-sheet {
-    width: min(760px, 100%);
-    max-height: 82vh;
-    display: flex;
-    flex-direction: column;
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: 18px 18px 0 0;
-    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
-    animation: watch-in 200ms ease-out;
-    /* The sheet's own bottom padding respects the phone's home indicator. */
-    padding-bottom: env(safe-area-inset-bottom, 0);
-}
-
-@keyframes watch-in {
-    from { transform: translateY(24px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-}
-
-.watch-head {
+/* The sheet is the app's own drawer — it already locks the background, contains its own
+   overscroll, handles the phone's safe area and closes on the backdrop. The hand-rolled
+   layer this replaces did none of that: the page showed through it and scrolled behind
+   it. What is left here is only what the drawer does not already know. */
+.drawer-layer .watch-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
-    padding: 12px 14px;
+    padding: 12px 4px 12px 0;
+    margin-bottom: 4px;
     border-bottom: 1px solid var(--color-border);
-    flex: 0 0 auto;
+    /* Stays put while the session scrolls, so whose workout this is never leaves the
+       screen — the whole risk is mistaking it for your own. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    /* --color-bg does not exist in this stylesheet; the surface token is what the drawer
+       itself paints with, and without a real colour here the session scrolled visibly
+       underneath the header. */
+    background: var(--color-surface);
 }
 
 .watch-who {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    flex-direction: column;
     min-width: 0;
-    flex-wrap: wrap;
+    flex: 1 1 auto;
+}
+
+.watch-who strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .watch-live {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: var(--color-accent);
-    align-self: center;
     flex: 0 0 auto;
     animation: presence-pulse 2s ease-out infinite;
 }
 
-/* The scroller. Repainted on its own so a hint never scrolls the viewer back to the top. */
-.watch-body {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 12px;
-    flex: 1 1 auto;
-}
+.watch-body { padding-bottom: 24px; }
 
 @media (prefers-reduced-motion: reduce) {
-    .watch-sheet { animation: none; }
     .watch-live { animation: none; }
+}
 }
 
 /* One tap to peek at the session you are training alongside, one tap back to your own
@@ -10055,8 +10033,9 @@ html.compact-ui .chip {
     background: var(--color-elevated);
 }
 
-/* Above the sheet's own backdrop, or the way back would be behind what it closes. */
-.watch-layer ~ .watch-fab { z-index: 2360; }
+/* Above the drawer and its backdrop, or the way back would sit behind what it closes.
+   The overlay stack tops out around 2400. */
+.watch-fab { z-index: 2450; }
 
 @media (min-width: 921px) {
     /* No mobile navigation bar to clear on a wide screen. */
