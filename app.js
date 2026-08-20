@@ -3055,7 +3055,7 @@ import {
         // done). Shows every time a workout's first exercise is added — not one-time.
         const hintOn = Boolean(showSetHint) && index === 1 && !set.isCompleted;
         const hintChip = hintOn
-            ? `<div class="setdone-hint" role="status"><span class="setdone-hint-full">Тисни кружечок праворуч, коли завершиш підхід</span><span class="setdone-hint-short">Тисни кружечок, коли завершиш</span><span class="setdone-hint-caret" aria-hidden="true"></span></div>`
+            ? `<div class="setdone-hint" role="status"><span class="setdone-hint-full">Тисни кружечок праворуч, коли завершиш підхід</span><span class="setdone-hint-short">Тисни кружечок</span><span class="setdone-hint-caret" aria-hidden="true"></span></div>`
             : "";
         return `<div class="set-row ${set.isCompleted ? "completed" : ""}${hintOn ? " has-hint" : ""}">
             <div class="set-row-head">${hintChip}
