@@ -370,6 +370,26 @@ import {
             return this.request(`/feed/comments/${id}/delete`, { method: "POST" });
         }
 
+        fetchAccessState() {
+            return this.request("/access/state", { method: "GET" });
+        }
+
+        setPrivacy(hideWorkoutDetails) {
+            return this.request("/access/privacy", { method: "POST", body: JSON.stringify({ hideWorkoutDetails }) });
+        }
+
+        acknowledgePrivacy() {
+            return this.request("/access/privacy/ack", { method: "POST" });
+        }
+
+        requestAccess(ownerId) {
+            return this.request("/access/requests", { method: "POST", body: JSON.stringify({ ownerId }) });
+        }
+
+        decideAccess(grantId, action) {
+            return this.request(`/access/requests/${encodeURIComponent(grantId)}/${action}`, { method: "POST" });
+        }
+
         fetchPresence() {
             return this.request("/live/presence", { method: "GET" });
         }
@@ -1261,6 +1281,14 @@ import {
         // Started here rather than at module load: before this point there is no token,
         // and a stream opened without one just burns a reconnect cycle against a 401.
         startLiveStream();
+        loadAccessState().then(() => {
+            if (state.section === "settings") {
+                renderSection();
+            }
+            // Deliberately late: landing straight into a dialog on open is how a setting
+            // gets dismissed without being read.
+            setTimeout(maybeAskAboutPrivacy, 3000);
+        });
         // Cheers that arrived while the app was closed. This used to run only on
         // returning to an already-open tab, which is the rarer case: a phone in a gym is
         // locked and the app fully suspended, so the ones most worth seeing were exactly
@@ -3490,7 +3518,7 @@ import {
         const catalogCard = `<section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button></div></section>`;
         const aboutCard = `<section class="card span-6"><h2>Про застосунок</h2><div class="list-row" style="margin-top:6px;"><div><div class="profile-name">GymOS</div><div class="profile-meta">Версія v${APP_VERSION}</div></div></div></section>`;
         const logoutCard = `<section class="card span-12 settings-logout"><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти з акаунта</button></section>`;
-        content(`<div class="grid dashboard-grid">${appearanceCard}${workoutDefaultsCard}${pushSettingsSection()}${exportCard}${catalogCard}${aboutCard}${logoutCard}</div>`);
+        content(`<div class="grid dashboard-grid">${appearanceCard}${workoutDefaultsCard}${privacySettingsCard()}${pushSettingsSection()}${exportCard}${catalogCard}${aboutCard}${logoutCard}</div>`);
     }
 
     function changelog() {
@@ -4382,6 +4410,9 @@ import {
             "copy-workout-start": () => copyWorkoutAndStart(actionElement.dataset.workoutId),
             "feed-scope": () => setFeedScope(actionElement.dataset.scope),
             "cheer": () => cheerTapped(actionElement.dataset.workoutId),
+            "set-privacy": () => setPrivacy(actionElement.dataset.value === "1"),
+            "request-access": () => requestAccess(actionElement.dataset.ownerId),
+            "access-decide": () => decideAccess(actionElement.dataset.grantId, actionElement.dataset.decision),
             "cheer-pick": () => sendCheer(actionElement.dataset.workoutId, actionElement.dataset.emoji),
             "feed-retry": () => loadFeed(feedState.scope, false),
             "feed-more": () => loadFeed(feedState.scope, true),
@@ -6479,6 +6510,11 @@ import {
     }
 
     function workoutDetailBody(workoutItem, needsDetail) {
+        // Its owner keeps their details private. Distinct from "we could not load it":
+        // there is nothing to wait for, and there IS something to do about it.
+        if (isWorkoutPrivate(workoutItem) || workoutItem.privateOwnerId) {
+            return privateWorkoutPanel(workoutItem.privateOwnerId || workoutItem.userId);
+        }
         if (needsDetail) {
             return emptyInline("Завантажуємо підходи", "Це тренування підвантажується з сервера.");
         }
@@ -6488,7 +6524,7 @@ import {
         // Only say "not available" when the server actually refused. A hydrated workout
         // with no exercises really is an empty or cardio-only session, whoever owns it.
         if (workoutItem.detailUnavailable) {
-            return emptyInline("Деталі недоступні", "Повний розбір підходів доступний лише власнику тренування.");
+            return emptyInline("Деталі недоступні", "Не вдалося завантажити підходи. Спробуй ще раз пізніше.");
         }
         return emptyInline("Вправ ще немає", "Це порожнє або кардіо-тренування.");
     }
@@ -6503,10 +6539,16 @@ import {
             return;
         }
         let full = null;
+        let privateOwnerId = null;
         try {
             full = await storage.apiClient.fetchWorkout(workoutId);
         } catch (error) {
             full = null;
+            // A refusal on privacy grounds is not a failed request — it is an answer, and
+            // the one the "ask for access" screen is built around.
+            if (Number(error?.status) === 403 && error?.payload?.code === "WORKOUT_PRIVATE") {
+                privateOwnerId = error.payload.ownerId || null;
+            }
         }
         const workoutItem = state.database.workouts.find((item) => item.id === workoutId);
         if (!workoutItem) {
@@ -6519,6 +6561,9 @@ import {
             // local one and vice versa; keep the two meanings apart.
             workoutItem.serverVersion = serverVersionOf(full) || workoutItem.serverVersion || null;
             workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
+        } else if (privateOwnerId) {
+            workoutItem.privateOwnerId = privateOwnerId;
+            delete workoutItem.detailUnavailable;
         } else {
             workoutItem.detailUnavailable = true;
         }
@@ -6849,6 +6894,22 @@ import {
             return `<article class="feed-card feed-achievement" data-action="open-post" data-type="achievement" data-id="${item.id}">
                 ${feedAuthor(item)}
                 <div class="feed-body feed-ach-body"><span class="feed-ach-ico"><i data-lucide="award"></i></span><div><strong>Досягнення «${escapeHtml(item.title || "")}»</strong><p class="card-caption">${escapeHtml(item.description || "")}</p></div></div>
+                ${actions}
+            </article>`;
+        }
+        // A session whose owner keeps their details private. The card stays — that they
+        // trained is public by design — but the numbers are ABSENT, not zero, so printing
+        // them would render "undefined підходів" and a zero would be a lie.
+        if (item.private) {
+            return `<article class="feed-card feed-private" data-action="open-post" data-type="workout" data-id="${item.id}">
+                ${feedAuthor(item)}
+                <div class="feed-body feed-private-body">
+                    <span class="feed-private-ico"><i data-lucide="lock"></i></span>
+                    <div>
+                        <strong>Тренування ${item.workoutType ? `· ${escapeHtml(workoutTypeLabel(item.workoutType))}` : ""}</strong>
+                        <p class="card-caption">Деталі приховані власником${item.durationMinutes ? ` · ${item.durationMinutes} хв` : ""}</p>
+                    </div>
+                </div>
                 ${actions}
             </article>`;
         }
@@ -8106,7 +8167,13 @@ import {
         const info = userLevel(user.id);
         const isCurrent = user.id === currentUser().id;
         const history = workoutsFor(user.id).sort(byDateDesc);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: isCurrent })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="badge unlocked">Це ви</span>` : ""}</div><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><div class="inline-actions wrap user-detail-actions">${impersonateButton(user, isCurrent)}<button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></div>${achievementBadges(user.id)}</section><section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}</div>`);
+        // The server DELETES the detail-derived stats for a member this viewer may not
+        // see, rather than zeroing them — a zero would claim they had lifted nothing.
+        // Their absence is the signal to draw a lock instead of a number.
+        const hidden = !isCurrent && detailHiddenFor(user.id);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: isCurrent })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal || "Учасник")}</span>${isCurrent ? `<span class="badge unlocked">Це ви</span>` : ""}</div><p class="card-caption">${escapeHtml(user.name || "")}${user.bodyweight ? ` · ${user.bodyweight} кг` : ""}${user.height ? ` · ${user.height} см` : ""}${user.trainingExperience ? ` · ${escapeHtml(user.trainingExperience)}` : ""}</p></div></div><div class="inline-actions wrap user-detail-actions">${subscribeButton(user, isCurrent)}${impersonateButton(user, isCurrent)}<button class="button button-secondary compact" type="button" data-action="navigate" data-section="users"><i data-lucide="arrow-left"></i>До команди</button></div></div>${achievementBadges(user.id)}</section><section class="card span-12"><div class="card-header"><div><h2>Тренування</h2><p class="card-caption">${isCurrent ? "Твої сесії." : "Сесії учасника. Натисни, щоб відкрити деталі."}</p></div></div><div class="activity-feed">${workoutHistoryList(history.slice(0, 20))}</div></section>${hidden
+            ? `${metric("Тренування", summary.completedWorkouts ?? 0, "calendar-check", "Завершено", "span-3")}${metric("Серія", `${summary.trainingStreak ?? 0}`, "flame", "днів поспіль", "span-3")}${lockedMetric("Обсяг", "span-3")}${lockedMetric("Підходи", "span-3")}`
+            : `${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}`}</div>`);
     }
 
     function exerciseMedia(exercise) {
@@ -8185,13 +8252,18 @@ import {
         const exercises = workoutExerciseCount(workoutItem);
         const sets = workoutSetCount(workoutItem);
         const cardio = workoutCardioMinutes(workoutItem);
-        const stats = [
-            `${number(workoutVolumeOf(workoutItem))} кг`,
-            `${exercises} ${pluralUk(exercises, "вправа", "вправи", "вправ")}`,
-            `${sets} ${pluralUk(sets, "підхід", "підходи", "підходів")}`,
-            cardio ? `${cardio} хв кардіо` : "",
-            `${durationOf(workoutItem)} хв`
-        ].filter(Boolean).join(" · ");
+        // A private row carries no aggregates at all, and every accessor above falls back
+        // to 0 — so without this branch somebody else's session reads as "0 кг · 0 вправ",
+        // which looks like a failed workout rather than a hidden one.
+        const stats = isWorkoutPrivate(workoutItem)
+            ? [`<span class="hist-private"><i data-lucide="lock"></i>Деталі приховані</span>`, `${durationOf(workoutItem)} хв`].filter(Boolean).join(" · ")
+            : [
+                `${number(workoutVolumeOf(workoutItem))} кг`,
+                `${exercises} ${pluralUk(exercises, "вправа", "вправи", "вправ")}`,
+                `${sets} ${pluralUk(sets, "підхід", "підходи", "підходів")}`,
+                cardio ? `${cardio} хв кардіо` : "",
+                `${durationOf(workoutItem)} хв`
+            ].filter(Boolean).join(" · ");
         const ownerChip = options.showOwner && owner
             ? `<button class="hist-owner" type="button" data-action="open-user" data-user-id="${owner.id}">${avatar(owner, "tiny")}${escapeHtml(owner.displayName)}</button>`
             : "";
@@ -11639,6 +11711,248 @@ import {
         }
     }
 
+    // ---- Privacy and access requests ---------------------------------------------------
+    //
+    // A member can hide the detail behind their sessions. Everyone still sees their
+    // profile, their standing and that they trained; the exercises, sets, weights, notes
+    // and records are gated behind an explicit grant.
+    //
+    // Nothing here decides what is visible — the server does, and it does so by not
+    // fetching the rows in the first place. This is only the UI for asking and answering.
+    const accessState = { hideWorkoutDetails: false, privacyChoiceAt: null, incoming: [], outgoing: [], subscribers: [], loaded: false };
+
+    async function loadAccessState() {
+        if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+            return;
+        }
+        try {
+            const answer = await storage.apiClient.fetchAccessState();
+            Object.assign(accessState, answer, { loaded: true });
+        } catch (error) {
+            // Privacy UI is not worth failing a screen over; the server enforces the rule
+            // regardless of whether this loaded.
+        }
+    }
+
+    /** What this viewer's relationship to another member's data currently is. */
+    function accessTo(ownerId) {
+        const row = (accessState.outgoing || []).find((item) => item.ownerId === ownerId);
+        return row ? row.status : "none";
+    }
+
+    function isWorkoutPrivate(workoutItem) {
+        return Boolean(workoutItem && workoutItem.private);
+    }
+
+    async function requestAccess(ownerId) {
+        try {
+            const answer = await storage.apiClient.requestAccess(ownerId);
+            // Optimistically reflect it so the button stops inviting another tap; the
+            // authoritative state arrives on the next access.changed event.
+            if (!(accessState.outgoing || []).some((item) => item.ownerId === ownerId)) {
+                accessState.outgoing = [...(accessState.outgoing || []), { ownerId, status: answer.status || "pending", owner: userById(ownerId) }];
+            }
+            renderSection();
+            toast("Запит надіслано", "Ти дізнаєшся, коли його розглянуть");
+        } catch (error) {
+            toast("Не вдалося надіслати запит", friendlyError(error), "error");
+        }
+    }
+
+    async function decideAccess(grantId, action) {
+        try {
+            await storage.apiClient.decideAccess(grantId, action);
+            await loadAccessState();
+            renderSection();
+            if (action === "accept") {
+                toast("Доступ відкрито", "Ця людина тепер бачить деталі твоїх тренувань");
+            } else if (action === "revoke") {
+                toast("Доступ закрито", "Деталі твоїх тренувань знову приховані");
+            }
+        } catch (error) {
+            toast("Не вдалося", friendlyError(error), "error");
+        }
+    }
+
+    async function setPrivacy(hide) {
+        // Painted immediately: a switch that waits for a round trip before moving feels
+        // broken, and the failure path below puts it back.
+        const previous = accessState.hideWorkoutDetails;
+        accessState.hideWorkoutDetails = hide;
+        accessState.privacyChoiceAt = new Date().toISOString();
+        renderSection();
+        try {
+            await storage.apiClient.setPrivacy(hide);
+            toast(
+                hide ? "Тренування приховані" : "Тренування відкриті",
+                hide
+                    ? "Інші бачать, що ти тренувався, але не бачать вправ, підходів і ваг"
+                    : "Інші знову бачать деталі твоїх тренувань"
+            );
+        } catch (error) {
+            accessState.hideWorkoutDetails = previous;
+            renderSection();
+            toast("Не вдалося змінити", friendlyError(error), "error");
+        }
+    }
+
+    // ---- The privacy card in Налаштування -----------------------------------------------
+
+    function privacySettingsCard() {
+        if (storage.mode !== "api") {
+            return "";
+        }
+        const hide = Boolean(accessState.hideWorkoutDetails);
+        const buttons = [["0", "Відкрито"], ["1", "Приховано"]].map(([value, label]) => `
+            <button class="segment-button ${(value === "1") === hide ? "active" : ""}" type="button" data-action="set-privacy" data-value="${value}">${label}</button>
+        `).join("");
+        const pending = (accessState.incoming || []).length;
+        const subscribers = (accessState.subscribers || []).length;
+        return `<section class="card span-6">
+            <h2>Приватність тренувань</h2>
+            <p class="card-caption">Коли приховано, інші бачать твій профіль, рівень і те, що ти тренувався — але не бачать вправ, підходів, ваг, нотаток і рекордів.</p>
+            <div class="pref-row"><span class="pref-label">Деталі тренувань</span><div class="segmented pref-seg">${buttons}</div></div>
+            ${pending ? `<div class="access-alert"><i data-lucide="user-plus"></i><span>${pending} ${pending === 1 ? "запит очікує" : "запити очікують"} на відповідь</span></div>` : ""}
+            ${(accessState.incoming || []).map(accessRequestRow).join("")}
+            ${subscribers ? `<h3 class="access-subhead">Мають доступ (${subscribers})</h3>${(accessState.subscribers || []).map(subscriberRow).join("")}` : ""}
+        </section>`;
+    }
+
+    function accessRequestRow(row) {
+        const person = row.viewer || {};
+        return `<div class="access-row">
+            <div class="access-person">${avatar(person, "tiny")}<span>${escapeHtml(person.displayName || "Учасник")}</span></div>
+            <div class="access-actions">
+                <button class="button button-primary compact" type="button" data-action="access-decide" data-grant-id="${escapeHtml(row.id)}" data-decision="accept">Відкрити</button>
+                <button class="button button-secondary compact" type="button" data-action="access-decide" data-grant-id="${escapeHtml(row.id)}" data-decision="reject">Відхилити</button>
+            </div>
+        </div>`;
+    }
+
+    function subscriberRow(row) {
+        const person = row.viewer || {};
+        return `<div class="access-row">
+            <div class="access-person">${avatar(person, "tiny")}<span>${escapeHtml(person.displayName || "Учасник")}</span></div>
+            <div class="access-actions">
+                <button class="button button-secondary compact" type="button" data-action="access-decide" data-grant-id="${escapeHtml(row.id)}" data-decision="revoke">Закрити доступ</button>
+            </div>
+        </div>`;
+    }
+
+    /**
+     * Whether this member's detail is being withheld from the current viewer.
+     *
+     * Read from the ABSENCE of the detail-derived stats rather than from a flag, because
+     * absence is what the server actually produces — and a flag would be one more thing
+     * that can be out of step with the data it describes.
+     */
+    function detailHiddenFor(userId) {
+        const stats = userStats(userId);
+        return Boolean(stats) && stats.totalVolume === undefined;
+    }
+
+    /** A metric tile that says "not shown" instead of inventing a number. */
+    function lockedMetric(label, span = "span-3") {
+        return `<section class="card metric ${span} metric-locked">
+            <span class="metric-ico"><i data-lucide="lock"></i></span>
+            <div><div class="metric-label">${escapeHtml(label)}</div><div class="metric-value">—</div><div class="metric-caption">Приховано власником</div></div>
+        </section>`;
+    }
+
+    function subscribeButton(user, isCurrent) {
+        if (isCurrent || storage.mode !== "api" || !detailHiddenFor(user.id)) {
+            return "";
+        }
+        const status = accessTo(user.id);
+        if (status === "accepted") {
+            return `<span class="badge unlocked"><i data-lucide="lock-open"></i>Ти маєш доступ</span>`;
+        }
+        if (status === "pending") {
+            return `<button class="button button-secondary compact" type="button" disabled><i data-lucide="clock"></i>Запит надіслано</button>`;
+        }
+        return `<button class="button button-primary compact" type="button" data-action="request-access" data-owner-id="${escapeHtml(user.id)}"><i data-lucide="user-plus"></i>Підписатися</button>`;
+    }
+
+    // ---- The locked workout screen ------------------------------------------------------
+
+    function privateWorkoutPanel(ownerId) {
+        const owner = userById(ownerId);
+        const name = owner ? firstName(owner.displayName) : "Учасник";
+        const status = accessTo(ownerId);
+        const action = status === "accepted"
+            ? ""
+            : status === "pending"
+                ? `<button class="button button-secondary" type="button" disabled><i data-lucide="clock"></i>Запит надіслано</button>`
+                : `<button class="button button-primary" type="button" data-action="request-access" data-owner-id="${escapeHtml(ownerId)}"><i data-lucide="lock-open"></i>Запросити доступ</button>`;
+        return `<section class="card private-panel">
+            <span class="private-ico"><i data-lucide="lock"></i></span>
+            <h3>Деталі тренування приватні</h3>
+            <p class="card-caption">${escapeHtml(name)} приховує вправи, підходи й ваги. Видно, що тренування було — решта лише за згодою.</p>
+            ${action ? `<div class="action-row" style="justify-content:center;">${action}</div>` : ""}
+        </section>`;
+    }
+
+    // ---- The one-time prompt for people who were here before this shipped ---------------
+
+    async function maybeAskAboutPrivacy() {
+        if (!accessState.loaded || accessState.privacyChoiceAt || storage.mode !== "api") {
+            return;
+        }
+        // Asked once per account. Answering either way records the choice — otherwise a
+        // member who keeps the default has nothing stored and the prompt returns on every
+        // single open.
+        const choice = await choiceDialog(
+            "Зараз твої тренування відкриті: команда бачить вправи, підходи й ваги. Так було завжди. Якщо хочеш, деталі можна приховати — інші бачитимуть профіль, рівень і те, що ти тренувався, але не саме тренування. Відкрити доступ окремим людям можна будь-коли.",
+            {
+                title: "Хто бачить твої тренування?",
+                choices: [
+                    { label: "Залишити відкритими", variant: "secondary" },
+                    { label: "Приховати деталі", variant: "primary" }
+                ]
+            }
+        );
+        if (choice === 1) {
+            await setPrivacy(true);
+            return;
+        }
+        // Keeping the default still counts as having been asked.
+        accessState.privacyChoiceAt = new Date().toISOString();
+        try {
+            await storage.apiClient.acknowledgePrivacy();
+        } catch (error) {
+            // Worst case it asks once more.
+        }
+    }
+
+    /**
+     * Forget detail this device is no longer entitled to.
+     *
+     * Revoking on the server stops the NEXT read; it does nothing about the sets already
+     * sitting in memory and in IndexedDB from when access was granted. Without this an
+     * ex-subscriber keeps seeing everything they were ever shown, which makes "закрити
+     * доступ" a promise the app does not keep.
+     *
+     * The whole payload is re-read rather than surgically pruned: the server is the only
+     * thing that knows what this account may now see, and guessing at it here is how a
+     * row gets missed.
+     */
+    async function dropRevokedDetail() {
+        await loadAccessState();
+        try {
+            const fresh = await loadDatabaseOrThrow();
+            state.database = fresh;
+            state.profileUserId = state.database.currentUserId;
+        } catch (error) {
+            // Could not re-read. Drop every peer row rather than keep showing detail that
+            // may no longer be permitted — a missing calendar entry is recoverable, a
+            // leak is not.
+            const me = state.database.currentUserId;
+            state.database.workouts = state.database.workouts.filter((row) => row.userId === me);
+        }
+        renderSection();
+        toast("Доступ закрито", "Ця людина більше не показує тобі деталі своїх тренувань");
+    }
+
     // ---- Presence and cheering ---------------------------------------------------------
     //
     // The feed shows a session once it is FINISHED, which is exactly too late to encourage
@@ -11684,9 +11998,22 @@ import {
         }
     }
 
+    /**
+     * Everyone else who is training, with the people you follow first.
+     *
+     * "Follow" here means an accepted access grant — you asked to see their training and
+     * they said yes. Those are the people whose sessions you actually care about, so they
+     * lead, and the rest come after a divider rather than being mixed in.
+     */
     function presenceOthers() {
         const me = state.database.currentUserId;
-        return liveState.presence.filter((item) => item.userId !== me);
+        const others = liveState.presence.filter((item) => item.userId !== me);
+        const followed = others.filter((item) => accessTo(item.userId) === "accepted");
+        if (!followed.length || followed.length === others.length) {
+            return others;
+        }
+        const rest = others.filter((item) => accessTo(item.userId) !== "accepted");
+        return [...followed, { divider: true }, ...rest];
     }
 
     function presenceStripMarkup() {
@@ -11699,7 +12026,9 @@ import {
                 <span class="presence-dot" aria-hidden="true"></span>
                 <h3>Зараз тренуються</h3>
             </div>
-            <div class="presence-row">${others.map(presenceItemMarkup).join("")}</div>
+            <div class="presence-row">${others.map((item) => item.divider
+                ? `<span class="presence-divider" aria-hidden="true"></span>`
+                : presenceItemMarkup(item)).join("")}</div>
         </section>`;
     }
 
@@ -11771,7 +12100,7 @@ import {
     function syncCheerPicker() {
         const card = element("presenceStrip")?.querySelector(".presence-card");
         const existing = card?.querySelector(".cheer-picker");
-        const target = presenceOthers().find((item) => item.workoutId === liveState.pickerFor);
+        const target = presenceOthers().find((item) => !item.divider && item.workoutId === liveState.pickerFor);
         if (!target || !card) {
             existing?.remove();
             return;
@@ -12208,6 +12537,17 @@ import {
             // session announces both), and acting on each one separately repainted the
             // screen once per event.
             scheduleTeamRefresh(payload.touches);
+            return;
+        }
+        if (frame.name === "access.changed") {
+            loadAccessState().then(renderSection);
+            return;
+        }
+        if (frame.name === "access.revoked") {
+            // Access this device HELD was withdrawn. A refresh is not enough: the detail
+            // is already in memory and in the local cache, so it has to be dropped before
+            // anything renders again.
+            dropRevokedDetail();
             return;
         }
         if (frame.name === "cheer") {
