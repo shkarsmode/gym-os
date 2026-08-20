@@ -9513,7 +9513,10 @@ html.compact-ui .chip {
     position: fixed;
     inset: 0;
     pointer-events: none;
-    z-index: 120;
+    /* Above every modal, drawer and toast in the app (which top out around 2400). A
+       cheer arriving while a dialog is open used to land behind it and be invisible —
+       and a dialog is open exactly when you are mid-set editing something. */
+    z-index: 2500;
     overflow: hidden;
 }
 
@@ -9545,6 +9548,9 @@ html.compact-ui .chip {
     left: 50%;
     top: 12%;
     transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
     background: color-mix(in srgb, var(--color-accent) 22%, var(--color-elevated));
     border: 1px solid var(--color-accent);
     color: var(--color-text);
@@ -9574,4 +9580,92 @@ html.compact-ui .chip {
         100% { opacity: 0; }
     }
     .presence-dot { animation: none; }
+}
+
+/* The emoji lifting off the button that was pressed. The flying cheer lands on the
+   RECIPIENT's screen, so without this a tap does nothing visible to the person doing
+   the tapping. */
+.cheer-pop {
+    position: fixed;
+    font-size: 1.4rem;
+    pointer-events: none;
+    transform: translate(-50%, 0);
+    animation: cheer-pop 1.2s ease-out forwards;
+    animation-delay: var(--pop-delay, 0ms);
+    opacity: 0;
+}
+
+@keyframes cheer-pop {
+    0% { transform: translate(-50%, 0) scale(0.5); opacity: 0; }
+    25% { opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--pop-x, 0px)), -70px) scale(1.15); opacity: 0; }
+}
+
+/* The other emoji, revealed by the same tap that already sent the default one.
+   Sits UNDER the strip, not on the person: .presence-row scrolls sideways, and a box
+   with overflow-x: auto clips its vertical overflow too, so an anchored popover would
+   simply be cut off. */
+.cheer-picker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: var(--color-elevated);
+    border: 1px solid var(--color-border);
+    animation: cheer-picker-in 160ms ease-out;
+}
+
+@keyframes cheer-picker-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.cheer-picker-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.cheer-picker-row {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+
+.cheer-choice {
+    border: 0;
+    background: transparent;
+    font-size: 1.15rem;
+    line-height: 1;
+    padding: 6px 8px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 120ms ease, background 120ms ease;
+}
+
+.cheer-choice:hover { background: var(--color-surface); }
+.cheer-choice:active { transform: scale(0.85); }
+
+@media (prefers-reduced-motion: reduce) {
+    .cheer-pop { animation-duration: 0.9s; }
+    .cheer-picker { animation: none; }
+}
+
+.cheer-name-face {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+}
+
+.cheer-name-initial {
+    background: var(--color-accent);
+    color: var(--color-bg);
+    font-size: 0.75rem;
+    font-weight: 700;
 }

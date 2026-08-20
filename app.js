@@ -154,6 +154,25 @@ import {
         }
     }
 
+    /**
+     * The session token, read from storage on every use.
+     *
+     * Deliberately a shared function rather than a cached value: the token changes on
+     * login, logout and impersonation, and a copy captured at module load would keep
+     * authenticating as whoever was signed in when the tab opened.
+     *
+     * It used to be a local inside ApiClient.request, which is why the live stream —
+     * written later, in a different scope — referenced a name that did not exist there
+     * and threw before it could open a connection.
+     */
+    function storedAuthToken() {
+        try {
+            return localStorage.getItem("gymos-auth-token") || "";
+        } catch (error) {
+            return "";
+        }
+    }
+
     class ApiClient {
         constructor(baseUrl) {
             this.baseUrl = String(baseUrl || "").replace(/\/$/, "");
@@ -168,12 +187,7 @@ import {
                 throw new Error("API base URL is not configured");
             }
 
-            let authToken = "";
-            try {
-                authToken = localStorage.getItem("gymos-auth-token") || "";
-            } catch (error) {
-                authToken = "";
-            }
+            const authToken = storedAuthToken();
 
             // Longer than the serverless execution wall (10s) on purpose: a backend that
             // times out should surface as its real 504, not as a client-side abort that
@@ -4355,7 +4369,8 @@ import {
             "apply-weekday-workout": () => applyWeekdayWorkout(actionElement.dataset.workoutId),
             "copy-workout-start": () => copyWorkoutAndStart(actionElement.dataset.workoutId),
             "feed-scope": () => setFeedScope(actionElement.dataset.scope),
-            "cheer": () => sendCheer(actionElement.dataset.workoutId),
+            "cheer": () => cheerTapped(actionElement.dataset.workoutId),
+            "cheer-pick": () => sendCheer(actionElement.dataset.workoutId, actionElement.dataset.emoji),
             "feed-retry": () => loadFeed(feedState.scope, false),
             "feed-more": () => loadFeed(feedState.scope, true),
             "feed-react": () => toggleFeedReaction(actionElement.dataset.type, actionElement.dataset.id, actionElement),
@@ -4665,6 +4680,7 @@ import {
             // Same reason: the cheer button paints itself sent the instant it is tapped,
             // and the loader restoring the pre-click markup would undo that.
             "cheer",
+            "cheer-pick",
             "open-post",
             "open-report",
             "close-overlay"
@@ -11574,7 +11590,10 @@ import {
     // The feed shows a session once it is FINISHED, which is exactly too late to encourage
     // anybody. This is the surface that says who is in the gym right now — and without it
     // there would be nothing to tap a 💪 on.
-    const liveState = { presence: [], loadedAt: 0, loading: false, cheeredAt: new Map(), seenCheers: new Set() };
+    const liveState = { presence: [], loadedAt: 0, loading: false, sentEmoji: new Map(), seenCheers: new Set(), pickerFor: null, pickerTimer: null };
+    // Mirrors CHEER_EMOJI on the server, which validates every one of these. Sending
+    // anything else is a 400, so the two lists must not drift.
+    const CHEER_CHOICES = ["💪", "🔥", "👏", "🚀", "🤘", "❤️"];
     const PRESENCE_TTL_MS = 60000;
 
     function presenceIsStale() {
@@ -11617,6 +11636,7 @@ import {
                 <h3>Зараз тренуються</h3>
             </div>
             <div class="presence-row">${others.map(presenceItemMarkup).join("")}</div>
+            ${cheerPickerMarkup(others)}
         </section>`;
     }
 
@@ -11629,13 +11649,32 @@ import {
         // "training" reads very differently at four minutes and at ninety.
         const clock = item.firstSetAt ? gymClockState({ firstSetAt: item.firstSetAt, status: "active", exercises: [] }) : null;
         const elapsed = clock && !clock.overflow ? formatClock(clock.ms) : "";
-        const recent = liveState.cheeredAt.get(item.workoutId);
-        const justCheered = recent && Date.now() - recent < 4000;
-        return `<div class="presence-person" data-presence="${escapeHtml(item.workoutId)}">
+        const sent = liveState.sentEmoji.get(item.workoutId);
+        const open = liveState.pickerFor === item.workoutId;
+        return `<div class="presence-person${open ? " is-picking" : ""}" data-presence="${escapeHtml(item.workoutId)}">
             <button class="presence-face" type="button" data-action="open-user" data-user-id="${escapeHtml(item.userId)}" aria-label="${escapeHtml(item.displayName)}">${face}</button>
             <span class="presence-name">${escapeHtml(firstName(item.displayName))}</span>
             <span class="presence-clock" data-presence-clock="${escapeHtml(item.workoutId)}">${escapeHtml(elapsed)}</span>
-            <button class="presence-cheer${justCheered ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">💪</button>
+            <button class="presence-cheer${sent ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">${escapeHtml(sent || "💪")}</button>
+        </div>`;
+    }
+
+    /**
+     * The other emoji, drawn UNDER the strip rather than as a popover on the person.
+     *
+     * `.presence-row` scrolls sideways, and a box with `overflow-x: auto` clips its
+     * vertical overflow too — there is no way to have one axis scroll and the other spill
+     * out. A popover anchored to an avatar would simply be cut off, worst of all on the
+     * last person in the row.
+     */
+    function cheerPickerMarkup(others) {
+        const target = others.find((item) => item.workoutId === liveState.pickerFor);
+        if (!target) {
+            return "";
+        }
+        return `<div class="cheer-picker">
+            <span class="cheer-picker-label">Надіслати ${escapeHtml(firstName(target.displayName))}:</span>
+            <div class="cheer-picker-row">${CHEER_CHOICES.map((emoji) => `<button class="cheer-choice" type="button" data-action="cheer-pick" data-workout-id="${escapeHtml(target.workoutId)}" data-emoji="${escapeHtml(emoji)}" aria-label="Надіслати ${escapeHtml(emoji)}">${escapeHtml(emoji)}</button>`).join("")}</div>
         </div>`;
     }
 
@@ -11682,17 +11721,60 @@ import {
         }
     }
 
-    async function sendCheer(workoutId) {
-        // Paint immediately: the whole point is that it feels like a nudge, and waiting
-        // for a round-trip to acknowledge a tap makes it feel like a form submission.
-        liveState.cheeredAt.set(workoutId, Date.now());
+    // Tapping the button sends the default straight away AND opens the other choices, so
+    // the common case stays one tap and picking something else stays discoverable.
+    function cheerTapped(workoutId) {
+        openCheerPicker(workoutId);
+        return sendCheer(workoutId, "💪");
+    }
+
+    function openCheerPicker(workoutId) {
+        liveState.pickerFor = workoutId;
+        clearTimeout(liveState.pickerTimer);
+        liveState.pickerTimer = setTimeout(() => {
+            liveState.pickerFor = null;
+            renderPresenceStrip();
+        }, 5000);
+    }
+
+    async function sendCheer(workoutId, emoji) {
+        const chosen = CHEER_CHOICES.includes(emoji) ? emoji : "💪";
+        // The emoji flies across the RECIPIENT's screen — which is the point, and also
+        // means the sender sees nothing at all unless it is shown here too. Burst it out
+        // of the button so a tap visibly does something on the screen being tapped.
+        burstFromButton(workoutId, chosen);
+        liveState.sentEmoji.set(workoutId, chosen);
         renderPresenceStrip();
         try {
-            await storage.apiClient.sendCheer({ workoutId, emoji: "💪" });
+            await storage.apiClient.sendCheer({ workoutId, emoji: chosen });
         } catch (error) {
-            liveState.cheeredAt.delete(workoutId);
+            liveState.sentEmoji.delete(workoutId);
             renderPresenceStrip();
             toast("Не вдалося підбадьорити", friendlyError(error), "error");
+        }
+    }
+
+    // A handful of copies of the emoji lifting off the button and fading. Anchored to the
+    // button's real position so it reads as coming OUT of the thing that was pressed.
+    function burstFromButton(workoutId, emoji) {
+        const button = document.querySelector(`.presence-cheer[data-workout-id="${CSS.escape(workoutId)}"]`);
+        if (!button) {
+            return;
+        }
+        const box = button.getBoundingClientRect();
+        const layer = cheerLayer();
+        for (let index = 0; index < 5; index += 1) {
+            const node = document.createElement("span");
+            node.className = "cheer-pop";
+            node.textContent = emoji;
+            node.style.left = `${box.left + box.width / 2}px`;
+            node.style.top = `${box.top}px`;
+            node.style.setProperty("--pop-x", `${Math.round(-40 + Math.random() * 80)}px`);
+            node.style.setProperty("--pop-delay", `${index * 45}ms`);
+            layer.appendChild(node);
+            const drop = () => node.remove();
+            node.addEventListener("animationend", drop, { once: true });
+            setTimeout(drop, 1600);
         }
     }
 
@@ -11701,7 +11783,7 @@ import {
     // Deliberately not a toast. A cheer is not information to be read and dismissed; it is
     // meant to land while you are between sets and looking at nothing in particular, so it
     // comes in from the edges, crosses the screen and leaves.
-    function flyCheer(emoji, label) {
+    function flyCheer(emoji, actor) {
         const layer = cheerLayer();
         if (!layer) {
             return;
@@ -11723,22 +11805,28 @@ import {
         const drop = () => node.remove();
         node.addEventListener("animationend", drop, { once: true });
         setTimeout(drop, 4000);
-        if (label) {
-            showCheerName(layer, label);
+        if (actor && actor.displayName) {
+            showCheerName(layer, actor);
         }
     }
 
-    function showCheerName(layer, label) {
+    // Who it was, with their face: a name on its own is weak at a glance, and the point
+    // of a cheer is knowing which of your people just sent it.
+    function showCheerName(layer, actor) {
         let banner = layer.querySelector(".cheer-name");
         if (!banner) {
             banner = document.createElement("div");
             banner.className = "cheer-name";
             layer.appendChild(banner);
         }
-        banner.textContent = `${label} підбадьорює`;
+        const avatar = imageUrl(actor.avatarUrl);
+        banner.innerHTML = `${avatar
+            ? `<img class="cheer-name-face" src="${escapeHtml(avatar)}" alt="" referrerpolicy="no-referrer" loading="eager" decoding="sync">`
+            : `<span class="cheer-name-face cheer-name-initial">${escapeHtml((actor.displayName || "?").slice(0, 1).toUpperCase())}</span>`}
+            <span>${escapeHtml(actor.displayName)} підбадьорює</span>`;
         banner.classList.remove("is-out");
-        clearTimeout(banner.dataset.timer);
-        banner.dataset.timer = String(setTimeout(() => banner.classList.add("is-out"), 2200));
+        clearTimeout(Number(banner.dataset.timer));
+        banner.dataset.timer = String(setTimeout(() => banner.classList.add("is-out"), 3200));
     }
 
     function cheerLayer() {
@@ -11751,6 +11839,37 @@ import {
             document.body.appendChild(layer);
         }
         return layer;
+    }
+
+    function cheerWatermarkKey() {
+        return `gymos-cheers-seen-${state.database.currentUserId || "anon"}`;
+    }
+
+    /**
+     * When cheers were last played on this device.
+     *
+     * Seeded to "now" the first time rather than to zero: a new device would otherwise
+     * open to every cheer its owner has ever received, all at once.
+     */
+    function cheerWatermark() {
+        try {
+            const raw = localStorage.getItem(cheerWatermarkKey());
+            if (raw) {
+                return Number(raw) || 0;
+            }
+            localStorage.setItem(cheerWatermarkKey(), String(Date.now()));
+            return Date.now();
+        } catch (error) {
+            return Date.now();
+        }
+    }
+
+    function setCheerWatermark(value) {
+        try {
+            localStorage.setItem(cheerWatermarkKey(), String(value));
+        } catch (error) {
+            // Private mode / full storage: the worst case is replaying a cheer twice.
+        }
     }
 
     /**
@@ -11791,28 +11910,41 @@ import {
     }
 
     async function replayMissedCheers() {
-        const active = state.database.workouts.find(
-            (item) => item.status === "active" && item.userId === state.database.currentUserId
-        );
-        if (!active || storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+        if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
             return;
         }
-        let result = null;
-        try {
-            result = await storage.apiClient.fetchCheers(active.id);
-        } catch (error) {
+        // Not just the running session. A cheer sent in the last minutes of a workout
+        // most often arrives after it was finished and the phone picked back up, and
+        // looking only at an active session would silently drop exactly those.
+        const me = state.database.currentUserId;
+        const recent = state.database.workouts
+            .filter((item) => item.userId === me && (item.status === "active" || item.status === "completed"))
+            .sort((left, right) => String(right.date).localeCompare(String(left.date)))
+            .slice(0, 3);
+        if (!recent.length) {
             return;
         }
-        const fresh = (result?.cheers || []).filter((cheer) => !liveState.seenCheers.has(cheer.id));
+        const results = await Promise.all(recent.map((item) =>
+            storage.apiClient.fetchCheers(item.id).catch(() => null)
+        ));
+        const result = { cheers: results.filter(Boolean).flatMap((item) => item.cheers || []) };
+        // The watermark lives in storage, not in memory. The server keeps every cheer a
+        // session ever received, so an in-memory set meant a full reload replayed the lot
+        // — a shower of week-old encouragement every time the app was opened.
+        const since = cheerWatermark();
+        const fresh = (result.cheers || [])
+            .filter((cheer) => !liveState.seenCheers.has(cheer.id))
+            .filter((cheer) => !since || new Date(cheer.at).getTime() > since);
+        for (const cheer of (result.cheers || [])) {
+            liveState.seenCheers.add(cheer.id);
+        }
+        setCheerWatermark(Date.now());
         if (!fresh.length) {
             return;
         }
-        for (const cheer of fresh) {
-            liveState.seenCheers.add(cheer.id);
-        }
         // Stagger so a backlog arrives as a shower rather than all in one frame.
         fresh.slice(0, 12).forEach((cheer, index) => {
-            setTimeout(() => flyCheer(cheer.emoji, firstName(cheer.actor?.displayName)), index * 220);
+            setTimeout(() => flyCheer(cheer.emoji, cheer.actor), index * 220);
         });
     }
 
@@ -11832,7 +11964,7 @@ import {
     function liveStreamSupported() {
         return storage.mode === "api"
             && storage.apiClient.hasBaseUrl()
-            && Boolean(authToken)
+            && Boolean(storedAuthToken())
             && typeof AbortController === "function"
             && typeof TextDecoder === "function";
     }
@@ -11874,7 +12006,7 @@ import {
         try {
             const response = await fetch(storage.apiClient.baseUrl + "/live/stream", {
                 credentials: "include",
-                headers: { Accept: "text/event-stream", Authorization: "Bearer " + authToken },
+                headers: { Accept: "text/event-stream", Authorization: "Bearer " + storedAuthToken() },
                 signal: controller.signal
             });
             if (!response.ok || !response.body) {
@@ -11938,7 +12070,7 @@ import {
         }
         if (frame.name === "cheer") {
             const cheer = payload.cheer || {};
-            flyCheer(cheer.emoji, firstName(cheer.actor?.displayName));
+            flyCheer(cheer.emoji, cheer.actor);
             return;
         }
         if (frame.name !== "workout.changed") {
