@@ -4974,11 +4974,14 @@ import {
         const avatar = element("openUserSwitcherButton");
         const line = topbar.getBoundingClientRect().bottom;
 
+        // The exercise you are IN — the last one whose top has passed under the header —
+        // rather than only one the header physically overlaps. Requiring an overlap made
+        // the title flick back to the section name in every gap between two cards.
+        // It clears only once that exercise has scrolled off the top entirely.
         let current = null;
         for (const card of document.querySelectorAll(".workout-exercise")) {
             const rect = card.getBoundingClientRect();
-            // The card the header is sitting on top of right now.
-            if (rect.top <= line && rect.bottom > line) {
+            if (rect.top <= line && rect.bottom > 0) {
                 current = card;
             }
         }
