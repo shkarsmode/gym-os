@@ -1941,6 +1941,11 @@ import {
         } else {
             element("sectionTitle").textContent = item.title;
         }
+        // The header's own identity, captured where it is actually decided. The scroll
+        // handler borrows the header for the exercise you are on and restores from here;
+        // letting it snapshot the DOM instead meant a first pass with nothing to show
+        // could freeze the placeholder title ("GymOS") as the thing to restore.
+        topbarContextBase = { eyebrow: element("sectionEyebrow").textContent, title: element("sectionTitle").textContent };
         const renderers = { dashboard, workout, calendar, exercises, stats, feed, notifications, post: postSection, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         // An in-place re-render (ticking a set, editing a field) must not move the page.
         //
@@ -4992,11 +4997,6 @@ import {
             return;
         }
 
-        // Remember what the header said before the first takeover, so restoring cannot
-        // invent a title.
-        if (!topbar.classList.contains("is-context")) {
-            topbarContextBase = { eyebrow: eyebrow.textContent, title: title.textContent };
-        }
         topbar.classList.add("is-context");
         const name = current.querySelector(".we-head-text h3");
         const muscle = current.querySelector(".we-head-text .chip");
