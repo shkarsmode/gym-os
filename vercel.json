@@ -3,7 +3,6 @@
     "outputDirectory": "dist",
     "redirects": [
         {
-            "comment": "GymOS moved to its own server. TEMPORARY (307) on purpose: a permanent redirect is cached by browsers effectively forever, which would make rolling back to Vercel impossible for anyone who had already visited. Removing this block restores the old deployment instantly.",
             "source": "/:path*",
             "destination": "https://gymos.91.98.164.192.nip.io/:path*",
             "permanent": false
