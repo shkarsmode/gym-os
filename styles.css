@@ -9446,24 +9446,17 @@ html.compact-ui .chip {
     flex: 0 0 auto;
 }
 
+/* A plain button around the framed avatar: the frame brings its own ring, aura and
+   sizing, so anything here beyond a reset would fight it. overflow stays visible or the
+   higher tiers' aura is clipped into a square. */
 .presence-face {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
     padding: 0;
-    border: 2px solid var(--color-accent);
-    background: var(--color-elevated);
-    overflow: hidden;
+    border: 0;
+    background: none;
     cursor: pointer;
     display: grid;
     place-items: center;
-}
-
-.presence-face img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
+    overflow: visible;
 }
 
 .presence-initial {

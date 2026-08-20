@@ -11641,9 +11641,12 @@ import {
     }
 
     function presenceItemMarkup(item) {
-        const avatar = imageUrl(item.avatarUrl);
-        const face = avatar
-            ? `<img src="${escapeHtml(avatar)}" alt="" referrerpolicy="no-referrer" loading="eager" decoding="sync">`
+        // The same level frame the profile and the leaderboard draw, not a flat accent
+        // ring: the frame IS someone's identity in this app, and a plain circle here made
+        // the one place you see people live the only place they all look alike.
+        const user = userById(item.userId);
+        const face = user
+            ? framedAvatar(user, "small")
             : `<span class="presence-initial">${escapeHtml((item.displayName || "?").slice(0, 1).toUpperCase())}</span>`;
         // The clock the owner sees on their own screen, shown to whoever is watching:
         // "training" reads very differently at four minutes and at ninety.
