@@ -2008,7 +2008,6 @@ body.is-impersonating .last-results {
     border-bottom: 6px solid var(--color-accent-border);
 }
 
-.setdone-hint-short { display: none; }
 
 @media (max-width: 560px) {
     /* Narrow and low: it floats over the field labels, so the smaller it is the less it
@@ -2053,8 +2052,6 @@ body.is-impersonating .last-results {
 
 @media (max-width: 640px) {
     .setdone-hint { font-size: 12px; }
-    .setdone-hint-full { display: none; }
-    .setdone-hint-short { display: inline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
