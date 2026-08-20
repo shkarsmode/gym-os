@@ -9378,3 +9378,17 @@ html.compact-ui .chip {
 .note-slot .previous-note + .note-add {
     margin-top: 10px;
 }
+
+/* A workout that is running right now, shown live in the calendar. Tabular numerals so
+   the pill does not jitter as the digits change. */
+.fc-ev-clock {
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--color-accent-strong);
+    font-size: 10.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}

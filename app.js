@@ -6837,6 +6837,18 @@ import {
         }
     }
 
+    // A record and an achievement have no `title` of their own in the workout sense, so the
+    // post screen used to fall back to the literal word "Пост" with an empty caption.
+    function postHeadline(post) {
+        if (post.type === "record") {
+            return `Новий рекорд · ${post.exercise || "Вправа"}`;
+        }
+        if (post.type === "achievement") {
+            return `Досягнення «${post.title || ""}»`;
+        }
+        return post.title || "Тренування";
+    }
+
     function renderPostView() {
         const host = element("postView");
         if (!host) {
@@ -6861,7 +6873,7 @@ import {
             <section class="card post-head">
                 <div class="post-head-row">
                     <button class="icon-button" type="button" data-action="navigate" data-section="feed" aria-label="Назад"><i data-lucide="chevron-left"></i></button>
-                    <div class="post-title"><h2>${escapeHtml(post.title || "Пост")}</h2><p class="card-caption">${escapeHtml(post.author?.displayName || "")} · ${post.date ? formatDate(post.date) : timeAgo(post.createdAt)}${post.workoutType ? ` · ${workoutTypeLabel(post.workoutType)}` : ""}</p></div>
+                    <div class="post-title"><h2>${escapeHtml(postHeadline(post))}</h2><p class="card-caption">${escapeHtml(post.author?.displayName || "")} · ${post.date ? formatDate(post.date) : timeAgo(post.createdAt)}${post.workoutType ? ` · ${workoutTypeLabel(post.workoutType)}` : ""}</p></div>
                     <button class="icon-button" type="button" title="Поскаржитись" data-action="open-report" data-type="${post.type}" data-id="${post.id}"><i data-lucide="more-vertical"></i></button>
                 </div>
                 ${post.type === "workout" ? `<div class="post-stats">
@@ -6871,9 +6883,11 @@ import {
                     ${post.durationMinutes ? `<span><strong>${post.durationMinutes}</strong><em>хв</em></span>` : ""}
                 </div>
                 <div class="post-exercises">${(post.exercises || []).map((exercise) => `<div class="post-ex"><span>${escapeHtml(exercise.name)}</span><span class="post-ex-sets">${exercise.sets} ${pluralUk(exercise.sets, "підхід", "підходи", "підходів")}${exercise.topWeightKg ? ` · до ${number(exercise.topWeightKg)} кг` : ""}</span></div>`).join("")}</div>` : ""}
+                ${post.type === "record" ? `<div class="feed-body feed-record-body"><span class="feed-record-ico"><i data-lucide="flame"></i></span><div><strong>${escapeHtml(post.exercise || "Вправа")}</strong><p class="card-caption">${number(post.weightKg)} кг${post.repetitions ? ` × ${post.repetitions}` : ""}${post.estimatedOneRepMax ? ` · 1ПМ ${number(post.estimatedOneRepMax)} кг` : ""}</p></div></div>` : ""}
+                ${post.type === "achievement" ? `<div class="feed-body feed-ach-body"><span class="feed-ach-ico"><i data-lucide="award"></i></span><div><strong>${escapeHtml(post.title || "Досягнення")}</strong><p class="card-caption">${escapeHtml(post.description || "")}</p></div></div>` : ""}
                 <div class="post-react-row">
                     <button class="feed-act big ${liked ? "liked" : ""}" type="button" data-action="feed-react" data-type="${post.type}" data-id="${post.id}"><i data-lucide="thumbs-up"></i><span data-like-count="${escapeHtml(`${post.type}:${post.id}`)}">${(post.reactions && post.reactions.count) || 0}</span></button>
-                    <button class="button button-secondary compact" type="button" data-action="copy-workout-start" data-workout-id="${post.id}"><i data-lucide="copy-plus"></i>Скопіювати</button>
+                    ${post.type === "workout" ? `<button class="button button-secondary compact" type="button" data-action="copy-workout-start" data-workout-id="${post.id}"><i data-lucide="copy-plus"></i>Скопіювати</button>` : ""}
                 </div>
             </section>
             <section class="card post-comments">
@@ -8211,14 +8225,22 @@ import {
                         mine: mine ? 0 : 1,
                         avatarUrl: imageUrl(owner.avatarUrl) || "",
                         initials: owner.avatarInitials || "",
-                        color: owner.avatarColor || "#333"
+                        color: owner.avatarColor || "#333",
+                        // Only an OWN active session has the marks to derive a clock from —
+                        // peer rows are summaries and carry no set timestamps.
+                        clockFrom: mine && workoutItem.status === "active" ? (workoutItem.firstSetAt || "") : ""
                     }
                 };
             }),
             eventContent: (arg) => {
                 const props = arg.event.extendedProps;
                 const av = `<span class="fc-ev-av" style="background:${escapeHtml(props.color)}">${escapeHtml(props.initials)}${props.avatarUrl ? `<img src="${escapeHtml(props.avatarUrl)}" alt="" referrerpolicy="no-referrer" decoding="async" onerror="this.remove()">` : ""}</span>`;
-                return { html: `<div class="fc-ev">${av}<span class="fc-ev-name">${escapeHtml(arg.event.title || "")}</span>${props.num ? `<span class="fc-ev-num">#${escapeHtml(props.num)}</span>` : ""}</div>` };
+                // A session that is running right now shows its clock instead of the #N —
+                // the calendar becomes a live view of who is training.
+                const live = props.clockFrom
+                    ? `<span class="fc-ev-clock" data-cal-clock="${escapeHtml(props.clockFrom)}">${escapeHtml(formatClock(Math.max(0, Date.now() - new Date(props.clockFrom).getTime())))}</span>`
+                    : "";
+                return { html: `<div class="fc-ev">${av}<span class="fc-ev-name">${escapeHtml(arg.event.title || "")}</span>${live || (props.num ? `<span class="fc-ev-num">#${escapeHtml(props.num)}</span>` : "")}</div>` };
             },
             dateClick: (info) => openDaySheet(info.dateStr),
             eventClick: (info) => {
@@ -8227,6 +8249,35 @@ import {
             }
         });
         state.calendar.render();
+        syncCalendarClocks();
+    }
+
+    // One interval for every live clock drawn in the calendar. It stops as soon as none are
+    // on screen, so leaving the section costs nothing.
+    let calendarClockTimer = null;
+
+    function syncCalendarClocks() {
+        clearInterval(calendarClockTimer);
+        calendarClockTimer = null;
+        const tick = () => {
+            const nodes = document.querySelectorAll("[data-cal-clock]");
+            if (!nodes.length) {
+                clearInterval(calendarClockTimer);
+                calendarClockTimer = null;
+                return;
+            }
+            nodes.forEach((node) => {
+                const start = new Date(node.dataset.calClock).getTime();
+                if (!Number.isFinite(start)) {
+                    return;
+                }
+                node.textContent = formatClock(Math.max(0, Date.now() - start));
+            });
+        };
+        if (document.querySelector("[data-cal-clock]")) {
+            calendarClockTimer = setInterval(tick, 1000);
+            tick();
+        }
     }
 
     function weeklyVolumeChart(id, userId) {
