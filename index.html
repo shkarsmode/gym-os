@@ -121,16 +121,51 @@
                     watch(registration.waiting);
                     registration.addEventListener("updatefound", () => watch(registration.installing));
                     // A tab left open all day never re-checks on its own.
-                    const poll = () => registration.update().catch(() => {});
-                    setInterval(poll, 15 * 60 * 1000);
+                    setInterval(() => registration.update().catch(() => {}), 15 * 60 * 1000);
                     document.addEventListener("visibilitychange", () => {
                         if (document.visibilityState === "visible") {
-                            poll();
+                            registration.update().catch(() => {});
                         }
                     });
                 }).catch(() => {});
             });
         }
+
+        // Second, independent signal — and the one that actually fires most of the time.
+        // The service worker only counts as "updated" when sw.js itself changes byte for
+        // byte, which a normal release does not touch: the app ships as a NEW hashed
+        // bundle referenced from index.html. So compare the bundle this tab is running
+        // against the one the server is serving now.
+        (function watchBuild() {
+            const running = document.querySelector('script[type="module"][src*="/assets/"]');
+            const mine = running && running.getAttribute("src");
+            if (!mine) {
+                return;
+            }
+            const announce = () => {
+                window.__gymosUpdateReady = true;
+                window.dispatchEvent(new CustomEvent("gymos:update-ready"));
+            };
+            const check = () => {
+                if (window.__gymosUpdateReady || document.visibilityState !== "visible") {
+                    return;
+                }
+                fetch("/?_build=" + Date.now(), { cache: "no-store" })
+                    .then((response) => (response.ok ? response.text() : null))
+                    .then((html) => {
+                        if (!html) {
+                            return;
+                        }
+                        const match = html.match(/src="(\/assets\/index-[A-Za-z0-9_-]+\.js)"/);
+                        if (match && match[1] !== mine) {
+                            announce();
+                        }
+                    })
+                    .catch(() => {});
+            };
+            setInterval(check, 10 * 60 * 1000);
+            document.addEventListener("visibilitychange", check);
+        })();
     </script>
 </body>
 </html>
