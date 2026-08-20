@@ -1832,11 +1832,23 @@ body.is-impersonating .last-results {
         gap: 8px;
     }
 
-    /* Title is redundant on phones (it's in the head card) and was making the bar
-       overflow. Hide the whole info wrapper — an empty flex child still consumed a
-       gap on the left, giving the bar uneven padding around the action buttons. */
+    /* At rest the title shares the first row with the clock, so that row carries meaning
+       instead of a lone chip. Collapsed it goes away again — the title is redundant (it is
+       in the head card right below) and it was what made the bar overflow in one row. */
     .workout-actionbar-info {
+        display: flex;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .workout-actionbar.is-stuck .workout-actionbar-info {
         display: none;
+    }
+
+    .workout-actionbar-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .workout-actionbar > .gym-clock {
