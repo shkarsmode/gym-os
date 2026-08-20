@@ -1877,6 +1877,48 @@ import {
 
     let pendingExerciseScrollId = null;
 
+    // The topmost thing still visible below the sticky header, and where its top edge sits
+    // right now.
+    //
+    // Individual SET rows are preferred over exercise cards, because the things that
+    // change height on a tick happen INSIDE a card: the coach-mark above set 1 disappears
+    // the moment that set is done, and the card collapses once all of its sets are. An
+    // anchor on the card would hold the card still while its contents slid underneath.
+    function captureScrollAnchor() {
+        const cutoff = topbarHeight();
+        const nodes = document.querySelectorAll("[data-set-id], .workout-exercise[data-workout-exercise-id]");
+        for (const node of nodes) {
+            const rect = node.getBoundingClientRect();
+            if (rect.bottom > cutoff) {
+                return {
+                    key: node.dataset.setId ? `set:${node.dataset.setId}` : `ex:${node.dataset.workoutExerciseId}`,
+                    top: rect.top
+                };
+            }
+        }
+        return null;
+    }
+
+    // Returns true when it handled the scroll, so the caller knows not to fall back.
+    function restoreScrollAnchor(anchor) {
+        if (!anchor || !anchor.key) {
+            return false;
+        }
+        const [kind, id] = [anchor.key.slice(0, anchor.key.indexOf(":")), anchor.key.slice(anchor.key.indexOf(":") + 1)];
+        const node = kind === "set"
+            ? document.querySelector(`[data-set-id="${CSS.escape(id)}"]`)
+            : document.querySelector(`.workout-exercise[data-workout-exercise-id="${CSS.escape(id)}"]`);
+        if (!node) {
+            return false;
+        }
+        const delta = node.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(delta) >= 1) {
+            // "instant": a smooth scroll here would read as the page sliding on every tap.
+            window.scrollTo({ top: window.scrollY + delta, behavior: "instant" });
+        }
+        return true;
+    }
+
     function renderSection() {
         destroyCharts();
         if ((state.section === "admin" || state.section === "moderation" || state.section === "aistats") && !isAdmin()) {
@@ -1897,19 +1939,30 @@ import {
         }
         const renderers = { dashboard, workout, calendar, exercises, stats, feed, notifications, post: postSection, rankings, levels, users, feedback, moderation, admin: adminPanel, aistats: aiStats, subscription, changelog, profile, settings, user: () => userDetail(state.viewUserId) };
         // An in-place re-render (ticking a set, editing a field) must not move the page.
-        // Replacing #pageContent empties the document for an instant, the browser clamps
-        // scrollTop to the shorter height, and the view jumps to the top.
+        //
+        // A pixel offset is not enough to hold it still: the re-render legitimately changes
+        // heights ABOVE the viewport — an exercise collapses once its last set is ticked,
+        // the action bar gains the clock chip the first time — and restoring the same
+        // scrollY then shows different content. So anchor on a real element instead and
+        // scroll by however far it actually moved.
+        //
         // Keyed on the target, not just the section: opening a DIFFERENT workout is a
         // navigation and should start at the top, even though the section name is the same.
         const viewKey = `${state.section}|${state.editingWorkoutId || ""}|${state.viewUserId || ""}`;
         const keepScroll = renderSection.lastViewKey === viewKey;
         renderSection.lastViewKey = viewKey;
         const scrollBefore = window.scrollY;
+        const anchor = keepScroll ? captureScrollAnchor() : null;
         (renderers[state.section] || dashboard)();
-        if (keepScroll && window.scrollY !== scrollBefore) {
-            window.scrollTo(0, scrollBefore);
-        }
+        // iconsIn swaps every <i data-lucide> placeholder for a sized <svg>, which changes
+        // heights. Measuring the anchor before that ran would correct the scroll against a
+        // layout that is about to change again — so restore AFTER the icons are in.
         iconsIn(element("pageContent")); // shell icons already converted in renderShell()
+        if (keepScroll) {
+            if (!restoreScrollAnchor(anchor) && window.scrollY !== scrollBefore) {
+                window.scrollTo(0, scrollBefore);
+            }
+        }
         // Subtle enter animation only when the section actually changes (not on
         // in-place data re-renders), so navigation feels smooth, edits don't flash.
         if (renderSection.lastSection !== state.section) {
@@ -2821,7 +2874,7 @@ import {
         // `has-clock` lets the CSS know whether the buttons have to share the row. Without
         // it, a bar whose clock has not started yet kept the buttons pinned right, with
         // dead space where the chip would eventually appear.
-        const actionBar = readonly ? "" : `<div class="workout-actionbar${clockChip ? " has-clock" : ""}">
+        const actionBar = readonly ? "" : `<div class="workout-actionbar${clockChip ? " has-clock" : ""}${actionBarStuck ? " is-stuck" : ""}">
                 <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong></div>
                 ${clockChip}
                 <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
@@ -3005,7 +3058,7 @@ import {
         const hintChip = hintOn
             ? `<div class="setdone-hint" role="status"><span class="setdone-hint-full">Тисни кружечок праворуч, коли завершиш підхід</span><span class="setdone-hint-short">Тисни кружечок, коли завершиш</span><span class="setdone-hint-caret" aria-hidden="true"></span></div>`
             : "";
-        return `${hintChip}<div class="set-row ${set.isCompleted ? "completed" : ""}">
+        return `<div class="set-row ${set.isCompleted ? "completed" : ""}${hintOn ? " has-hint" : ""}">${hintChip}
             <div class="set-row-head">
                 <span class="set-index">${index}</span>
                 <gym-select class="set-type-select" data-action="set-field" ${target} data-field="type" ${lock}>${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
@@ -4764,76 +4817,28 @@ import {
     // and simply never arrive while the tab is backgrounded or throttled, which left the
     // bar stuck in its tall two-row state. Comparing the bar's own top against the offset
     // it sticks at is exact and costs one rect read per scroll event.
+    // Whether the action bar has reached its sticky position. Deliberately NO animation:
+    // renderSection rebuilds the bar on every set toggle, so an animated collapse replayed
+    // itself on every single tap — the bar grew a row, shrank again, and dragged the whole
+    // page with it. The state is a plain boolean that the markup applies at render time,
+    // so a re-render paints the bar in its correct shape immediately, with nothing moving.
+    let actionBarStuck = false;
+
     function updateActionBarStuck() {
         const bar = document.querySelector(".workout-actionbar");
         if (!bar) {
+            actionBarStuck = false;
             return;
         }
+        // Measure against the bar's resting top when it is NOT stuck, so the reading does
+        // not depend on the class that is about to change.
         const stuck = bar.getBoundingClientRect().top <= topbarHeight() - 5;
-        if (stuck === bar.classList.contains("is-stuck")) {
+        if (stuck === actionBarStuck && stuck === bar.classList.contains("is-stuck")) {
             return;
         }
-        animateActionBarState(bar, stuck);
-    }
-
-    // Collapsing the bar changes flex-wrap, and neither a wrap change nor an auto height
-    // transitions in CSS — the buttons would snap onto the first row. So: measure, apply
-    // the class, measure again, then play the difference back as a transform (FLIP). The
-    // browser animates one transform per element, which is smooth on a phone and needs no
-    // layout work per frame.
-    function animateActionBarState(bar, stuck) {
-        const movers = [bar.querySelector(".workout-actionbar-actions"), bar.querySelector(".gym-clock")].filter(Boolean);
-        const before = movers.map((node) => node.getBoundingClientRect());
-        const heightBefore = bar.offsetHeight;
-
+        actionBarStuck = stuck;
         bar.classList.toggle("is-stuck", stuck);
-
-        const heightAfter = bar.offsetHeight;
-        const after = movers.map((node) => node.getBoundingClientRect());
-        // Publish the FINAL height straight away: the sticky «Минулого разу» pill sits
-        // below the bar and must land in its resting place, not chase the animation.
         updateTopbarOffset();
-
-        if (prefersReducedMotion() || heightBefore === heightAfter) {
-            return;
-        }
-
-        bar.style.height = `${heightBefore}px`;
-        movers.forEach((node, index) => {
-            const dx = before[index].left - after[index].left;
-            const dy = before[index].top - after[index].top;
-            node.style.transition = "none";
-            node.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`;
-        });
-
-        // Two frames: the first commits the inverted position, the second starts the play.
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                bar.style.transition = "height 260ms cubic-bezier(0.4, 0, 0.2, 1), padding 260ms cubic-bezier(0.4, 0, 0.2, 1)";
-                bar.style.height = `${heightAfter}px`;
-                movers.forEach((node) => {
-                    node.style.transition = "transform 260ms cubic-bezier(0.4, 0, 0.2, 1)";
-                    node.style.transform = "";
-                });
-            });
-        });
-
-        // Always clean up, even if a transitionend never arrives (a backgrounded tab
-        // throttles rAF, and a leftover inline height would freeze the bar's size).
-        clearTimeout(animateActionBarState.cleanup);
-        animateActionBarState.cleanup = setTimeout(() => {
-            bar.style.height = "";
-            bar.style.transition = "";
-            movers.forEach((node) => {
-                node.style.transition = "";
-                node.style.transform = "";
-            });
-            updateTopbarOffset();
-        }, 420);
-    }
-
-    function prefersReducedMotion() {
-        return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     }
 
     function topbarHeight() {

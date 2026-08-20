@@ -1870,17 +1870,10 @@ body.is-impersonating .last-results {
         overflow: hidden;
     }
 
-    /* Labels collapse by max-width rather than display:none, so the buttons shrink
-       continuously into icons instead of snapping. The negative margin swallows the
-       icon-to-label gap as the text disappears. */
     .workout-actionbar .button span {
-        display: inline-block;
-        max-width: 7rem;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        opacity: 1;
-        transition: max-width 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 150ms ease, margin-left 260ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .workout-actionbar.is-stuck {
@@ -1893,9 +1886,7 @@ body.is-impersonating .last-results {
     }
 
     .workout-actionbar.is-stuck .button span {
-        max-width: 0;
-        opacity: 0;
-        margin-left: -5px;
+        display: none;
     }
 
     .workout-actionbar.is-stuck .button {
@@ -1920,17 +1911,9 @@ body.is-impersonating .last-results {
     }
 }
 
-/* The bar animates between its two states: height is driven from JS (auto heights do not
-   transition), the children glide with a FLIP transform, and padding rides along in CSS. */
-.workout-actionbar {
-    transition: padding 260ms cubic-bezier(0.4, 0, 0.2, 1);
-    overflow: hidden;
-}
-
-.workout-actionbar .button,
-.workout-actionbar > .gym-clock {
-    transition: padding 260ms cubic-bezier(0.4, 0, 0.2, 1), flex-basis 260ms cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* NO transitions anywhere in this bar. It is rebuilt on every set toggle, so anything
+   that animates replays on every tap — which read as the whole header twitching. The two
+   layouts are swapped instantly instead. */
 
 .exercise-title-line {
     display: flex;
@@ -1955,6 +1938,7 @@ body.is-impersonating .last-results {
 }
 
 .set-row {
+    position: relative;
     padding: 10px 11px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -2024,10 +2008,14 @@ body.is-impersonating .last-results {
 
 /* ---- First-set coach-mark (teaches new users to tap "complete set") ---- */
 .setdone-hint {
-    /* sit at the right, directly above the round complete-toggle, so the caret
-       points at the actual button (not the left of the row). */
-    align-self: flex-end;
-    position: relative;
+    /* Absolutely positioned, floating above the row and pinned to its right edge so the
+       caret points at the round complete-toggle.
+       It takes NO space in the flow on purpose: as a normal sibling it disappeared the
+       instant the first set was ticked, and everything below jumped up by its height. */
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 2px);
+    z-index: 3;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -2046,11 +2034,12 @@ body.is-impersonating .last-results {
 }
 
 /* CSS-only caret (no lucide dependency), pinned to point DOWN at the toggle.
-   The toggle centre is ~75px from the row's right edge: delete button (38) +
-   gap (6) + half the 38px toggle (19) + row padding (11) ≈ 74. */
+   The toggle centre is ~59px from the hint's right edge: delete button (38) + gap (6) +
+   half the 38px toggle (19) = 63, less the row padding the hint now sits inside (11) —
+   it is positioned against the row's PADDING box since going absolute. */
 .setdone-hint-caret {
     position: absolute;
-    right: 70px;
+    right: 59px;
     bottom: -6px;
     width: 0;
     height: 0;
