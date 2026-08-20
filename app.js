@@ -1261,6 +1261,11 @@ import {
         // Started here rather than at module load: before this point there is no token,
         // and a stream opened without one just burns a reconnect cycle against a 401.
         startLiveStream();
+        // Cheers that arrived while the app was closed. This used to run only on
+        // returning to an already-open tab, which is the rarer case: a phone in a gym is
+        // locked and the app fully suspended, so the ones most worth seeing were exactly
+        // the ones being dropped.
+        setTimeout(replayMissedCheers, 1200);
         preloadAvatars();
         refreshUnreadCount();
         setTimeout(syncAchievementsToFeed, 2500);
@@ -8297,12 +8302,23 @@ import {
             });
             return;
         }
+        // Which month the user was looking at. The calendar is rebuilt whenever the
+        // section repaints — including now, when a teammate's session changes — and
+        // without this it silently jumps back to today every time, throwing away
+        // wherever they had navigated to.
+        let viewedDate = null;
         if (state.calendar) {
+            try {
+                viewedDate = state.calendar.getDate();
+            } catch (error) {
+                viewedDate = null;
+            }
             state.calendar.destroy();
         }
         const mobile = window.innerWidth < 760;
         state.calendar = new FullCalendar.Calendar(container, {
             initialView: mobile ? "listMonth" : "dayGridMonth",
+            ...(viewedDate ? { initialDate: viewedDate } : {}),
             height: "auto",
             firstDay: 1,
             locale: "uk",
@@ -12132,6 +12148,12 @@ import {
                     // Reaching a real frame proves the connection works end to end, so
                     // the next drop starts its backoff from scratch.
                     liveStream.attempt = 0;
+                    if (frame.name === "hello" && liveStream.reconnected) {
+                        // The connection had dropped; anything sent during that window
+                        // was delivered to nobody. Go and collect it.
+                        liveStream.reconnected = false;
+                        replayMissedCheers();
+                    }
                     await handleLiveEvent(frame);
                 }
             }
@@ -12144,6 +12166,9 @@ import {
         if (liveStream.controller === controller) {
             liveStream.controller = null;
         }
+        // The next "hello" is a RECONNECT, not a first connection — so whatever arrived
+        // while this device was unreachable gets collected when it comes back.
+        liveStream.reconnected = true;
         scheduleLiveStream();
     }
 
@@ -12162,7 +12187,7 @@ import {
             // COALESCED. Several of these arrive together (a save that closes another
             // session announces both), and acting on each one separately repainted the
             // screen once per event.
-            scheduleTeamRefresh();
+            scheduleTeamRefresh(payload.touches);
             return;
         }
         if (frame.name === "cheer") {
@@ -12187,20 +12212,49 @@ import {
     // Coalesce a burst of team hints into one refresh, and never repaint for a hint that
     // turns out to change nothing on screen.
     let teamRefreshTimer = null;
+    // What the coalesced events between now and the refresh actually touch. An event with
+    // no `touches` came from an older server and is treated as touching everything.
+    const NOTHING_TOUCHED = { presence: false, feed: false, peers: false };
+    let teamRefreshTouches = { ...NOTHING_TOUCHED };
 
-    function scheduleTeamRefresh() {
+    function scheduleTeamRefresh(touches) {
+        // A hint with no `touches` came from a server older than this field. Treat it as
+        // touching everything rather than silently refreshing nothing.
+        const wanted = touches && typeof touches === "object"
+            ? touches
+            : { presence: true, feed: true, peers: true };
+        teamRefreshTouches = {
+            presence: teamRefreshTouches.presence || Boolean(wanted.presence),
+            feed: teamRefreshTouches.feed || Boolean(wanted.feed),
+            peers: teamRefreshTouches.peers || Boolean(wanted.peers)
+        };
         clearTimeout(teamRefreshTimer);
         teamRefreshTimer = setTimeout(runTeamRefresh, 400);
     }
 
     async function runTeamRefresh() {
         teamRefreshTimer = null;
-        await loadPresence(true);
-        const moved = await refreshPeerWorkouts();
-        invalidateFeed();
-        if (state.section === "feed") {
-            loadFeed(feedState.scope, false);
-        } else if (moved && sectionShowsPeers()) {
+        const touches = teamRefreshTouches;
+        teamRefreshTouches = { ...NOTHING_TOUCHED };
+
+        if (touches.presence) {
+            await loadPresence(true);
+        }
+        if (!touches.peers && !touches.feed) {
+            // Somebody is warming up: that moves the presence strip and nothing else.
+            return;
+        }
+        // The calendar and day sheet hold PLANNED and ACTIVE sessions, so they move for
+        // changes the feed will never mention.
+        const moved = touches.peers ? await refreshPeerWorkouts() : false;
+        if (touches.feed) {
+            invalidateFeed();
+            if (state.section === "feed") {
+                loadFeed(feedState.scope, false);
+                return;
+            }
+        }
+        if (moved && sectionShowsPeers()) {
             repaintSection();
         }
     }
