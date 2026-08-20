@@ -1996,10 +1996,12 @@ body.is-impersonating .last-results {
    the 38px toggle (19). */
 .setdone-hint-caret {
     position: absolute;
-    /* `right` places the triangle's RIGHT EDGE, but it is 10px wide and has to be centred
-       on the toggle — hence 63 (the toggle's centre from the head's right edge) minus half
-       the triangle. Getting this wrong is a visible 5px miss. */
-    right: 58px;
+    /* 63px is the toggle's centre measured from the head line's right edge: delete button
+       (38) + gap (6) + half the 38px toggle (19). `right` would place the triangle's RIGHT
+       EDGE there, so translateX(50%) shifts it back by half its own width and centres it —
+       self-correcting if the triangle is ever resized. */
+    right: 63px;
+    transform: translateX(50%);
     top: -6px;
     width: 0;
     height: 0;
