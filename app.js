@@ -39,6 +39,9 @@ import {
 
     const state = {
         section: "dashboard",
+        // Note fields the user has explicitly opened this session (they render collapsed
+        // to a one-line button while empty).
+        openNotes: new Set(),
         profileUserId: null,
         editingWorkoutId: null,
         // Cursor into the caller's own history under the windowed payload; null once
@@ -1876,6 +1879,7 @@ import {
     }
 
     let pendingExerciseScrollId = null;
+    let pendingNoteFocus = null;
 
     // The topmost thing still visible below the sticky header, and where its top edge sits
     // right now.
@@ -1981,6 +1985,16 @@ import {
         requestAnimationFrame(updateTopbarOffset);
         updateLastResultsFocus();
         syncGymClockTicker();
+
+        if (pendingNoteFocus) {
+            const key = pendingNoteFocus;
+            pendingNoteFocus = null;
+            const field = document.querySelector(`textarea[data-note-key="${CSS.escape(key)}"]`);
+            if (field) {
+                field.focus();
+                field.setSelectionRange(field.value.length, field.value.length);
+            }
+        }
 
         if (pendingExerciseScrollId) {
             const targetId = pendingExerciseScrollId;
@@ -2888,7 +2902,7 @@ import {
                 ${contextBanner}
                 ${readonly ? "" : `<div class="field-grid two" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div></div>`}
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
-                <div class="field" style="margin-top:14px;"><label>Нотатки тренування</label><textarea data-action="update-workout-notes" placeholder="Що важливо запам'ятати про цю сесію" ${readonly ? "disabled" : ""}>${escapeHtml(workoutItem.notes || "")}</textarea></div>
+                ${noteField(`workout:${workoutItem.id}`, "Нотатки тренування", "Додати нотатку до тренування", workoutItem.notes, `data-action="update-workout-notes"`, readonly)}
             </section>
             ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutItem.exercises.slice().sort((left, right) => left.order - right.order).map((item, exerciseIndex) => workoutExerciseEditor(workoutItem, item, readonly, exerciseIndex === 0)).join("")}</div>` : `${readonly ? "" : repeatSuggestionCard(workoutItem)}${emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}`}
             ${cardioBlock(workoutItem, readonly)}
@@ -3002,7 +3016,7 @@ import {
         const collapsed = allDone && !state.expandedExercises.has(workoutExercise.id) && state.collapseAnimId !== workoutExercise.id;
         const articleClass = `workout-exercise${allDone ? " we-done" : ""}${collapsed ? " we-collapsed" : ""}`;
         const collapseToggle = allDone ? `<button class="icon-button we-collapse-btn" type="button" title="Згорнути / розгорнути" aria-label="Згорнути / розгорнути" data-action="toggle-exercise-collapse" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="chevron-down"></i></button>` : "";
-        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="field" style="margin-top:14px;"><label>Нотатки до вправи</label>${previousNote}<textarea data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" placeholder="Нова нотатка до вправи (необов'язково)" ${readonly ? "disabled" : ""}>${escapeHtml(workoutExercise.notes || "")}</textarea></div></div></div></article>`;
+        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
     }
 
     // Small "+N кг" / "−N кг" tag showing the weight change from the previous set.
@@ -3595,6 +3609,13 @@ import {
         document.addEventListener("input", handleInput);
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
+        // Capture phase: blur does not bubble.
+        document.addEventListener("blur", (event) => {
+            const field = event.target;
+            if (field && field.tagName === "TEXTAREA" && field.dataset.noteKey) {
+                closeEmptyNote(field.dataset.noteKey, field.value);
+            }
+        }, true);
         window.addEventListener("scroll", updateLastResultsFocus, { passive: true });
         // The event can fire before the app finishes booting, in which case index.html's
         // dispatch lands on nobody — index.html sets the flag too, so re-check here.
@@ -4412,6 +4433,7 @@ import {
             reset: resetData,
             "close-overlay": closeOverlay,
             "apply-update": applyUpdate,
+            "open-note": () => openNote(actionElement.dataset.noteKey),
             "open-workout-type": () => openWorkoutTypePicker(actionElement.dataset.workoutId),
             "dismiss-update": dismissUpdateBanner,
             "close-sheet": closeSheet
@@ -4870,6 +4892,44 @@ import {
         if (choice && choice !== workoutItem.workoutType) {
             await updateWorkoutMeta(workoutId, "workoutType", choice);
         }
+    }
+
+    // A note field that is empty renders as a single line instead of a textarea.
+    //
+    // An empty «Нотатки до вправи» box cost about a third of a phone screen per exercise,
+    // pushing the sets you are actually working with off the bottom. Most sets never get a
+    // note, so the box should only exist once you ask for it.
+    //
+    // `openNotes` survives re-renders (the whole page is rebuilt on every set tick), and a
+    // field that is opened but left empty folds itself away again on blur.
+    function noteField(key, label, addLabel, value, attrs, readonly, extra = "") {
+        const text = String(value || "");
+        if (readonly && !text) {
+            return "";
+        }
+        if (!text && !state.openNotes.has(key)) {
+            return `<button class="note-add" type="button" data-action="open-note" data-note-key="${escapeHtml(key)}"><i data-lucide="plus"></i>${escapeHtml(addLabel)}</button>`;
+        }
+        return `<div class="field note-field" style="margin-top:14px;"><label>${escapeHtml(label)}</label>${extra}<textarea ${attrs} data-note-key="${escapeHtml(key)}" placeholder="${escapeHtml(addLabel)}" ${readonly ? "disabled" : ""}>${escapeHtml(text)}</textarea></div>`;
+    }
+
+    function openNote(key) {
+        if (!key) {
+            return;
+        }
+        state.openNotes.add(key);
+        pendingNoteFocus = key;
+        renderSection();
+    }
+
+    // Folding back on blur is what keeps the layout honest: open a note, think better of
+    // it, and the screen returns to what it was.
+    function closeEmptyNote(key, value) {
+        if (!key || String(value || "").trim()) {
+            return;
+        }
+        state.openNotes.delete(key);
+        renderSection();
     }
 
     function topbarHeight() {
