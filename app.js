@@ -356,6 +356,18 @@ import {
             return this.request(`/feed/comments/${id}/delete`, { method: "POST" });
         }
 
+        fetchPresence() {
+            return this.request("/live/presence", { method: "GET" });
+        }
+
+        sendCheer(payload) {
+            return this.request("/live/cheer", { method: "POST", body: JSON.stringify(payload) });
+        }
+
+        fetchCheers(workoutId) {
+            return this.request(`/live/cheers/${encodeURIComponent(workoutId)}`, { method: "GET" });
+        }
+
         reportContent(payload) {
             return this.request("/feed/report", { method: "POST", body: JSON.stringify(payload) });
         }
@@ -4332,6 +4344,7 @@ import {
             "apply-weekday-workout": () => applyWeekdayWorkout(actionElement.dataset.workoutId),
             "copy-workout-start": () => copyWorkoutAndStart(actionElement.dataset.workoutId),
             "feed-scope": () => setFeedScope(actionElement.dataset.scope),
+            "cheer": () => sendCheer(actionElement.dataset.workoutId),
             "feed-retry": () => loadFeed(feedState.scope, false),
             "feed-more": () => loadFeed(feedState.scope, true),
             "feed-react": () => toggleFeedReaction(actionElement.dataset.type, actionElement.dataset.id, actionElement),
@@ -4638,6 +4651,9 @@ import {
             // markup afterwards, silently putting the old like count back.
             "feed-react",
             "feed-scope",
+            // Same reason: the cheer button paints itself sent the instant it is tapped,
+            // and the loader restoring the pre-click markup would undo that.
+            "cheer",
             "open-post",
             "open-report",
             "close-overlay"
@@ -6671,8 +6687,11 @@ import {
                 </div>
                 <div class="feed-tabs">${FEED_SCOPE_TABS.map(([value, label]) => `<button class="feed-tab ${feedState.scope === value ? "active" : ""}" type="button" data-action="feed-scope" data-scope="${value}">${label}</button>`).join("")}</div>
             </section>
+            <div id="presenceStrip" class="span-12"></div>
             <section class="span-12"><div id="feedList" class="feed-list"></div></section>
         </div>`);
+        renderPresenceStrip();
+        loadPresence();
         renderFeedList();
         // Paint what we have, then refetch page 1 when it has gone stale — the cached
         // list stays on screen meanwhile, so revisiting the tab never flashes empty.
@@ -11539,6 +11558,223 @@ import {
         }
     }
 
+    // ---- Presence and cheering ---------------------------------------------------------
+    //
+    // The feed shows a session once it is FINISHED, which is exactly too late to encourage
+    // anybody. This is the surface that says who is in the gym right now — and without it
+    // there would be nothing to tap a 💪 on.
+    const liveState = { presence: [], loadedAt: 0, loading: false, cheeredAt: new Map(), seenCheers: new Set() };
+    const PRESENCE_TTL_MS = 60000;
+
+    function presenceIsStale() {
+        return Date.now() - liveState.loadedAt > PRESENCE_TTL_MS;
+    }
+
+    async function loadPresence(force = false) {
+        if (liveState.loading || storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+            return;
+        }
+        if (!force && !presenceIsStale()) {
+            return;
+        }
+        liveState.loading = true;
+        try {
+            const result = await storage.apiClient.fetchPresence();
+            liveState.presence = Array.isArray(result?.training) ? result.training : [];
+            liveState.loadedAt = Date.now();
+            renderPresenceStrip();
+        } catch (error) {
+            // Presence is decoration; a failure must never take a section down with it.
+        } finally {
+            liveState.loading = false;
+        }
+    }
+
+    function presenceOthers() {
+        const me = state.database.currentUserId;
+        return liveState.presence.filter((item) => item.userId !== me);
+    }
+
+    function presenceStripMarkup() {
+        const others = presenceOthers();
+        if (!others.length) {
+            return "";
+        }
+        return `<section class="card span-12 presence-card">
+            <div class="presence-head">
+                <span class="presence-dot" aria-hidden="true"></span>
+                <h3>Зараз тренуються</h3>
+            </div>
+            <div class="presence-row">${others.map(presenceItemMarkup).join("")}</div>
+        </section>`;
+    }
+
+    function presenceItemMarkup(item) {
+        const avatar = imageUrl(item.avatarUrl);
+        const face = avatar
+            ? `<img src="${escapeHtml(avatar)}" alt="" referrerpolicy="no-referrer" loading="eager" decoding="sync">`
+            : `<span class="presence-initial">${escapeHtml((item.displayName || "?").slice(0, 1).toUpperCase())}</span>`;
+        // The clock the owner sees on their own screen, shown to whoever is watching:
+        // "training" reads very differently at four minutes and at ninety.
+        const clock = item.firstSetAt ? gymClockState({ firstSetAt: item.firstSetAt, status: "active", exercises: [] }) : null;
+        const elapsed = clock && !clock.overflow ? formatClock(clock.ms) : "";
+        const recent = liveState.cheeredAt.get(item.workoutId);
+        const justCheered = recent && Date.now() - recent < 4000;
+        return `<div class="presence-person" data-presence="${escapeHtml(item.workoutId)}">
+            <button class="presence-face" type="button" data-action="open-user" data-user-id="${escapeHtml(item.userId)}" aria-label="${escapeHtml(item.displayName)}">${face}</button>
+            <span class="presence-name">${escapeHtml(firstName(item.displayName))}</span>
+            <span class="presence-clock" data-presence-clock="${escapeHtml(item.workoutId)}">${escapeHtml(elapsed)}</span>
+            <button class="presence-cheer${justCheered ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">💪</button>
+        </div>`;
+    }
+
+    function firstName(displayName) {
+        return String(displayName || "").trim().split(/\s+/)[0] || "—";
+    }
+
+    function renderPresenceStrip() {
+        const host = element("presenceStrip");
+        if (!host) {
+            return;
+        }
+        host.innerHTML = presenceStripMarkup();
+        iconsIn(host);
+        syncPresenceClocks();
+    }
+
+    // The presence clocks tick without redrawing the strip: a full repaint every second
+    // would swap every avatar element and make them blink.
+    let presenceClockTimer = null;
+
+    function syncPresenceClocks() {
+        clearInterval(presenceClockTimer);
+        presenceClockTimer = null;
+        const tick = () => {
+            const nodes = document.querySelectorAll("[data-presence-clock]");
+            if (!nodes.length) {
+                clearInterval(presenceClockTimer);
+                presenceClockTimer = null;
+                return;
+            }
+            nodes.forEach((node) => {
+                const item = liveState.presence.find((row) => row.workoutId === node.dataset.presenceClock);
+                if (!item || !item.firstSetAt) {
+                    return;
+                }
+                const clock = gymClockState({ firstSetAt: item.firstSetAt, status: "active", exercises: [] });
+                node.textContent = clock && !clock.overflow ? formatClock(clock.ms) : "";
+            });
+        };
+        if (document.querySelector("[data-presence-clock]")) {
+            presenceClockTimer = setInterval(tick, 1000);
+            tick();
+        }
+    }
+
+    async function sendCheer(workoutId) {
+        // Paint immediately: the whole point is that it feels like a nudge, and waiting
+        // for a round-trip to acknowledge a tap makes it feel like a form submission.
+        liveState.cheeredAt.set(workoutId, Date.now());
+        renderPresenceStrip();
+        try {
+            await storage.apiClient.sendCheer({ workoutId, emoji: "💪" });
+        } catch (error) {
+            liveState.cheeredAt.delete(workoutId);
+            renderPresenceStrip();
+            toast("Не вдалося підбадьорити", friendlyError(error), "error");
+        }
+    }
+
+    // ---- The flying emoji ---------------------------------------------------------------
+    //
+    // Deliberately not a toast. A cheer is not information to be read and dismissed; it is
+    // meant to land while you are between sets and looking at nothing in particular, so it
+    // comes in from the edges, crosses the screen and leaves.
+    function flyCheer(emoji, label) {
+        const layer = cheerLayer();
+        if (!layer) {
+            return;
+        }
+        const node = document.createElement("span");
+        node.className = "cheer-fly";
+        node.textContent = emoji || "💪";
+        // Each one enters from a random edge, so a burst reads as a crowd rather than a
+        // queue. Custom properties feed a single CSS animation.
+        const fromLeft = Math.random() < 0.5;
+        node.style.setProperty("--cheer-x", `${fromLeft ? -12 : 112}vw`);
+        node.style.setProperty("--cheer-y", `${15 + Math.random() * 60}vh`);
+        node.style.setProperty("--cheer-x-end", `${fromLeft ? 20 + Math.random() * 60 : 80 - Math.random() * 60}vw`);
+        node.style.setProperty("--cheer-y-end", `${10 + Math.random() * 40}vh`);
+        node.style.setProperty("--cheer-rot", `${Math.round(-40 + Math.random() * 80)}deg`);
+        layer.appendChild(node);
+        // Remove on animationend, with a timer as the backstop: animations do not fire
+        // their end event in a backgrounded tab, and without this the nodes accumulate.
+        const drop = () => node.remove();
+        node.addEventListener("animationend", drop, { once: true });
+        setTimeout(drop, 4000);
+        if (label) {
+            showCheerName(layer, label);
+        }
+    }
+
+    function showCheerName(layer, label) {
+        let banner = layer.querySelector(".cheer-name");
+        if (!banner) {
+            banner = document.createElement("div");
+            banner.className = "cheer-name";
+            layer.appendChild(banner);
+        }
+        banner.textContent = `${label} підбадьорює`;
+        banner.classList.remove("is-out");
+        clearTimeout(banner.dataset.timer);
+        banner.dataset.timer = String(setTimeout(() => banner.classList.add("is-out"), 2200));
+    }
+
+    function cheerLayer() {
+        let layer = document.getElementById("cheerLayer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.id = "cheerLayer";
+            layer.className = "cheer-layer";
+            layer.setAttribute("aria-hidden", "true");
+            document.body.appendChild(layer);
+        }
+        return layer;
+    }
+
+    /**
+     * Cheers that landed while nobody was looking.
+     *
+     * The live event is fired once and lost if the tab was closed or the screen was off —
+     * which is the common case, because between sets the phone is face-down on a bench.
+     * The server keeps them, so they are collected on returning and played then.
+     */
+    async function replayMissedCheers() {
+        const active = state.database.workouts.find(
+            (item) => item.status === "active" && item.userId === state.database.currentUserId
+        );
+        if (!active || storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+            return;
+        }
+        let result = null;
+        try {
+            result = await storage.apiClient.fetchCheers(active.id);
+        } catch (error) {
+            return;
+        }
+        const fresh = (result?.cheers || []).filter((cheer) => !liveState.seenCheers.has(cheer.id));
+        if (!fresh.length) {
+            return;
+        }
+        for (const cheer of fresh) {
+            liveState.seenCheers.add(cheer.id);
+        }
+        // Stagger so a backlog arrives as a shower rather than all in one frame.
+        fresh.slice(0, 12).forEach((cheer, index) => {
+            setTimeout(() => flyCheer(cheer.emoji, firstName(cheer.actor?.displayName)), index * 220);
+        });
+    }
+
     // ---- Live stream -----------------------------------------------------------------
     //
     // A single server-sent-events connection carrying HINTS — "these workouts changed,
@@ -11648,6 +11884,17 @@ import {
             renderSection();
             return;
         }
+        if (frame.name === "presence.changed") {
+            // A hint, like everything else on this stream: somebody's session opened or
+            // closed, go and re-read who is training.
+            loadPresence(true);
+            return;
+        }
+        if (frame.name === "cheer") {
+            const cheer = payload.cheer || {};
+            flyCheer(cheer.emoji, firstName(cheer.actor?.displayName));
+            return;
+        }
         if (frame.name !== "workout.changed") {
             return;
         }
@@ -11727,6 +11974,8 @@ import {
             stopLiveStream();
         } else {
             startLiveStream();
+            loadPresence(true);
+            replayMissedCheers();
         }
     });
     window.addEventListener("pagehide", () => {

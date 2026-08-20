@@ -9392,3 +9392,186 @@ html.compact-ui .chip {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
+
+/* ---- Зараз тренуються ---------------------------------------------------- */
+
+.presence-card {
+    padding: 14px 16px;
+}
+
+.presence-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.presence-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+/* A live indicator has to look alive; a static dot reads as a bullet point. */
+.presence-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 60%, transparent);
+    animation: presence-pulse 2s ease-out infinite;
+    flex: 0 0 auto;
+}
+
+@keyframes presence-pulse {
+    70% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-accent) 0%, transparent); }
+    100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 0%, transparent); }
+}
+
+/* Scrolls sideways rather than wrapping: a full gym should not push the feed down. */
+.presence-row {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+}
+
+.presence-row::-webkit-scrollbar { display: none; }
+
+.presence-person {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    min-width: 64px;
+    flex: 0 0 auto;
+}
+
+.presence-face {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    padding: 0;
+    border: 2px solid var(--color-accent);
+    background: var(--color-elevated);
+    overflow: hidden;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+}
+
+.presence-face img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.presence-initial {
+    font-weight: 700;
+    color: var(--color-accent);
+}
+
+.presence-name {
+    font-size: 0.78rem;
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Tabular figures so a ticking clock does not shuffle the name under it. */
+.presence-clock {
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    min-height: 1em;
+}
+
+.presence-cheer {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: transform 120ms ease, background 120ms ease;
+}
+
+.presence-cheer:active { transform: scale(0.9); }
+
+.presence-cheer.is-sent {
+    background: color-mix(in srgb, var(--color-accent) 20%, var(--color-elevated));
+    border-color: var(--color-accent);
+}
+
+/* ---- Підбадьорення, що прилітає ------------------------------------------ */
+
+/* Above everything, and never in the way of a tap: this lands while somebody is
+   mid-set and must not intercept the button they were reaching for. */
+.cheer-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 120;
+    overflow: hidden;
+}
+
+.cheer-fly {
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-size: 2.2rem;
+    will-change: transform, opacity;
+    animation: cheer-fly 2.6s cubic-bezier(0.16, 0.6, 0.3, 1) forwards;
+    transform: translate(var(--cheer-x), var(--cheer-y));
+}
+
+@keyframes cheer-fly {
+    0% {
+        transform: translate(var(--cheer-x), var(--cheer-y)) scale(0.6) rotate(0deg);
+        opacity: 0;
+    }
+    18% { opacity: 1; }
+    70% { opacity: 1; }
+    100% {
+        transform: translate(var(--cheer-x-end), var(--cheer-y-end)) scale(1.3) rotate(var(--cheer-rot));
+        opacity: 0;
+    }
+}
+
+.cheer-name {
+    position: absolute;
+    left: 50%;
+    top: 12%;
+    transform: translateX(-50%);
+    background: color-mix(in srgb, var(--color-accent) 22%, var(--color-elevated));
+    border: 1px solid var(--color-accent);
+    color: var(--color-text);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: opacity 400ms ease, transform 400ms ease;
+}
+
+.cheer-name.is-out {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+}
+
+/* Somebody who has asked for less motion still gets the message, just without
+   anything flying across their screen. */
+@media (prefers-reduced-motion: reduce) {
+    .cheer-fly {
+        animation: cheer-fade 1.6s ease forwards;
+        transform: translate(var(--cheer-x-end), var(--cheer-y-end));
+    }
+    @keyframes cheer-fade {
+        0% { opacity: 0; }
+        20% { opacity: 1; }
+        100% { opacity: 0; }
+    }
+    .presence-dot { animation: none; }
+}
