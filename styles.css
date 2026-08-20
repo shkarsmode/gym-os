@@ -1892,16 +1892,9 @@ body.is-impersonating .last-results {
     }
 }
 
-/* The bar animates between the two states; the sentinel above it is what detects the
-   transition, and has no size of its own. */
+/* The bar animates between its two states. */
 .workout-actionbar {
     transition: padding 160ms ease;
-}
-
-.wab-sentinel {
-    height: 1px;
-    margin-bottom: -1px;
-    pointer-events: none;
 }
 
 .exercise-title-line {

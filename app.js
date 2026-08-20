@@ -1914,7 +1914,7 @@ import {
         }
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
-        watchActionBarStuck();
+        updateActionBarStuck();
         syncGymClockTicker();
 
         if (pendingExerciseScrollId) {
@@ -2811,7 +2811,6 @@ import {
                 <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
             </div>`;
         return `
-            ${readonly ? "" : `<div class="wab-sentinel" aria-hidden="true"></div>`}
             ${actionBar}
             <section class="card workout-head">
                 <div class="card-header">
@@ -3527,6 +3526,7 @@ import {
         document.addEventListener("input", handleInput);
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
+        window.addEventListener("scroll", updateActionBarStuck, { passive: true });
         // The event can fire before the app finishes booting, in which case index.html's
         // dispatch lands on nobody — index.html sets the flag too, so re-check here.
         if (window.__gymosUpdateReady) {
@@ -4743,27 +4743,24 @@ import {
         }
     }
 
-    let actionBarObserver = null;
-
-    function watchActionBarStuck() {
-        if (actionBarObserver) {
-            actionBarObserver.disconnect();
-            actionBarObserver = null;
-        }
-        const sentinel = document.querySelector(".wab-sentinel");
+    // Whether the action bar has reached its sticky position. A scroll listener rather
+    // than an IntersectionObserver: IO callbacks are delivered with the rendering steps
+    // and simply never arrive while the tab is backgrounded or throttled, which left the
+    // bar stuck in its tall two-row state. Comparing the bar's own top against the offset
+    // it sticks at is exact and costs one rect read per scroll event.
+    function updateActionBarStuck() {
         const bar = document.querySelector(".workout-actionbar");
-        if (!sentinel || !bar || typeof IntersectionObserver !== "function") {
+        if (!bar) {
             return;
         }
-        // rootMargin pulls the trigger line down to just under the topbar, so the bar
-        // collapses exactly when it starts overlapping content rather than a moment later.
-        actionBarObserver = new IntersectionObserver(([entry]) => {
-            bar.classList.toggle("is-stuck", !entry.isIntersecting);
-            // Collapsing removes a row, so the measured height the sticky pill depends on
-            // has to be republished.
-            updateTopbarOffset();
-        }, { rootMargin: `-${Math.round(topbarHeight()) + 8}px 0px 0px 0px`, threshold: 0 });
-        actionBarObserver.observe(sentinel);
+        const stuck = bar.getBoundingClientRect().top <= topbarHeight() - 5;
+        if (stuck === bar.classList.contains("is-stuck")) {
+            return;
+        }
+        bar.classList.toggle("is-stuck", stuck);
+        // Collapsing drops a row, and the sticky «Минулого разу» pill positions itself
+        // below the bar's MEASURED height.
+        updateTopbarOffset();
     }
 
     function topbarHeight() {
