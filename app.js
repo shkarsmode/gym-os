@@ -360,6 +360,10 @@ import {
             return this.request("/live/presence", { method: "GET" });
         }
 
+        fetchPeerWorkouts() {
+            return this.request("/live/peers", { method: "GET" });
+        }
+
         sendCheer(payload) {
             return this.request("/live/cheer", { method: "POST", body: JSON.stringify(payload) });
         }
@@ -2072,6 +2076,12 @@ import {
     function dashboard() {
         const user = currentUser();
         const active = activeWorkoutFor(user.id);
+        // Presence is painted from whatever is already held and refreshed in the
+        // background, so switching sections never flashes an empty strip.
+        setTimeout(() => {
+            renderPresenceStrip();
+            loadPresence();
+        }, 0);
         content(`
             <div class="grid dashboard-grid">
                 <section class="card span-12 dash-quickstart">
@@ -2088,6 +2098,7 @@ import {
                         <button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Перейти до календаря</button>
                     </div>
                 </section>
+                <div id="presenceStrip" class="span-12"></div>
                 ${navHub()}
                 <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">${state.filters.activityScope === "all" ? "Спільна стрічка команди — чужі лише для перегляду." : "Твої завершені тренування."}</p></div><div class="activity-toolbar"><div class="segmented">${[["mine", "Мої"], ["all", "Усі"]].map(([value, label]) => `<button class="segment-button ${(state.filters.activityScope === "all" ? "all" : "mine") === value ? "active" : ""}" type="button" data-action="activity-scope" data-scope="${value}">${label}</button>`).join("")}</div></div></div><div class="activity-feed">${activityFeed()}</div></section>
             </div>
@@ -11749,6 +11760,36 @@ import {
      * which is the common case, because between sets the phone is face-down on a bench.
      * The server keeps them, so they are collected on returning and played then.
      */
+    /**
+     * Re-read everyone else's recent sessions and merge them in.
+     *
+     * Peers live in the same `state.database.workouts` array as your own rows but in a
+     * different shape — summaries with aggregates and NO `exercises` key — so they are
+     * replaced wholesale rather than merged field by field: assigning onto an existing
+     * row could leave a stale `exercises` array behind and make a summary look hydrated.
+     */
+    async function refreshPeerWorkouts() {
+        if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+            return;
+        }
+        let result = null;
+        try {
+            result = await storage.apiClient.fetchPeerWorkouts();
+        } catch (error) {
+            return;
+        }
+        const rows = Array.isArray(result?.workouts) ? result.workouts : [];
+        if (!rows.length) {
+            return;
+        }
+        const me = state.database.currentUserId;
+        const incoming = new Map(rows.map((row) => [row.id, row]));
+        // Keep every row of mine untouched, plus any peer row the window no longer covers.
+        const kept = state.database.workouts.filter((row) => row.userId === me || !incoming.has(row.id));
+        state.database.workouts = [...kept, ...rows.filter((row) => row.userId !== me)];
+        renderSection();
+    }
+
     async function replayMissedCheers() {
         const active = state.database.workouts.find(
             (item) => item.status === "active" && item.userId === state.database.currentUserId
@@ -11884,10 +11925,15 @@ import {
             renderSection();
             return;
         }
-        if (frame.name === "presence.changed") {
-            // A hint, like everything else on this stream: somebody's session opened or
-            // closed, go and re-read who is training.
+        if (frame.name === "team.changed") {
+            // Somebody else's session opened, closed or appeared. A hint like everything
+            // else here: go and re-read the surfaces that show other people.
             loadPresence(true);
+            refreshPeerWorkouts();
+            invalidateFeed();
+            if (state.section === "feed") {
+                loadFeed(feedState.scope, false);
+            }
             return;
         }
         if (frame.name === "cheer") {
