@@ -9801,8 +9801,12 @@ html.compact-ui .chip {
     flex-wrap: wrap;
 }
 
-.partner-head > div { flex: 1 1 160px; min-width: 0; }
+/* Target the text block by NAME, not by "any div child".
+   The avatar is a div too, so `.partner-head > div` overrode its own flex: 0 0 auto and
+   stretched a 30px square into a 190px letterbox. */
+.partner-title { flex: 1 1 160px; min-width: 0; }
 .partner-head strong { display: block; }
+.partner-head .avatar { flex: 0 0 auto; }
 
 .partner-idle {
     margin: 10px 0 0;
@@ -9893,3 +9897,19 @@ html.compact-ui .chip {
 
 .presence-invite svg { width: 13px; height: 13px; }
 .presence-invite:hover { color: var(--color-accent); border-color: var(--color-accent); }
+
+/* Who somebody is training with. Sits on its own short line under the name rather than
+   widening the cell — the strip's columns are already sized to the frame. */
+.presence-pair {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 84px;
+    font-size: 0.68rem;
+    color: var(--color-accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.presence-pair svg { width: 10px; height: 10px; flex: 0 0 auto; }

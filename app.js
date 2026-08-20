@@ -11821,7 +11821,7 @@ import {
         const name = escapeHtml(firstName(person.displayName));
         if (link.status === "pending") {
             return `<section class="card span-12 partner-card">
-                <div class="partner-head">${avatar(person, "tiny")}<div>
+                <div class="partner-head">${avatar(person, "tiny")}<div class="partner-title">
                     <strong>${link.incoming ? `${name} кличе тренуватися разом` : `Чекаємо на ${name}`}</strong>
                     <p class="card-caption">${link.incoming ? "Бачитимете підходи одне одного, поки триває сесія." : "Запрошення надіслано."}</p>
                 </div></div>
@@ -11834,7 +11834,7 @@ import {
         return `<section class="card span-12 partner-card is-live">
             <div class="partner-head">
                 ${avatar(person, "tiny")}
-                <div><strong>Разом з ${name}</strong><p class="card-caption">Лише перегляд — редагувати чужі підходи не можна.</p></div>
+                <div class="partner-title"><strong>Разом з ${name}</strong><p class="card-caption">Лише перегляд — редагувати чужі підходи не можна.</p></div>
                 <button class="button button-secondary compact" type="button" data-action="partner-answer" data-id="${escapeHtml(link.id)}" data-decision="leave">Завершити</button>
             </div>
             <div id="partnerBody">${partnerBodyMarkup()}</div>
@@ -12292,6 +12292,7 @@ import {
         return `<div class="presence-person${open ? " is-picking" : ""}" data-presence="${escapeHtml(item.workoutId)}">
             <button class="presence-face" type="button" data-action="open-user" data-user-id="${escapeHtml(item.userId)}" aria-label="${escapeHtml(item.displayName)}">${face}</button>
             <span class="presence-name">${escapeHtml(firstName(item.displayName))}</span>
+            ${item.partner ? `<span class="presence-pair" title="Тренується разом з ${escapeHtml(item.partner.displayName)}"><i data-lucide="users"></i>${escapeHtml(firstName(item.partner.displayName))}</span>` : ""}
             <span class="presence-clock${clock ? "" : " is-word"}"${clock ? ` data-presence-clock="${escapeHtml(item.workoutId)}"` : ""}>${escapeHtml(elapsed)}</span>
             ${partnerInviteButton(item)}
             <button class="presence-cheer${sent ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">${escapeHtml(sent || "💪")}</button>
