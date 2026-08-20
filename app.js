@@ -3018,9 +3018,15 @@ import {
     }
     // ===== end AI статистика ====================================================
 
-    function workoutEditor(workoutItem) {
+    function workoutEditor(workoutItem, options = {}) {
         const owner = userById(workoutItem.userId);
-        const readonly = !canManage(workoutItem);
+        // `forceReadonly` is not the same question as "may this person edit". An admin
+        // CAN manage anybody's workout, so opening someone else's session to watch it
+        // handed them the full editor — action bar, delete button, live weight inputs and
+        // the "tap the circle to finish" coach-mark — on a screen whose entire promise is
+        // that you are only looking. Watching must never be able to change anything,
+        // whoever is watching.
+        const readonly = options.forceReadonly === true || !canManage(workoutItem);
         // An admin can open ANY workout here, including a teammate's row that is still a
         // summary from the windowed payload. Everything below walks exercises/sets, so
         // bail out to a read-only stub rather than throwing on a screen the user reached
@@ -12000,9 +12006,18 @@ import {
         if (!watchState.workout) {
             return emptyInline("Завантажуємо", "Підтягуємо тренування.");
         }
+        const owner = userById(watchState.workout.userId);
+        const name = owner ? owner.displayName : "учасника";
+        // Said inside the scroller, not only in the header, because the header scrolls
+        // out of sight and the screen below it is pixel-for-pixel your own workout
+        // screen. Confusing the two is the failure mode worth spending a banner on.
+        const banner = `<div class="watch-banner">
+            <i data-lucide="eye"></i>
+            <span>Це тренування <strong>${escapeHtml(name)}</strong> · лише перегляд</span>
+        </div>`;
         // The workout screen's own renderer, in the read-only mode it already supports:
         // same cards, same set rows, same «Минулого разу» — just nothing to press.
-        return `<div class="workout-stack">${workoutEditor(watchState.workout)}</div>`;
+        return `${banner}<div class="workout-stack is-watched">${workoutEditor(watchState.workout, { forceReadonly: true })}</div>`;
     }
 
     // ---- Training together --------------------------------------------------------------
@@ -12105,70 +12120,23 @@ import {
                 </div>
             </section>`;
         }
+        // Deliberately just this: who you are with, and the two things you can do about
+        // it. Set counts, volume and an exercise list all live one tap away on the screen
+        // the first button opens, and repeating them here only pushed your OWN workout
+        // further down the phone.
+        const live = partnerState.workout;
         return `<section class="card span-12 partner-card is-live">
             <div class="partner-head">
                 ${avatar(person, "tiny")}
-                <div class="partner-title"><strong>Разом з ${name}</strong><p class="card-caption">Лише перегляд — редагувати чужі підходи не можна.</p></div>
+                <div class="partner-title"><strong>Разом з ${name}</strong></div>
+            </div>
+            <div class="partner-actions" id="partnerBody">
+                ${live
+                    ? `<button class="button button-primary compact" type="button" data-action="watch-workout" data-workout-id="${escapeHtml(live.id)}"><i data-lucide="eye"></i>Тренування ${name}</button>`
+                    : `<span class="card-caption partner-idle">${name} ще не відкрив сьогоднішнє тренування</span>`}
                 <button class="button button-secondary compact" type="button" data-action="partner-answer" data-id="${escapeHtml(link.id)}" data-decision="leave">Завершити</button>
             </div>
-            <div id="partnerBody">${partnerBodyMarkup()}</div>
         </section>`;
-    }
-
-    function partnerBodyMarkup() {
-        const workoutItem = partnerState.workout;
-        const person = partnerState.partnership?.partner || {};
-        if (!workoutItem) {
-            return `<p class="card-caption partner-idle">${escapeHtml(firstName(person.displayName))} ще не відкрив сьогоднішнє тренування.</p>`;
-        }
-        const next = nextUndoneSet(workoutItem);
-        const done = partnerSetsOf(workoutItem).filter((set) => set.isCompleted).length;
-        const total = partnerSetsOf(workoutItem).length;
-        return `<div class="partner-progress">
-            <span class="partner-count">${done}/${total} підходів</span>
-            <span class="partner-volume">${number(workoutVolume(workoutItem))} кг</span>
-            <button class="button button-primary compact partner-open" type="button" data-action="watch-workout" data-workout-id="${escapeHtml(workoutItem.id)}"><i data-lucide="eye"></i>Відкрити тренування</button>
-        </div>
-        ${next ? `<div class="partner-next">
-            <span class="partner-next-label">Зараз</span>
-            <strong>${escapeHtml(exerciseById(next.exerciseId)?.name || "Вправа")}</strong>
-            <span class="card-caption">Підхід ${next.index + 1} · ${number(next.set.weight)} кг × ${next.set.repetitions}</span>
-        </div>` : `<div class="partner-next partner-done"><i data-lucide="check-circle-2"></i><span>Усі підходи зроблені</span></div>`}
-        <div class="partner-exercises">${(workoutItem.exercises || []).map(partnerExerciseRow).join("")}</div>`;
-    }
-
-    function partnerExerciseRow(workoutExercise) {
-        const exercise = exerciseById(workoutExercise.exerciseId);
-        const sets = workoutExercise.sets || [];
-        const done = sets.filter((set) => set.isCompleted).length;
-        const dots = sets.map((set) => `<span class="pset ${set.isCompleted ? "is-done" : ""}"></span>`).join("");
-        return `<div class="partner-ex">
-            <span class="partner-ex-name">${escapeHtml(exercise?.name || "Вправа")}</span>
-            <span class="partner-ex-sets">${dots}</span>
-            <span class="partner-ex-count">${done}/${sets.length}</span>
-        </div>`;
-    }
-
-    /**
-     * The set the partner has not done yet — what "focus jumps to the next undone set"
-     * means when you are watching rather than lifting.
-     *
-     * The first incomplete set in order, which is the one they are on or about to be on.
-     */
-    function nextUndoneSet(workoutItem) {
-        for (const exercise of (workoutItem.exercises || [])) {
-            const sets = exercise.sets || [];
-            for (let index = 0; index < sets.length; index += 1) {
-                if (!sets[index].isCompleted) {
-                    return { exerciseId: exercise.exerciseId, set: sets[index], index };
-                }
-            }
-        }
-        return null;
-    }
-
-    function partnerSetsOf(workoutItem) {
-        return (workoutItem?.exercises || []).flatMap((exercise) => exercise.sets || []);
     }
 
     function renderPartnerPanel() {
@@ -12176,14 +12144,9 @@ import {
         if (!host) {
             return;
         }
-        const body = element("partnerBody");
-        // Targeted update while the panel is already up: rebuilding it on every set the
-        // partner ticks would blink their avatar once per set.
-        if (body && partnerState.partnership?.status === "active") {
-            body.innerHTML = partnerBodyMarkup();
-            iconsIn(body);
-            return;
-        }
+        // The panel no longer changes as the partner lifts — it only says who you are
+        // with — so there is nothing to update in place and nothing to blink.
+
         host.innerHTML = partnerPanelMarkup();
         iconsIn(host);
         syncWatchFab();

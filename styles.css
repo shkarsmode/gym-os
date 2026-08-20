@@ -10062,3 +10062,45 @@ html.compact-ui .chip {
     /* No mobile navigation bar to clear on a wide screen. */
     .watch-fab { bottom: 24px; }
 }
+
+/* Said inside the scroller, not only in the sheet's header: the header scrolls away and
+   what is left is pixel-for-pixel your own workout screen. Mistaking somebody else's
+   session for yours is the failure this banner exists to prevent. */
+.watch-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 9px 12px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-elevated));
+    border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+    font-size: 0.85rem;
+}
+
+.watch-banner svg { width: 15px; height: 15px; flex: 0 0 auto; color: var(--color-accent); }
+
+/* A second, always-visible signal: somebody else's session is inset and tinted, so even
+   a glance mid-scroll says "not mine". */
+.workout-stack.is-watched {
+    border-left: 3px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+    padding-left: 10px;
+}
+
+/* Who you are with, and the two things you can do about it. Nothing else - the numbers
+   live one tap away on the screen the first button opens. */
+.partner-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.partner-actions .button { flex: 1 1 auto; }
+
+@media (max-width: 920px) {
+    /* Beat the mobile rule that makes every button full-width, or these stack. */
+    .partner-actions .button { width: auto; }
+}
+
+.partner-actions .partner-idle { flex: 1 1 100%; margin: 0; }
