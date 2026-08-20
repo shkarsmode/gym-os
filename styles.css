@@ -1819,95 +1819,48 @@ body.is-impersonating .last-results {
 }
 
 @media (max-width: 560px) {
-    /* Two states on a phone.
-       AT REST (top of the page): the bar wraps, so the clock and all three buttons keep
-       their labels and nothing is clipped — four readable targets over two rows.
-       STUCK (as soon as you scroll): it collapses to a single row of icons. The labels
-       are what made «Завершити» run off the right edge, and once you are deep in the sets
-       you already know what the three buttons do — you need the row thin, not wordy. */
+    /* ONE layout, always. The bar is sticky, so a state that changed its height on scroll
+       shoved every pixel of the page up and down as you moved — which is what read as the
+       whole screen twitching. Nothing here reacts to scrolling any more.
+       «Завершити» used to be clipped because the buttons were forced to equal widths
+       (flex: 1 1 0) and the longest label lost. Sized to their content they all fit on one
+       row at 390px with room left for the clock. */
     .workout-actionbar {
-        flex-wrap: wrap;
-        justify-content: flex-start;
+        flex-wrap: nowrap;
         padding: 8px;
         gap: 8px;
     }
 
-    /* At rest the title shares the first row with the clock, so that row carries meaning
-       instead of a lone chip. Collapsed it goes away again — the title is redundant (it is
-       in the head card right below) and it was what made the bar overflow in one row. */
+    /* The title is right below in the head card; on a phone the row is worth more than
+       the repetition. */
     .workout-actionbar-info {
-        display: flex;
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .workout-actionbar.is-stuck .workout-actionbar-info {
         display: none;
-    }
-
-    .workout-actionbar-title {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
 
     .workout-actionbar > .gym-clock {
         flex: 0 0 auto;
+        margin-left: 0;
+        margin-right: auto;
     }
 
     .workout-actionbar-actions {
-        flex: 1 1 100%;
+        flex: 0 1 auto;
         min-width: 0;
         gap: 6px;
     }
 
     .workout-actionbar .button {
-        flex: 1 1 0;
+        flex: 0 1 auto;
         width: auto;
         min-width: 0;
-        padding-inline: 8px;
+        padding-inline: 10px;
         gap: 5px;
-        overflow: hidden;
     }
 
     .workout-actionbar .button span {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-    }
-
-    .workout-actionbar.is-stuck {
-        padding: 6px 8px;
-    }
-
-    .workout-actionbar.is-stuck .workout-actionbar-actions {
-        flex: 0 1 auto;
-        justify-content: flex-end;
-    }
-
-    .workout-actionbar.is-stuck .button span {
-        display: none;
-    }
-
-    .workout-actionbar.is-stuck .button {
-        flex: 0 0 auto;
-        padding-inline: 11px;
-    }
-
-    /* The clock keeps its digits — a stopwatch with no number is not a stopwatch. */
-    .workout-actionbar.is-stuck > .gym-clock {
-        margin-right: auto;
-    }
-
-    /* No clock yet (nothing ticked): nothing is competing for the row, so the buttons
-       take the full width instead of huddling on the right. */
-    .workout-actionbar:not(.has-clock).is-stuck .workout-actionbar-actions {
-        flex: 1 1 100%;
-        justify-content: stretch;
-    }
-
-    .workout-actionbar:not(.has-clock).is-stuck .button {
-        flex: 1 1 0;
     }
 }
 
@@ -1938,7 +1891,6 @@ body.is-impersonating .last-results {
 }
 
 .set-row {
-    position: relative;
     padding: 10px 11px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -1954,6 +1906,7 @@ body.is-impersonating .last-results {
 }
 
 .set-row-head {
+    position: relative; /* anchors the coach-mark that hangs under this line */
     display: flex;
     align-items: center;
     gap: 9px;
@@ -2008,14 +1961,16 @@ body.is-impersonating .last-results {
 
 /* ---- First-set coach-mark (teaches new users to tap "complete set") ---- */
 .setdone-hint {
-    /* Absolutely positioned, floating above the row and pinned to its right edge so the
-       caret points at the round complete-toggle.
-       It takes NO space in the flow on purpose: as a normal sibling it disappeared the
-       instant the first set was ticked, and everything below jumped up by its height. */
+    /* Hangs BELOW the row's head line, pinned right so the caret points up at the round
+       complete-toggle.
+       Two reasons it lives here and not above the row: above, it collided with the sticky
+       «Минулого разу» pill, which is opaque and sits at z-index 4 — the hint was drawn
+       underneath it. And it takes NO space in the flow, because as a normal sibling it
+       vanished the instant the first set was ticked and dragged everything below it up. */
     position: absolute;
     right: 0;
-    bottom: calc(100% + 2px);
-    z-index: 3;
+    top: calc(100% + 7px);
+    z-index: 6;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -2033,19 +1988,18 @@ body.is-impersonating .last-results {
     animation: gymHintIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-/* CSS-only caret (no lucide dependency), pinned to point DOWN at the toggle.
-   The toggle centre is ~59px from the hint's right edge: delete button (38) + gap (6) +
-   half the 38px toggle (19) = 63, less the row padding the hint now sits inside (11) —
-   it is positioned against the row's PADDING box since going absolute. */
+/* CSS-only caret (no lucide dependency), pointing UP at the toggle above it. The toggle
+   centre sits 63px from the head line's right edge: delete button (38) + gap (6) + half
+   the 38px toggle (19). */
 .setdone-hint-caret {
     position: absolute;
-    right: 59px;
-    bottom: -6px;
+    right: 63px;
+    top: -6px;
     width: 0;
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 6px solid var(--color-accent);
+    border-bottom: 6px solid var(--color-accent);
 }
 
 .setdone-hint-short { display: none; }

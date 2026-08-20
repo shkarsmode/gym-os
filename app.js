@@ -1979,7 +1979,6 @@ import {
         }
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
-        updateActionBarStuck();
         syncGymClockTicker();
 
         if (pendingExerciseScrollId) {
@@ -2874,7 +2873,7 @@ import {
         // `has-clock` lets the CSS know whether the buttons have to share the row. Without
         // it, a bar whose clock has not started yet kept the buttons pinned right, with
         // dead space where the chip would eventually appear.
-        const actionBar = readonly ? "" : `<div class="workout-actionbar${clockChip ? " has-clock" : ""}${actionBarStuck ? " is-stuck" : ""}">
+        const actionBar = readonly ? "" : `<div class="workout-actionbar${clockChip ? " has-clock" : ""}">
                 <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong></div>
                 ${clockChip}
                 <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
@@ -3058,8 +3057,8 @@ import {
         const hintChip = hintOn
             ? `<div class="setdone-hint" role="status"><span class="setdone-hint-full">Тисни кружечок праворуч, коли завершиш підхід</span><span class="setdone-hint-short">Тисни кружечок, коли завершиш</span><span class="setdone-hint-caret" aria-hidden="true"></span></div>`
             : "";
-        return `<div class="set-row ${set.isCompleted ? "completed" : ""}${hintOn ? " has-hint" : ""}">${hintChip}
-            <div class="set-row-head">
+        return `<div class="set-row ${set.isCompleted ? "completed" : ""}${hintOn ? " has-hint" : ""}">
+            <div class="set-row-head">${hintChip}
                 <span class="set-index">${index}</span>
                 <gym-select class="set-type-select" data-action="set-field" ${target} data-field="type" ${lock}>${["warmup", "working", "drop", "failure", "backoff"].map((type) => `<option value="${type}" ${set.type === type ? "selected" : ""}>${setTypeLabel(type)}</option>`).join("")}</gym-select>
                 <div class="set-row-actions">
@@ -3595,7 +3594,6 @@ import {
         document.addEventListener("input", handleInput);
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
-        window.addEventListener("scroll", updateActionBarStuck, { passive: true });
         // The event can fire before the app finishes booting, in which case index.html's
         // dispatch lands on nobody — index.html sets the flag too, so re-check here.
         if (window.__gymosUpdateReady) {
@@ -4810,35 +4808,6 @@ import {
         } else {
             window.location.hash = target;
         }
-    }
-
-    // Whether the action bar has reached its sticky position. A scroll listener rather
-    // than an IntersectionObserver: IO callbacks are delivered with the rendering steps
-    // and simply never arrive while the tab is backgrounded or throttled, which left the
-    // bar stuck in its tall two-row state. Comparing the bar's own top against the offset
-    // it sticks at is exact and costs one rect read per scroll event.
-    // Whether the action bar has reached its sticky position. Deliberately NO animation:
-    // renderSection rebuilds the bar on every set toggle, so an animated collapse replayed
-    // itself on every single tap — the bar grew a row, shrank again, and dragged the whole
-    // page with it. The state is a plain boolean that the markup applies at render time,
-    // so a re-render paints the bar in its correct shape immediately, with nothing moving.
-    let actionBarStuck = false;
-
-    function updateActionBarStuck() {
-        const bar = document.querySelector(".workout-actionbar");
-        if (!bar) {
-            actionBarStuck = false;
-            return;
-        }
-        // Measure against the bar's resting top when it is NOT stuck, so the reading does
-        // not depend on the class that is about to change.
-        const stuck = bar.getBoundingClientRect().top <= topbarHeight() - 5;
-        if (stuck === actionBarStuck && stuck === bar.classList.contains("is-stuck")) {
-            return;
-        }
-        actionBarStuck = stuck;
-        bar.classList.toggle("is-stuck", stuck);
-        updateTopbarOffset();
     }
 
     function topbarHeight() {
