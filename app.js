@@ -6662,6 +6662,7 @@ import {
             renderFeedList();
             return;
         }
+        let unchanged = false;
         if (append) {
             feedState.loadingMore = true;
         } else {
@@ -6671,7 +6672,12 @@ import {
         renderFeedList();
         try {
             const answer = await storage.apiClient.fetchFeed(scope, append ? feedState.cursor : null);
-            feedState.items = append ? [...feedState.items, ...(answer.items || [])] : (answer.items || []);
+            const incoming = answer.items || [];
+            // A refresh that returns the same page must not repaint: rebuilding the list
+            // recreates every avatar <img>, and a recreated image blinks even when the
+            // browser already holds the bytes.
+            unchanged = !append && feedSignature(incoming) === feedSignature(feedState.items);
+            feedState.items = append ? [...feedState.items, ...incoming] : incoming;
             feedState.cursor = answer.nextCursor || null;
             feedState.error = null;
         } catch (error) {
@@ -6683,8 +6689,26 @@ import {
             if (!append && !feedState.error) {
                 feedState.loadedAt = Date.now();
             }
-            renderFeedList();
+            if (!unchanged) {
+                renderFeedList();
+            }
         }
+    }
+
+    /**
+     * What the rendered feed actually depends on.
+     *
+     * Reaction counts and comment counts are in it because they are drawn on the card;
+     * anything else changing is invisible and must not cost a repaint.
+     */
+    function feedSignature(items) {
+        return (items || []).map((item) => [
+            item.type,
+            item.id,
+            item.reactions?.count || 0,
+            item.reactions?.mine ? 1 : 0,
+            item.comments?.count ?? item.commentCount ?? 0
+        ].join(":")).join("|");
     }
 
     function setFeedScope(scope) {
@@ -6732,7 +6756,11 @@ import {
         if (!host) {
             return;
         }
-        if (feedState.loading) {
+        // The skeleton is for a list that has nothing to show yet. Painting it over a
+        // list already on screen is what made every background refresh — and there is one
+        // now every time a teammate starts or finishes a session — flash the whole feed
+        // away and back.
+        if (feedState.loading && !feedState.items.length) {
             host.innerHTML = feedSkeleton(3);
             return;
         }
@@ -11615,9 +11643,17 @@ import {
         liveState.loading = true;
         try {
             const result = await storage.apiClient.fetchPresence();
-            liveState.presence = Array.isArray(result?.training) ? result.training : [];
+            const rows = Array.isArray(result?.training) ? result.training : [];
+            // Same reason the feed guards its repaint: rebuilding the strip recreates
+            // every avatar, and these refresh on a timer as well as on every team hint.
+            // The clock is excluded from the signature on purpose — it ticks in place.
+            const signature = (list) => list.map((item) => `${item.workoutId}:${item.state}`).join("|");
+            const moved = signature(rows) !== signature(liveState.presence);
+            liveState.presence = rows;
             liveState.loadedAt = Date.now();
-            renderPresenceStrip();
+            if (moved) {
+                renderPresenceStrip();
+            }
         } catch (error) {
             // Presence is decoration; a failure must never take a section down with it.
         } finally {
@@ -11937,24 +11973,39 @@ import {
      */
     async function refreshPeerWorkouts() {
         if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
-            return;
+            return false;
         }
         let result = null;
         try {
             result = await storage.apiClient.fetchPeerWorkouts();
         } catch (error) {
-            return;
+            return false;
         }
         const rows = Array.isArray(result?.workouts) ? result.workouts : [];
         if (!rows.length) {
-            return;
+            return false;
         }
         const me = state.database.currentUserId;
         const incoming = new Map(rows.map((row) => [row.id, row]));
+        // Did anything actually move? A hint fires for a session opening or closing, and
+        // most of the time the row the viewer already holds is identical — repainting on
+        // it is a flash of every avatar on screen in exchange for no change at all.
+        const held = new Map(state.database.workouts.filter((row) => row.userId !== me).map((row) => [row.id, row]));
+        const moved = rows.length !== held.size
+            || rows.some((row) => {
+                const previous = held.get(row.id);
+                return !previous
+                    || previous.status !== row.status
+                    || previous.updatedAt !== row.updatedAt
+                    || Boolean(previous.private) !== Boolean(row.private);
+            });
+        if (!moved) {
+            return false;
+        }
         // Keep every row of mine untouched, plus any peer row the window no longer covers.
         const kept = state.database.workouts.filter((row) => row.userId === me || !incoming.has(row.id));
         state.database.workouts = [...kept, ...rows.filter((row) => row.userId !== me)];
-        renderSection();
+        return true;
     }
 
     async function replayMissedCheers() {
@@ -12102,18 +12153,16 @@ import {
             for (const workoutId of (payload.ids || [])) {
                 applyRemoteWorkoutDeletion(workoutId);
             }
-            renderSection();
+            repaintSection();
             return;
         }
         if (frame.name === "team.changed") {
             // Somebody else's session opened, closed or appeared. A hint like everything
-            // else here: go and re-read the surfaces that show other people.
-            loadPresence(true);
-            refreshPeerWorkouts();
-            invalidateFeed();
-            if (state.section === "feed") {
-                loadFeed(feedState.scope, false);
-            }
+            // else here: go and re-read the surfaces that show other people — but
+            // COALESCED. Several of these arrive together (a save that closes another
+            // session announces both), and acting on each one separately repainted the
+            // screen once per event.
+            scheduleTeamRefresh();
             return;
         }
         if (frame.name === "cheer") {
@@ -12131,8 +12180,57 @@ import {
             }
         }
         if (changed) {
-            renderSection();
+            repaintSection();
         }
+    }
+
+    // Coalesce a burst of team hints into one refresh, and never repaint for a hint that
+    // turns out to change nothing on screen.
+    let teamRefreshTimer = null;
+
+    function scheduleTeamRefresh() {
+        clearTimeout(teamRefreshTimer);
+        teamRefreshTimer = setTimeout(runTeamRefresh, 400);
+    }
+
+    async function runTeamRefresh() {
+        teamRefreshTimer = null;
+        await loadPresence(true);
+        const moved = await refreshPeerWorkouts();
+        invalidateFeed();
+        if (state.section === "feed") {
+            loadFeed(feedState.scope, false);
+        } else if (moved && sectionShowsPeers()) {
+            repaintSection();
+        }
+    }
+
+    // Which screens actually render other people's sessions. Repainting anything else
+    // because a teammate finished a workout is pure flicker: nothing on it would change.
+    function sectionShowsPeers() {
+        return ["dashboard", "calendar", "rankings", "levels", "users", "user"].includes(state.section);
+    }
+
+    /**
+     * Repaint the current section without the avatar flash.
+     *
+     * renderSection() replaces the whole section's innerHTML, which recreates every
+     * <img> in it — and a recreated <img> repaints from scratch even when the browser
+     * has the bytes cached. That is visible as a blink on any screen full of faces,
+     * which is exactly the screens a team update touches. So a repaint driven by
+     * somebody ELSE's activity is deferred to an idle moment and skipped entirely while
+     * the user is interacting.
+     */
+    function repaintSection() {
+        if (document.visibilityState !== "visible") {
+            return;
+        }
+        // An open dialog owns the screen; rebuilding underneath it is both pointless and
+        // a good way to lose whatever is half-typed in it.
+        if (document.querySelector(".modal-layer, .drawer-layer")?.childElementCount) {
+            return;
+        }
+        renderSection();
     }
 
     function workoutSaverBusy(workoutId) {
