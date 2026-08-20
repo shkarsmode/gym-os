@@ -10016,7 +10016,10 @@ import {
         if (/(forearm|wrist|grip)/.test(text)) return "Передпліччя";
         if (/(quad|thigh|leg extension)/.test(text)) return "Квадрицепс";
         if (/(hamstring|leg curl)/.test(text)) return "Задня поверхня стегна";
-        if (/(glute|hip)/.test(text)) return "Сідниці";
+        // Adductors before glutes: "hip adductor" contains "hip", and the inner thigh is
+        // the more specific answer for it.
+        if (/(adductor|inner thigh|groin)/.test(text)) return "Внутрішня поверхня стегна";
+        if (/(abductor|glute|hip)/.test(text)) return "Сідниці";
         if (/(calf|gastrocnemius|soleus)/.test(text)) return "Литки";
         if (/(ab|oblique|waist|core)/.test(text)) return "Прес";
         if (/neck/.test(text)) return "Шия";
