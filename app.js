@@ -10,6 +10,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
+import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
 // See lib/scoring.js for the two order/timezone hazards documented at the top.
@@ -37,7 +38,7 @@ import {
     ].map(([id, title, description, exerciseNames]) => ({ id, title, description, exerciseNames, type: id }));
 
     const state = {
-        section: "dashboard",
+        section: "feed",
         profileUserId: null,
         editingWorkoutId: null,
         // Cursor into the caller's own history under the windowed payload; null once
@@ -1650,7 +1651,7 @@ import {
     function renderMobileNavigation() {
         const container = element("mobileNavigation");
         const activeWorkout = activeWorkoutFor(currentUser().id);
-        const order = ["dashboard", "calendar", "workout", "feed", "profile"];
+        const order = ["feed", "calendar", "workout", "dashboard", "profile"];
         const mobileLabels = { workout: "Тренування" };
         container.innerHTML = order.map((id) => {
             const item = sectionItems.find((section) => section.id === id);
@@ -1879,7 +1880,7 @@ import {
     function renderSection() {
         destroyCharts();
         if ((state.section === "admin" || state.section === "moderation" || state.section === "aistats") && !isAdmin()) {
-            state.section = "dashboard";
+            state.section = DEFAULT_SECTION;
         }
         renderShell();
         // Detail routes ("post", "user") are reachable but are not nav entries, so they
@@ -1913,6 +1914,7 @@ import {
         }
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
+        syncGymClockTicker();
 
         if (pendingExerciseScrollId) {
             const targetId = pendingExerciseScrollId;
@@ -2803,7 +2805,7 @@ import {
             ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutItem.status).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
             : isOtherThanActive ? `<div class="readonly-layer info">У вас є активне тренування. <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Відкрити активне</button></div>` : "";
         const actionBar = readonly ? "" : `<div class="workout-actionbar">
-                <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong></div>
+                <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong>${gymClockChip(workoutItem)}</div>
                 <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
             </div>`;
         return `
@@ -4605,6 +4607,10 @@ import {
 
     const routableSections = new Set([...sectionItems.map((item) => item.id), "user", "post"]);
 
+    // Where the app lands with no route in the hash. Стрічка, so opening GymOS shows
+    // what the team has been doing rather than a screen you have to leave to find it.
+    const DEFAULT_SECTION = "feed";
+
     function parseRoute() {
         const raw = String(window.location.hash || "").replace(/^#\/?/, "");
         const [section, ...rest] = raw.split("/");
@@ -4612,7 +4618,7 @@ import {
         if (section && routableSections.has(section)) {
             return { section, param: params[0] || null, params };
         }
-        return { section: "dashboard", param: null, params: [] };
+        return { section: DEFAULT_SECTION, param: null, params: [] };
     }
 
     function handleRoute() {
@@ -5729,6 +5735,7 @@ import {
         }
         const completing = !set.isCompleted;
         set.isCompleted = completing;
+        touchGymClock(editWorkout());
         if (completing && editWorkout()?.status === "active" && getPref("autoStartRest") === "1") {
             startTimer(set.restSeconds || 90);
         }
@@ -5747,6 +5754,7 @@ import {
                 });
                 if (choice === "all") {
                     earlierPending.forEach((item) => { item.isCompleted = true; });
+                    touchGymClock(editWorkout());
                 }
             }
         }
@@ -5825,6 +5833,14 @@ import {
         workoutItem.exercises.forEach((exercise) => {
             (exercise.sets || []).forEach((set) => { set.isCompleted = true; });
         });
+        if (!workoutItem.firstSetAt) {
+            touchGymClock(workoutItem);
+        }
+        // The clock knows how long this actually took; offer it as the duration rather
+        // than writing it silently. It is a suggestion because the timer can be wrong in
+        // exactly the way the user described — a session left open overnight, or finished
+        // the next morning — so the athlete gets the last word.
+        await offerClockDuration(workoutItem);
         workoutItem.status = "completed";
         workoutItem.finishedAt = new Date().toISOString();
         workoutItem.updatedAt = new Date().toISOString();
@@ -5834,6 +5850,32 @@ import {
         renderSection();
         toast("Тренування завершено", "Статистику та рекорди перераховано.");
         checkAchievementUnlocks();
+    }
+
+    // Rounded to something a person would say out loud (see suggestedDurationMinutes).
+    // Skipped when there is no clock, when the span is implausible, and when the workout
+    // already carries exactly this duration — a dialog that changes nothing is noise.
+    async function offerClockDuration(workoutItem) {
+        const clock = gymClockState(workoutItem);
+        if (!clock || clock.overflow) {
+            return;
+        }
+        const suggestion = suggestedDurationMinutes(clock.ms);
+        if (!suggestion || Number(workoutItem.durationOverride) === suggestion) {
+            return;
+        }
+        const label = formatDurationLabel(suggestion);
+        const choice = await choiceDialog(`Секундомір показав ${formatClock(clock.ms)} — від першого підходу до останнього. Записати тривалість як ${label}?`, {
+            title: "Тривалість тренування",
+            closable: true,
+            choices: [
+                { label: `Так, ${label}`, value: "apply", variant: "primary" },
+                { label: "Не змінювати", value: "skip" }
+            ]
+        });
+        if (choice === "apply") {
+            workoutItem.durationOverride = suggestion;
+        }
     }
 
     async function saveCardio(workoutId, cardioId = null) {
@@ -8667,6 +8709,7 @@ import {
         node.classList.add("visible");
         iconsIn(node);
         updateFocusTimer();
+        syncGymClockTicker();
     }
 
     function focusMarkup(context) {
@@ -8678,6 +8721,7 @@ import {
                 <div class="focus-topbar-text">
                     <span class="focus-eyebrow">Фокус-режим</span>
                     <strong>Вправа ${index + 1} з ${list.length}</strong>
+                    ${gymClockChip(context.workout)}
                 </div>
                 <button class="focus-timer-chip${chipVisible ? " visible" : ""}${state.timer.overtime ? " overtime" : ""}" type="button" data-action="focus-show-rest" id="focusTimerChip" title="Відкрити таймер відпочинку">
                     <i data-lucide="timer"></i><span id="focusTimerChipValue">${timerDisplayValue()}</span>
@@ -8849,6 +8893,7 @@ import {
             return;
         }
         context.set.isCompleted = true;
+        touchGymClock(context.workout);
         startTimer(context.set.restSeconds || Number(getPref("defaultRest")) || 90);
         const next = context.exercise.sets.find((item) => !item.isCompleted);
         state.focus.setId = next ? next.id : context.set.id;
@@ -8868,6 +8913,7 @@ import {
             return;
         }
         context.set.isCompleted = false;
+        touchGymClock(context.workout);
         context.workout.updatedAt = new Date().toISOString();
         schedulePersistWorkout(context.workout);
         renderFocus();
@@ -10584,6 +10630,8 @@ import {
             // undefined (not null) when unset → JSON.stringify drops the key, so an
             // older backend that hasn't deployed this field yet won't 400 on it.
             durationOverride: (workoutItem.durationOverride === undefined || workoutItem.durationOverride === null || workoutItem.durationOverride === "") ? undefined : Math.round(Number(workoutItem.durationOverride)),
+            firstSetAt: workoutItem.firstSetAt || undefined,
+            lastSetAt: workoutItem.lastSetAt || undefined,
             exercises: (workoutItem.exercises || []).map((exercise, index) => ({
                 exerciseId: exercise.exerciseId,
                 order: exercise.order || index + 1,
@@ -10867,6 +10915,61 @@ import {
     // Thin wrappers kept so existing call sites stay unchanged. Saves are now
     // optimistic + coalesced (fire-and-forget) — the UI updates instantly and the
     // serializer guarantees one in-flight save with the latest state.
+    // ---- Gym clock --------------------------------------------------------
+    // Pure logic lives in lib/gym-clock.js (and is tested there); this file only wires
+    // it to the workout state and to the DOM.
+
+    function touchGymClock(workoutItem) {
+        if (!workoutItem) {
+            return;
+        }
+        Object.assign(workoutItem, nextGymClockMarks(workoutItem));
+    }
+
+    function gymClockChip(workoutItem) {
+        const clock = gymClockState(workoutItem);
+        if (!clock) {
+            return "";
+        }
+        if (clock.overflow) {
+            // Too long to be a plausible single session — show the anchor instead of a
+            // runaway number, so a forgotten session reads as "started at 18:30".
+            return `<span class="gym-clock stale" title="Сесія триває надто довго, щоб показувати секундомір"><i data-lucide="clock"></i><span>з ${clock.startLabel}</span></span>`;
+        }
+        return `<span class="gym-clock ${clock.live ? "live" : "done"}" data-gym-clock="1" title="${clock.live ? "У залі з " + clock.startLabel : "Від першого до останнього підходу"}"><i data-lucide="${clock.live ? "timer" : "check"}"></i><span data-gym-clock-value="1">${formatClock(clock.ms)}</span></span>`;
+    }
+
+    // One interval for the whole app: re-rendering the section every second would fight
+    // every input the user is typing into.
+    let gymClockTimer = null;
+
+    function syncGymClockTicker() {
+        const nodes = [...document.querySelectorAll("[data-gym-clock]")];
+        const needsTick = nodes.some((node) => node.classList.contains("live"));
+        if (!needsTick) {
+            clearInterval(gymClockTimer);
+            gymClockTimer = null;
+            return;
+        }
+        if (gymClockTimer) {
+            return;
+        }
+        gymClockTimer = setInterval(() => {
+            const workoutItem = editWorkout() || activeWorkoutFor(currentUser().id);
+            const clock = gymClockState(workoutItem);
+            const live = [...document.querySelectorAll("[data-gym-clock].live [data-gym-clock-value]")];
+            if (!clock || !clock.live || !live.length) {
+                clearInterval(gymClockTimer);
+                gymClockTimer = null;
+                if (live.length) {
+                    renderSection();
+                }
+                return;
+            }
+            live.forEach((node) => { node.textContent = formatClock(clock.ms); });
+        }, 1000);
+    }
+
     function persistWorkout(workoutItem) {
         requestWorkoutSave(workoutItem, 0);
         return Promise.resolve();

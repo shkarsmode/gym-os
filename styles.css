@@ -9042,3 +9042,56 @@ html.compact-ui .chip {
     .report-card .button { width: auto; flex: 1 1 auto; }
     .push-row input { width: 22px; height: 22px; }
 }
+
+/* Gym clock: how long the current session has actually been running, anchored on the
+   first completed set. Deliberately quiet — it sits beside the workout title and must
+   never compete with the rest timer, which is the number you act on. */
+.gym-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: 9px;
+    padding: 3px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.gym-clock i {
+    width: 13px;
+    height: 13px;
+}
+
+.gym-clock.live {
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+}
+
+.gym-clock.done {
+    color: var(--color-text-soft);
+}
+
+.gym-clock.stale {
+    font-weight: 500;
+}
+
+/* In focus mode the topbar text column is narrow, so the chip drops onto its own line. */
+.focus-topbar-text .gym-clock {
+    margin: 4px 0 0;
+}
+
+@media (max-width: 720px) {
+    /* The action bar already wraps to two rows on a narrow phone; keep the clock tight
+       so it does not force a third. */
+    .workout-actionbar-info .gym-clock {
+        margin-left: 7px;
+        padding: 2px 7px;
+        font-size: 0.72rem;
+    }
+}
