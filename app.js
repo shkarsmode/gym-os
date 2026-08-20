@@ -11941,34 +11941,40 @@ import {
         return layer;
     }
 
-    function cheerWatermarkKey() {
-        return `gymos-cheers-seen-${state.database.currentUserId || "anon"}`;
+    function cheerSeenKey() {
+        return `gymos-cheers-shown-${state.database.currentUserId || "anon"}`;
     }
 
+    // How far back a cheer is still worth showing on opening the app. Long enough to
+    // cover a session and the trip home; short enough that a device signing in for the
+    // first time does not replay months of history at once.
+    const CHEER_REPLAY_WINDOW_MS = 12 * 60 * 60 * 1000;
+    const CHEER_SEEN_CAP = 200;
+
     /**
-     * When cheers were last played on this device.
+     * Which cheers this device has already animated.
      *
-     * Seeded to "now" the first time rather than to zero: a new device would otherwise
-     * open to every cheer its owner has ever received, all at once.
+     * IDS, not a timestamp. The timestamp version had a fatal flaw for the exact case
+     * this exists to serve: it was seeded to "now" on first read, so everything that
+     * arrived while the app was closed was immediately older than the watermark and
+     * silently discarded — which is to say, the feature worked only for cheers you were
+     * already looking at.
      */
-    function cheerWatermark() {
+    function cheerSeenIds() {
         try {
-            const raw = localStorage.getItem(cheerWatermarkKey());
-            if (raw) {
-                return Number(raw) || 0;
-            }
-            localStorage.setItem(cheerWatermarkKey(), String(Date.now()));
-            return Date.now();
+            const raw = JSON.parse(localStorage.getItem(cheerSeenKey()) || "[]");
+            return new Set(Array.isArray(raw) ? raw : []);
         } catch (error) {
-            return Date.now();
+            return new Set();
         }
     }
 
-    function setCheerWatermark(value) {
+    function rememberCheerIds(ids) {
         try {
-            localStorage.setItem(cheerWatermarkKey(), String(value));
+            const kept = [...cheerSeenIds(), ...ids].slice(-CHEER_SEEN_CAP);
+            localStorage.setItem(cheerSeenKey(), JSON.stringify(kept));
         } catch (error) {
-            // Private mode / full storage: the worst case is replaying a cheer twice.
+            // Private mode / full storage: the worst case is showing a cheer twice.
         }
     }
 
@@ -12043,17 +12049,24 @@ import {
             storage.apiClient.fetchCheers(item.id).catch(() => null)
         ));
         const result = { cheers: results.filter(Boolean).flatMap((item) => item.cheers || []) };
-        // The watermark lives in storage, not in memory. The server keeps every cheer a
-        // session ever received, so an in-memory set meant a full reload replayed the lot
-        // — a shower of week-old encouragement every time the app was opened.
-        const since = cheerWatermark();
-        const fresh = (result.cheers || [])
-            .filter((cheer) => !liveState.seenCheers.has(cheer.id))
-            .filter((cheer) => !since || new Date(cheer.at).getTime() > since);
-        for (const cheer of (result.cheers || [])) {
+        // Survives a reload, because the server keeps every cheer a session ever received
+        // and an in-memory set would replay the lot on every open.
+        const seen = cheerSeenIds();
+        const cutoff = Date.now() - CHEER_REPLAY_WINDOW_MS;
+        const all = result.cheers || [];
+        const fresh = all.filter((cheer) => {
+            if (seen.has(cheer.id) || liveState.seenCheers.has(cheer.id)) {
+                return false;
+            }
+            const at = new Date(cheer.at).getTime();
+            return Number.isFinite(at) && at >= cutoff;
+        });
+        // Everything looked at is remembered, including what was too old to show, so a
+        // stale cheer is not reconsidered on every single open.
+        for (const cheer of all) {
             liveState.seenCheers.add(cheer.id);
         }
-        setCheerWatermark(Date.now());
+        rememberCheerIds(all.map((cheer) => cheer.id));
         if (!fresh.length) {
             return;
         }
@@ -12359,6 +12372,18 @@ import {
     window.addEventListener("pagehide", () => {
         flushPendingWorkoutSaves();
         stopLiveStream();
+    });
+
+    // iOS restores a backgrounded PWA from the back/forward cache without always firing
+    // visibilitychange, so a phone reopened from the app switcher could come back with a
+    // dead stream and nothing collected. pageshow fires in both cases.
+    window.addEventListener("pageshow", (event) => {
+        if (!event.persisted) {
+            return;
+        }
+        startLiveStream();
+        loadPresence(true);
+        replayMissedCheers();
     });
 })();
 
