@@ -11638,7 +11638,6 @@ import {
                 <h3>Зараз тренуються</h3>
             </div>
             <div class="presence-row">${others.map(presenceItemMarkup).join("")}</div>
-            ${cheerPickerMarkup(others)}
         </section>`;
     }
 
@@ -11675,12 +11674,8 @@ import {
      * out. A popover anchored to an avatar would simply be cut off, worst of all on the
      * last person in the row.
      */
-    function cheerPickerMarkup(others) {
-        const target = others.find((item) => item.workoutId === liveState.pickerFor);
-        if (!target) {
-            return "";
-        }
-        return `<div class="cheer-picker">
+    function cheerPickerMarkup(target) {
+        return `<div class="cheer-picker" data-workout-id="${escapeHtml(target.workoutId)}">
             <span class="cheer-picker-label">Надіслати ${escapeHtml(firstName(target.displayName))}:</span>
             <div class="cheer-picker-row">${CHEER_CHOICES.map((emoji) => `<button class="cheer-choice" type="button" data-action="cheer-pick" data-workout-id="${escapeHtml(target.workoutId)}" data-emoji="${escapeHtml(emoji)}" aria-label="Надіслати ${escapeHtml(emoji)}">${escapeHtml(emoji)}</button>`).join("")}</div>
         </div>`;
@@ -11698,6 +11693,33 @@ import {
         host.innerHTML = presenceStripMarkup();
         iconsIn(host);
         syncPresenceClocks();
+        syncCheerPicker();
+    }
+
+    /**
+     * Add, move or remove the emoji panel without ever rebuilding one that is already
+     * open on the right person.
+     *
+     * The panel used to be part of the strip's markup, so every repaint of the strip
+     * destroyed and recreated it — replaying its entrance animation and, worse, deleting
+     * the button under the user's finger mid-tap. Presence repaints for reasons that have
+     * nothing to do with the panel (a refresh every minute, somebody starting a session),
+     * which is why this is a targeted update rather than part of the render.
+     */
+    function syncCheerPicker() {
+        const card = element("presenceStrip")?.querySelector(".presence-card");
+        const existing = card?.querySelector(".cheer-picker");
+        const target = presenceOthers().find((item) => item.workoutId === liveState.pickerFor);
+        if (!target || !card) {
+            existing?.remove();
+            return;
+        }
+        if (existing && existing.dataset.workoutId === target.workoutId) {
+            // Already showing for this person — leave the live node completely alone.
+            return;
+        }
+        existing?.remove();
+        card.insertAdjacentHTML("beforeend", cheerPickerMarkup(target));
     }
 
     // The presence clocks tick without redrawing the strip: a full repaint every second
@@ -11745,14 +11767,14 @@ import {
         // Stays open long enough to send several — the picker closing under your finger
         // after one tap is what makes a single emoji feel like the only option.
         liveState.pickerTimer = setTimeout(closeCheerPicker, 12000);
-        renderPresenceStrip();
+        syncCheerPicker();
     }
 
     function closeCheerPicker() {
         clearTimeout(liveState.pickerTimer);
         liveState.pickerTimer = null;
         liveState.pickerFor = null;
-        renderPresenceStrip();
+        syncCheerPicker();
     }
 
     async function sendCheer(workoutId, emoji) {
@@ -11772,7 +11794,6 @@ import {
             await storage.apiClient.sendCheer({ workoutId, emoji: chosen });
         } catch (error) {
             liveState.sentEmoji.delete(workoutId);
-            renderPresenceStrip();
             toast("Не вдалося підбадьорити", friendlyError(error), "error");
         }
     }
