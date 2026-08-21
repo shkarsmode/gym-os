@@ -5488,9 +5488,10 @@ ul {
 
 /* ==== Settings ======================================================================
    One row shape for the whole screen: a name (with an optional line of explanation) on
-   the left, its control on the right. It replaced eight cards of five different shapes,
-   three of which existed to hold a single button. Grouped rows are what settings look
-   like everywhere else for a reason — they can be scanned down one column of names. */
+   the left, a control on the right that takes only the width it needs. The first pass
+   at this stretched every control to the full row, which turned five accent choices into
+   two wrapped lines and made each row ~110px tall — a settings page you scroll for a
+   minute. Nothing here is full-width. */
 .settings-page { align-items: start; }
 
 .settings-group {
@@ -5502,47 +5503,71 @@ ul {
     overflow: hidden;
 }
 
-.settings-group-head { padding: 15px 16px 11px; }
-.settings-group-head h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-muted); }
-.settings-group-head .card-caption { margin-top: 5px; }
+.settings-group-head { padding: 13px 14px 9px; }
 
+.settings-group-head h2 {
+    margin: 0;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-faint);
+}
+
+.settings-group-head .card-caption { margin-top: 4px; }
 .settings-list { display: flex; flex-direction: column; }
 
 .settings-row {
     display: flex;
     align-items: center;
     gap: 14px;
-    min-height: 54px;
-    padding: 11px 16px;
+    min-height: 48px;
+    padding: 9px 14px;
     border-top: 1px solid var(--color-border);
 }
 
 .settings-row-text { flex: 1 1 auto; min-width: 0; }
-.settings-row-text strong { display: block; font-size: 14px; font-weight: 500; }
-.settings-row-text span { display: block; margin-top: 3px; color: var(--color-muted); font-size: 12px; line-height: 1.45; }
-.settings-row-control { flex: 0 0 auto; display: flex; justify-content: flex-end; min-width: 0; }
-.settings-row-control gym-select { min-width: 158px; }
+.settings-row-text strong { display: block; font-size: 14px; font-weight: 500; line-height: 1.3; }
+.settings-row-text span { display: block; margin-top: 2px; color: var(--color-faint); font-size: 11.5px; line-height: 1.4; }
+.settings-row-control { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; }
 .settings-value { color: var(--color-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-
-/* Anything too wide to sit beside its label — the five accent swatches, and every
-   control on a narrow phone — drops onto its own line instead of squeezing the name. */
-.settings-row.is-stacked { flex-direction: column; align-items: stretch; gap: 10px; }
-.settings-row.is-stacked .settings-row-control { justify-content: stretch; }
-.settings-row.is-stacked .segmented { width: 100%; }
-
 .settings-row.is-danger .settings-row-text strong { color: var(--color-danger); }
-.settings-group-extra { padding: 0 16px 14px; }
+.settings-group-extra { padding: 0 14px 12px; }
 .settings-group-extra:empty { display: none; }
 
-/* A real switch for the notification categories: a bare checkbox in a settings list is
-   the one control people misread as "not a control". */
+/* Tighter than the segmented control used elsewhere: three options plus a label have to
+   share 375px, and the default 14px side padding does not leave room. */
+.settings-seg { padding: 2px; gap: 2px; }
+.settings-seg .segment-button { min-height: 28px; padding: 0 10px; font-size: 12.5px; }
+
+/* Colour is chosen by looking at colours, not by reading the word "Amber". */
+.settings-swatches { display: flex; gap: 7px; }
+
+.settings-swatch {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    background: var(--swatch);
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+    transition: transform 0.14s ease, border-color 0.14s ease;
+}
+
+.settings-swatch:hover { transform: scale(1.1); }
+.settings-swatch.active { border-color: var(--color-text); }
+.settings-swatch:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* A real switch: a bare checkbox in a settings list is the one control people read as
+   not-a-control. */
 .settings-switch { position: relative; display: inline-flex; flex: 0 0 auto; cursor: pointer; }
 .settings-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 
 .settings-switch span {
     display: block;
-    width: 44px;
-    height: 26px;
+    width: 42px;
+    height: 25px;
     border-radius: var(--radius-pill);
     background: var(--color-elevated);
     box-shadow: inset 0 0 0 1px var(--color-border-strong);
@@ -5554,34 +5579,29 @@ ul {
     position: absolute;
     top: 4px;
     left: 4px;
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
     border-radius: 50%;
     background: var(--color-muted);
     transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), background 0.18s ease;
 }
 
 .settings-switch input:checked + span { background: color-mix(in srgb, var(--color-accent) 30%, transparent); box-shadow: inset 0 0 0 1px var(--color-accent-border); }
-.settings-switch input:checked + span::after { transform: translateX(18px); background: var(--color-accent); }
+.settings-switch input:checked + span::after { transform: translateX(17px); background: var(--color-accent); }
 .settings-switch input:focus-visible + span { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .settings-switch input:disabled + span { opacity: 0.45; cursor: not-allowed; }
 
-@media (max-width: 720px) {
-    /* Deliberately NOT stacking everything. A select or a button sits perfectly well
-       beside its label at 375px, and stacking them made every row ~100px tall and the
-       page twice as long — the opposite of what a settings screen is for. Only controls
-       that genuinely need the width drop to their own line. */
-    .settings-row { gap: 10px; padding: 10px 14px; }
-    .settings-row-text strong { font-size: 13.5px; }
-    .settings-row-control gym-select { min-width: 132px; }
-}
+.settings-row-control gym-select { min-width: 132px; }
 
-@media (max-width: 560px) {
-    /* A segmented control is the one that cannot share: three or five options beside a
-       label leaves each of them a few pixels. */
-    .settings-row:has(.segmented) { flex-direction: column; align-items: stretch; gap: 9px; }
-    .settings-row:has(.segmented) .settings-row-control { justify-content: stretch; }
-    .settings-row .segmented { width: 100%; }
+@media (max-width: 340px) {
+    /* Only on the very narrowest phones. At 375px the three theme options and their
+       label fit side by side with room to spare, and stacking them there cost 35px of
+       height for nothing. */
+    .settings-row:has(.settings-seg) { flex-direction: column; align-items: stretch; gap: 8px; }
+    .settings-row:has(.settings-seg) .settings-row-control { justify-content: stretch; }
+    .settings-row:has(.settings-seg) .settings-seg { width: 100%; }
+    .settings-row:has(.settings-seg) .segment-button { flex: 1 1 0; }
+    .settings-row-control gym-select { min-width: 118px; }
 }
 
 /* ==== Supersets ======================================================================

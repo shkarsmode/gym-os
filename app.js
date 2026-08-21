@@ -3739,6 +3739,32 @@ import {
         </div>`;
     }
 
+    /** A boolean preference: one switch, not two buttons the width of the row. */
+    const ACCENT_CHOICES = [
+        ["mint", "Mint", "#34d399"],
+        ["blue", "Blue", "#3b82f6"],
+        ["purple", "Purple", "#a78bfa"],
+        ["amber", "Amber", "#f59e0b"],
+        ["red", "Red", "#f43f5e"]
+    ];
+
+    function settingsSwitch(pref, label) {
+        const on = getPref(pref) === "1";
+        return `<label class="settings-switch"><input type="checkbox" data-action="set-pref-switch" data-pref="${pref}" ${on ? "checked" : ""} aria-label="${escapeHtml(label)}"><span></span></label>`;
+    }
+
+    /**
+     * Colour is picked by looking at colours.
+     *
+     * The accent used to be five named text pills, which is both wider than any phone row
+     * and the wrong control entirely — nobody chooses "Amber" by reading the word.
+     */
+    function settingsSwatches(pref, options) {
+        const current = getPref(pref);
+        return `<div class="settings-swatches" role="radiogroup" aria-label="Акцент">${options.map(([value, label, color]) =>
+            `<button class="settings-swatch${current === value ? " active" : ""}" type="button" role="radio" aria-checked="${current === value}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-action="set-pref" data-pref="${pref}" data-value="${value}" style="--swatch:${color};"></button>`).join("")}</div>`;
+    }
+
     function settingsGroup(title, rows, options = {}) {
         return `<section class="settings-group${options.wide ? " span-12" : " span-6"}">
             <header class="settings-group-head"><h2>${escapeHtml(title)}</h2>${options.caption ? `<p class="card-caption">${escapeHtml(options.caption)}</p>` : ""}</header>
@@ -3750,18 +3776,15 @@ import {
     function settings() {
         const seg = (pref, value, label, extra = "") => `<button class="segment-button ${getPref(pref) === value ? "active" : ""}" type="button" data-action="set-pref" data-pref="${pref}" data-value="${value}">${extra}${escapeHtml(label)}</button>`;
         const themeButtons = [["system", "System"], ["dark", "Dark"], ["blackout", "Blackout"]].map(([value, label]) => seg("theme", value, label)).join("");
-        const accentButtons = [["mint", "Mint", "#34d399"], ["blue", "Blue", "#3b82f6"], ["purple", "Purple", "#a78bfa"], ["amber", "Amber", "#f59e0b"], ["red", "Red", "#f43f5e"]].map(([value, label, color]) => seg("accent", value, label, `<span class="pref-dot" style="background:${color};"></span>`)).join("");
-        const compactButtons = [["0", "Стандартні"], ["1", "Компактні"]].map(([value, label]) => seg("compactCards", value, label)).join("");
-        const autoStartButtons = [["1", "Увімк."], ["0", "Вимк."]].map(([value, label]) => seg("autoStartRest", value, label)).join("");
-        const supersetButtons = [["1", "Так"], ["0", "Ні"]].map(([value, label]) => seg("useSupersets", value, label)).join("");
+
         const restOptions = [45, 60, 75, 90, 120, 150, 180].map((rest) => `<option value="${rest}" ${getPref("defaultRest") === String(rest) ? "selected" : ""}>${rest} сек</option>`).join("");
         const workoutTypeOptions = Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultWorkoutType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
         const setTypeOptions = Object.entries(setTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultSetType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
         const durationDefaultOptions = `<option value="auto" ${getPref("defaultDuration") === "auto" ? "selected" : ""}>Авто (за часом)</option>` + [15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${getPref("defaultDuration") === String(min) ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("");
         const appearanceGroup = settingsGroup("Вигляд", [
-            settingsRow("Тема", `<div class="segmented pref-seg">${themeButtons}</div>`),
-            settingsRow("Акцент", `<div class="segmented pref-seg">${accentButtons}</div>`, { stacked: true }),
-            settingsRow("Щільність карток", `<div class="segmented pref-seg">${compactButtons}</div>`, { hint: "Компактні вміщують більше" })
+            settingsRow("Тема", `<div class="segmented settings-seg">${themeButtons}</div>`),
+            settingsRow("Акцент", settingsSwatches("accent", ACCENT_CHOICES)),
+            settingsRow("Компактні картки", settingsSwitch("compactCards", "Компактні картки"), { hint: "Вміщують більше на екран" })
         ]);
 
         const workoutGroup = settingsGroup("Тренування за замовчуванням", [
@@ -3769,8 +3792,8 @@ import {
             settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
             settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
             settingsRow("Тривалість", `<gym-select data-action="set-pref-select" data-pref="defaultDuration">${durationDefaultOptions}</gym-select>`),
-            settingsRow("Авто-старт таймера", `<div class="segmented pref-seg">${autoStartButtons}</div>`, { hint: "Щойно позначив підхід" }),
-            settingsRow("Використовую суперсети", `<div class="segmented pref-seg">${supersetButtons}</div>`, { hint: "Обʼєднувати 2–3 вправи в раунди" })
+            settingsRow("Авто-старт таймера", settingsSwitch("autoStartRest", "Авто-старт таймера відпочинку"), { hint: "Щойно позначив підхід" }),
+            settingsRow("Суперсети", settingsSwitch("useSupersets", "Використовую суперсети"), { hint: "Обʼєднувати 2–3 вправи в раунди" })
         ]);
 
         // The three one-button cards were a card each for a single line. As rows they are
@@ -4931,6 +4954,19 @@ import {
 
             if (actionElement.dataset.action === "set-pref-select") {
                 setPref(actionElement.dataset.pref, actionElement.value);
+            }
+
+            // A boolean preference is a switch, not a two-button segmented control taking
+            // the full width of a row. Repaints the section because some prefs change the
+            // shell (density, accent).
+            if (actionElement.dataset.action === "set-privacy-switch") {
+                await setPrivacy(actionElement.checked);
+            }
+
+            if (actionElement.dataset.action === "set-pref-switch") {
+                setPref(actionElement.dataset.pref, actionElement.checked ? "1" : "0");
+                applyPreferences();
+                renderSection();
             }
 
             if (actionElement.dataset.action === "picker-filter-select") {
@@ -8096,7 +8132,7 @@ import {
         const master = settingsRow("Пуш-сповіщення", `<button class="button ${enabled ? "button-secondary" : "button-primary"} compact" type="button" data-action="${enabled ? "disable-push" : "enable-push"}"><i data-lucide="${enabled ? "bell-off" : "bell"}"></i>${enabled ? "Вимкнути" : "Увімкнути"}</button>`, {
             hint: enabled ? "Приходять, навіть коли застосунок закритий" : "Увімкни, щоб керувати категоріями"
         });
-        return settingsGroup("Сповіщення", [master, ...(enabled ? rows : [])], { wide: true });
+        return settingsGroup("Сповіщення", [master, ...(enabled ? rows : [])]);
     }
 
     // ---- Achievement bridge ----------------------------------------------
@@ -13888,17 +13924,14 @@ import {
             return "";
         }
         const hide = Boolean(accessState.hideWorkoutDetails);
-        const buttons = [["0", "Відкрито"], ["1", "Приховано"]].map(([value, label]) => `
-            <button class="segment-button ${(value === "1") === hide ? "active" : ""}" type="button" data-action="set-privacy" data-value="${value}">${label}</button>
-        `).join("");
         const pending = (accessState.incoming || []).length;
         const subscribers = (accessState.subscribers || []).length;
         const extras = `${pending ? `<div class="access-alert"><i data-lucide="user-plus"></i><span>${pending} ${pending === 1 ? "запит очікує" : "запити очікують"} на відповідь</span></div>` : ""}`
             + `${(accessState.incoming || []).map(accessRequestRow).join("")}`
             + `${subscribers ? `<h3 class="access-subhead">Мають доступ (${subscribers})</h3>${(accessState.subscribers || []).map(subscriberRow).join("")}` : ""}`;
         return settingsGroup("Приватність тренувань", [
-            settingsRow("Деталі тренувань", `<div class="segmented pref-seg">${buttons}</div>`, {
-                hint: "Коли приховано — видно профіль, рівень і сам факт тренування, але не вправи, підходи, ваги, нотатки й рекорди"
+            settingsRow("Приховати деталі", `<label class="settings-switch"><input type="checkbox" data-action="set-privacy-switch" ${hide ? "checked" : ""} aria-label="Приховати деталі тренувань"><span></span></label>`, {
+                hint: "Видно профіль, рівень і сам факт тренування — але не вправи, підходи, ваги, нотатки й рекорди"
             })
         ], { footer: extras ? `<div class="settings-group-extra">${extras}</div>` : "" });
     }
