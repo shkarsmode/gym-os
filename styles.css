@@ -6878,6 +6878,126 @@ ul {
     background: transparent;
 }
 
+/* ---- Month / year views -------------------------------------------------------------
+   The title zooms out: days → months → years. Without it the only way to a birth year is
+   the chevron, and 1998 is 336 taps from the current month — which is exactly how a
+   birthday field ends up holding 2025. */
+.gcal-title-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.gcal-title-btn:hover {
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-2);
+}
+
+.gcal-title-btn svg {
+    width: 14px;
+    height: 14px;
+    color: var(--color-muted);
+}
+
+/* Three across and four down — the same footprint as six week-rows, so switching views
+   does not resize the panel and move it out from under the finger. */
+.gcal-picks {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.gcal-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.gcal-cell:hover {
+    border-color: var(--color-accent-border);
+}
+
+.gcal-cell.is-selected {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #08090a;
+    font-weight: 700;
+}
+
+.gcal-cell.is-focus {
+    border-color: var(--color-accent);
+}
+
+.gcal-cell[disabled] {
+    opacity: 0.28;
+    cursor: not-allowed;
+}
+
+.gcal-cell[disabled]:hover {
+    border-color: transparent;
+}
+
+/* Touch: the panel is now the only implementation on every device, so a day has to be
+   hittable with a thumb rather than a mouse pointer. */
+@media (pointer: coarse) {
+    .gdate-panel {
+        width: 340px;
+        padding: 16px;
+    }
+
+    .gcal-day {
+        font-size: 15px;
+        min-height: 40px;
+    }
+
+    .gcal-nav {
+        width: 38px;
+        height: 38px;
+    }
+
+    .gcal-cell {
+        min-height: 48px;
+        font-size: 14px;
+    }
+
+    .gcal-body {
+        min-height: 292px;
+    }
+}
+
+/* One box for all three views. Days need six rows, months and years four — without a
+   floor the panel resized on every zoom, and a panel that is anchored above its field
+   resizes from the bottom, i.e. it moves under the finger that opened it. */
+.gcal-body {
+    min-height: 258px;
+}
+
+.gcal-picks {
+    height: 100%;
+    align-content: stretch;
+    grid-auto-rows: 1fr;
+}
+
 .gcal-foot {
     margin-top: 12px;
     display: flex;

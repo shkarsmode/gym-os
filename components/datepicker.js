@@ -2,9 +2,13 @@
 // calendar (portaled to <body> so it never clips); on touch devices it defers to
 // the native OS date picker (best mobile UX). Like <gym-select> it carries data-*
 // attributes, exposes .value (ISO yyyy-mm-dd) and fires a bubbling "change".
-import { escapeHtml, refreshIcons, isCoarsePointer, revealOnNextFrame, registerOpenPanel, unregisterOpenPanel } from "./util.js";
+import { escapeHtml, refreshIcons, revealOnNextFrame, registerOpenPanel, unregisterOpenPanel } from "./util.js";
 
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+const MONTHS_SHORT = ["Січ", "Лют", "Бер", "Кві", "Тра", "Чер", "Лип", "Сер", "Вер", "Жов", "Лис", "Гру"];
+// A page of years, three across. Twelve is the same grid as the months view, so
+// switching between them does not resize the panel.
+const YEARS_PER_PAGE = 12;
 const MONTHS = [
     "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
     "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"
@@ -128,15 +132,11 @@ class GymDate extends HTMLElement {
     }
 
     toggle() {
-        if (isCoarsePointer()) {
-            try {
-                this.input.showPicker();
-            } catch (_) {
-                this.input.focus();
-                this.input.click();
-            }
-            return;
-        }
+        // ONE implementation on every device. It used to hand touch screens to
+        // input.showPicker(), and on a real phone that returned nothing at all — the
+        // field stayed on «Оберіть дату» after picking a date, with no error to explain
+        // it. A path that cannot be reproduced or tested here is not one to keep for the
+        // devices most people use; the panel below is sized for a thumb instead.
         if (this.panel) {
             this.close();
         } else {
@@ -147,10 +147,15 @@ class GymDate extends HTMLElement {
     open() {
         this.classList.add("is-open");
         this.setAttribute("aria-expanded", "true");
-        const base = parseISO(this._value) || new Date();
+        // With no value, start where the field is ALLOWED to be rather than at today.
+        // A birthday field capped at "ten years ago" opened on the current year, and
+        // reaching 1998 from there is 336 taps on a chevron — which is how somebody ends
+        // up entering 2025 as their year of birth.
+        const base = parseISO(this._value) || parseISO(this.input.max) || new Date();
         this.viewYear = base.getFullYear();
         this.viewMonth = base.getMonth();
-        this.activeIso = this._value || toISO(new Date());
+        this.view = "days";
+        this.activeIso = this._value || toISO(base);
 
         const panel = document.createElement("div");
         panel.className = "gdate-panel";
@@ -167,7 +172,30 @@ class GymDate extends HTMLElement {
             const nav = event.target.closest("[data-nav]");
             if (nav) {
                 event.preventDefault();
-                this.shiftMonth(Number(nav.dataset.nav));
+                this.shiftView(Number(nav.dataset.nav));
+                return;
+            }
+            if (event.target.closest("[data-zoom]")) {
+                event.preventDefault();
+                // Days → months → years, the way every OS picker does it.
+                this.view = this.view === "days" ? "months" : "years";
+                this.renderCalendar();
+                return;
+            }
+            const pickYear = event.target.closest("[data-year]");
+            if (pickYear && !pickYear.disabled) {
+                event.preventDefault();
+                this.viewYear = Number(pickYear.dataset.year);
+                this.view = "months";
+                this.renderCalendar();
+                return;
+            }
+            const pickMonth = event.target.closest("[data-month]");
+            if (pickMonth && !pickMonth.disabled) {
+                event.preventDefault();
+                this.viewMonth = Number(pickMonth.dataset.month);
+                this.view = "days";
+                this.renderCalendar();
                 return;
             }
             if (event.target.closest("[data-today]")) {
@@ -206,12 +234,28 @@ class GymDate extends HTMLElement {
             return;
         }
         switch (event.key) {
+            case "ArrowLeft":
+            case "ArrowRight":
+            case "ArrowUp":
+            case "ArrowDown":
+                if (this.view !== "days") {
+                    event.preventDefault();
+                    this.view = "days";
+                    this.renderCalendar();
+                    return;
+                }
+                break;
+            default:
+                break;
+        }
+        switch (event.key) {
             case "ArrowLeft": event.preventDefault(); this.moveActive(-1); break;
             case "ArrowRight": event.preventDefault(); this.moveActive(1); break;
             case "ArrowUp": event.preventDefault(); this.moveActive(-7); break;
             case "ArrowDown": event.preventDefault(); this.moveActive(7); break;
-            case "PageUp": event.preventDefault(); this.shiftMonth(-1); break;
-            case "PageDown": event.preventDefault(); this.shiftMonth(1); break;
+            // Pages whatever is on screen, matching what the chevrons do.
+            case "PageUp": event.preventDefault(); this.shiftView(-1); break;
+            case "PageDown": event.preventDefault(); this.shiftView(1); break;
             case "Enter":
             case " ":
                 event.preventDefault();
@@ -241,8 +285,11 @@ class GymDate extends HTMLElement {
         if (cursor.getFullYear() !== this.viewYear || cursor.getMonth() !== this.viewMonth) {
             this.viewYear = cursor.getFullYear();
             this.viewMonth = cursor.getMonth();
+            // Rendered but NOT repositioned: the panel is anchored once, on open. Six
+            // week-rows are always six rows now, but re-running position() on every
+            // arrow key would still walk the panel around whenever its height changed
+            // for any other reason.
             this.renderCalendar();
-            this.position();
         } else {
             this.markActive();
         }
@@ -269,17 +316,61 @@ class GymDate extends HTMLElement {
             this.viewYear += 1;
         }
         this.renderCalendar();
-        this.position();
+    }
+
+    /** The chevrons mean "previous page of whatever is on screen". */
+    shiftView(delta) {
+        if (this.view === "days") {
+            this.shiftMonth(delta);
+            return;
+        }
+        this.viewYear += this.view === "years" ? delta * YEARS_PER_PAGE : delta;
+        this.renderCalendar();
+    }
+
+    /** The 12-year block `viewYear` falls in, so paging is stable rather than relative. */
+    yearPageStart() {
+        // Anchored to a fixed grid of decades rather than to the current year, so paging
+        // back and forth always lands on the same pages instead of drifting.
+        return Math.floor(this.viewYear / YEARS_PER_PAGE) * YEARS_PER_PAGE;
     }
 
     renderCalendar() {
+        const body = this.view === "years" ? this.yearsMarkup()
+            : this.view === "months" ? this.monthsMarkup()
+            : this.daysMarkup();
+        const title = this.view === "years"
+            ? `${this.yearPageStart()} — ${this.yearPageStart() + YEARS_PER_PAGE - 1}`
+            : this.view === "months" ? String(this.viewYear)
+            : `${MONTHS[this.viewMonth]} ${this.viewYear}`;
+        // The title is a BUTTON in every view except the last one you can zoom out to.
+        // Reaching 1998 by chevron from the current year is 336 taps, which is how a
+        // birthday field ends up holding 2025.
+        const titleMarkup = this.view === "years"
+            ? `<div class="gcal-title">${title}</div>`
+            : `<button type="button" class="gcal-title gcal-title-btn" data-zoom aria-label="Обрати ${this.view === "days" ? "місяць" : "рік"}"><span>${title}</span><i data-lucide="chevron-down"></i></button>`;
+        this.panel.innerHTML =
+            `<div class="gcal-head">` +
+                `<button type="button" class="gcal-nav" data-nav="-1" aria-label="Назад"><i data-lucide="chevron-left"></i></button>` +
+                titleMarkup +
+                `<button type="button" class="gcal-nav" data-nav="1" aria-label="Вперед"><i data-lucide="chevron-right"></i></button>` +
+            `</div><div class="gcal-body">${body}</div>` +
+            // Offering "today" on a birthday field capped at ten years ago is offering a
+            // button that refuses to work.
+            (this.isDisabledISO(toISO(new Date()))
+                ? ""
+                : `<div class="gcal-foot"><button type="button" class="gcal-today-btn" data-today>Сьогодні</button></div>`);
+        refreshIcons();
+    }
+
+    daysMarkup() {
         const year = this.viewYear;
         const month = this.viewMonth;
         const startDow = (new Date(year, month, 1).getDay() + 6) % 7; // Monday-first
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const today = toISO(new Date());
         let cells = "";
-        for (let i = 0; i < startDow; i += 1) {
+        for (let index = 0; index < startDow; index += 1) {
             cells += `<span class="gcal-day is-empty"></span>`;
         }
         for (let day = 1; day <= daysInMonth; day += 1) {
@@ -293,16 +384,39 @@ class GymDate extends HTMLElement {
             ].filter(Boolean).join(" ");
             cells += `<button type="button" class="gcal-day ${classes}" data-iso="${iso}"${disabled ? " disabled" : ""}>${day}</button>`;
         }
-        this.panel.innerHTML =
-            `<div class="gcal-head">` +
-                `<button type="button" class="gcal-nav" data-nav="-1" aria-label="Попередній місяць"><i data-lucide="chevron-left"></i></button>` +
-                `<div class="gcal-title">${MONTHS[month]} ${year}</div>` +
-                `<button type="button" class="gcal-nav" data-nav="1" aria-label="Наступний місяць"><i data-lucide="chevron-right"></i></button>` +
-            `</div>` +
-            `<div class="gcal-grid gcal-weekdays">${WEEKDAYS.map((day) => `<span class="gcal-wd">${day}</span>`).join("")}</div>` +
-            `<div class="gcal-grid gcal-days">${cells}</div>` +
-            `<div class="gcal-foot"><button type="button" class="gcal-today-btn" data-today>Сьогодні</button></div>`;
-        refreshIcons();
+        // Always six rows. A 5-row month and a 6-row month are 40 px apart, and the panel
+        // is positioned from its own height — so every chevron tap moved the whole
+        // calendar under the finger that tapped it.
+        const filled = startDow + daysInMonth;
+        for (let index = filled; index < 42; index += 1) {
+            cells += `<span class="gcal-day is-empty"></span>`;
+        }
+        return `<div class="gcal-grid gcal-weekdays">${WEEKDAYS.map((day) => `<span class="gcal-wd">${day}</span>`).join("")}</div>`
+            + `<div class="gcal-grid gcal-days">${cells}</div>`;
+    }
+
+    monthsMarkup() {
+        const cells = MONTHS_SHORT.map((label, index) => {
+            // A month is out of range only when EVERY day in it is.
+            const first = toISO(new Date(this.viewYear, index, 1));
+            const last = toISO(new Date(this.viewYear, index + 1, 0));
+            const disabled = this.isDisabledISO(first) && this.isDisabledISO(last);
+            const current = index === this.viewMonth ? " is-selected" : "";
+            return `<button type="button" class="gcal-cell${current}" data-month="${index}"${disabled ? " disabled" : ""}>${label}</button>`;
+        }).join("");
+        return `<div class="gcal-grid gcal-picks">${cells}</div>`;
+    }
+
+    yearsMarkup() {
+        const start = this.yearPageStart();
+        const selected = parseISO(this._value)?.getFullYear();
+        let cells = "";
+        for (let year = start; year < start + YEARS_PER_PAGE; year += 1) {
+            const disabled = this.isDisabledISO(`${year}-12-31`) && this.isDisabledISO(`${year}-01-01`);
+            const current = year === selected ? " is-selected" : year === this.viewYear ? " is-focus" : "";
+            cells += `<button type="button" class="gcal-cell${current}" data-year="${year}"${disabled ? " disabled" : ""}>${year}</button>`;
+        }
+        return `<div class="gcal-grid gcal-picks">${cells}</div>`;
     }
 
     position() {
@@ -312,11 +426,14 @@ class GymDate extends HTMLElement {
         const panelHeight = panel.offsetHeight;
         const panelWidth = panel.offsetWidth;
         const below = window.innerHeight - rect.bottom;
-        if (below < panelHeight + 12 && rect.top > below) {
-            panel.style.top = `${Math.round(rect.top - panelHeight - 6)}px`;
-        } else {
-            panel.style.top = `${Math.round(rect.bottom + 6)}px`;
-        }
+        let top = below < panelHeight + 12 && rect.top > below
+            ? rect.top - panelHeight - 6
+            : rect.bottom + 6;
+        // Clamp to the viewport. Flipping above a field that sits high on the screen —
+        // which is where it sits inside a centred dialog — put the whole calendar at a
+        // negative offset, off the top of the window, with no way to scroll to it.
+        top = Math.max(margin, Math.min(top, window.innerHeight - panelHeight - margin));
+        panel.style.top = `${Math.round(top)}px`;
         const left = Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin));
         panel.style.left = `${Math.round(left)}px`;
     }

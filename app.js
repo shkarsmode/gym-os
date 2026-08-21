@@ -11,7 +11,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
 import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
-import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, stepBlocker } from "./lib/onboarding.js";
+import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
@@ -13226,9 +13226,12 @@ import {
         }
 
         if (step === "birth") {
+            // Bounds go to the picker as well as to the validator, so an impossible year
+            // is greyed out rather than accepted and then rejected.
+            const bounds = birthDateBounds();
             const age = validBirthDate(draft.birthDate) ? ageFromBirthDate(draft.birthDate) : null;
             return `${onboardingHead("cake", "Коли твій день народження?", "Вік впливає на силові нормативи й на те, скільки часу треба на відновлення.")}
-                <gym-date class="ob-date" id="onboardingBirth" value="${escapeHtml(draft.birthDate)}" data-action="onboarding-field" data-ob-field="birthDate"></gym-date>
+                <gym-date class="ob-date" id="onboardingBirth" value="${escapeHtml(draft.birthDate)}" min="${bounds.min}" max="${bounds.max}" data-action="onboarding-field" data-ob-field="birthDate"></gym-date>
                 ${age === null ? "" : `<p class="ob-hint"><i data-lucide="sparkles"></i>${age} ${pluralUk(age, "рік", "роки", "років")}</p>`}${error}`;
         }
 
