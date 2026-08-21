@@ -2224,7 +2224,7 @@ import {
 
     function workout() {
         const workoutItem = editWorkout();
-        content(`<div class="workout-stack"><div id="presenceStrip"></div><div id="partnerPanel"></div>${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
+        content(`<div class="workout-stack"><div id="partnerPanel"></div>${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
         // Painted from whatever is already held, then refreshed in the background, so
         // switching to this screen never flashes an empty panel.
         renderPartnerPanel();
@@ -2232,8 +2232,8 @@ import {
         // The strip lived only on the dashboard and the feed. Its absence here IS the
         // missing entry point: this is the screen you are on while training, and it is
         // where seeing that somebody else is lifting right now actually matters.
-        // renderPresenceStrip decides for itself whether the strip belongs here.
-        renderPresenceStrip();
+        // Presence still loads — the partner panel and the peek button read from it — it
+        // simply has no strip to draw on this screen.
         loadPresence();
     }
 
@@ -12306,8 +12306,6 @@ import {
         host.innerHTML = partnerPanelMarkup();
         iconsIn(host);
         syncWatchFab();
-        // Joining or leaving flips whether the strip belongs on this screen.
-        renderPresenceStrip();
     }
 
     /**
@@ -12722,13 +12720,13 @@ import {
         if (!host) {
             return;
         }
-        // On the workout screen the partner panel already says who you are with, so the
-        // strip is noise there and pushes your own session down the phone. Decided HERE
-        // rather than only where the screen is built: presence refreshes on a timer and
-        // on every team hint, and those repaints were filling the strip back in after the
-        // screen had deliberately left it out — which is why it appeared on joining and
-        // vanished again on reload.
-        if (state.section === "workout" && partnerState.partnership) {
+        // Never on the workout screen. That screen is YOUR session plus, if you are in
+        // one, the partner panel — a list of everybody else in the gym belongs on the
+        // feed and the dashboard, and here it just pushed the workout down the phone.
+        // Decided HERE rather than only where the screen is built: presence refreshes on
+        // a timer and on every team hint, and those repaints were filling the strip back
+        // in after the screen had deliberately left it out.
+        if (state.section === "workout") {
             host.innerHTML = "";
             return;
         }
