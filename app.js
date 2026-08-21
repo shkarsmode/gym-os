@@ -2232,12 +2232,9 @@ import {
         // The strip lived only on the dashboard and the feed. Its absence here IS the
         // missing entry point: this is the screen you are on while training, and it is
         // where seeing that somebody else is lifting right now actually matters.
-        // Only when there is no partner panel: with one, the strip repeats what the
-        // panel already says and pushes the actual workout further down the screen.
-        if (!partnerState.partnership) {
-            renderPresenceStrip();
-            loadPresence();
-        }
+        // renderPresenceStrip decides for itself whether the strip belongs here.
+        renderPresenceStrip();
+        loadPresence();
     }
 
     function workoutStarter() {
@@ -12309,6 +12306,8 @@ import {
         host.innerHTML = partnerPanelMarkup();
         iconsIn(host);
         syncWatchFab();
+        // Joining or leaving flips whether the strip belongs on this screen.
+        renderPresenceStrip();
     }
 
     /**
@@ -12721,6 +12720,16 @@ import {
     function renderPresenceStrip() {
         const host = element("presenceStrip");
         if (!host) {
+            return;
+        }
+        // On the workout screen the partner panel already says who you are with, so the
+        // strip is noise there and pushes your own session down the phone. Decided HERE
+        // rather than only where the screen is built: presence refreshes on a timer and
+        // on every team hint, and those repaints were filling the strip back in after the
+        // screen had deliberately left it out — which is why it appeared on joining and
+        // vanished again on reload.
+        if (state.section === "workout" && partnerState.partnership) {
+            host.innerHTML = "";
             return;
         }
         host.innerHTML = presenceStripMarkup();
