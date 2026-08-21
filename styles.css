@@ -6722,14 +6722,13 @@ ul {
     opacity: 0;
     -webkit-appearance: none;
     appearance: none;
+    /* NEVER interactive, on any device. This input exists only to hold the value and
+       the min/max bounds. It used to be given `pointer-events: auto` under
+       (pointer: coarse) so touch screens got the OS picker instead — and when the JS
+       half of that was removed, this half stayed: the invisible input still lay over
+       the whole field, swallowed the tap, opened the native dialog, and the custom
+       panel behind it flashed once and vanished as the system dialog took focus. */
     pointer-events: none;
-}
-
-@media (pointer: coarse) {
-    .gdate-native {
-        pointer-events: auto;
-        z-index: 2;
-    }
 }
 
 .gdate-icon {
