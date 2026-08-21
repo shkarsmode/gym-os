@@ -13,7 +13,7 @@ import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRep
 import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
 import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
-import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
+import { gymClockState, nextGymClockMarks, formatClock, formatDurationLabel } from "./lib/gym-clock.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
@@ -6729,33 +6729,20 @@ import {
                 }
             });
         });
-        // NOTHING is mutated until the athlete has confirmed. The sweep used to run
-        // first, so closing the duration dialog with the X left every set marked done
-        // AND finished the session anyway — an X that performed the action it looked
-        // like it was cancelling.
-        //
-        // Never invent a START, though: a session closed from the calendar days later was
-        // never timed, and a fabricated anchor would show a meaningless 0:00 clock.
-        const prospectiveLastSetAt = pendingSets.length && workoutItem.firstSetAt
-            ? new Date().toISOString()
-            : workoutItem.lastSetAt;
-        // The clock knows how long this actually took; offer it as the duration rather
-        // than writing it silently. It is a suggestion because the timer can be wrong in
-        // exactly the way the user described — a session left open overnight, or finished
-        // the next morning — so the athlete gets the last word.
-        const clockAnswer = await offerClockDuration({ ...workoutItem, lastSetAt: prospectiveLastSetAt });
-        if (clockAnswer.cancelled) {
-            return;
-        }
         pendingSets.forEach((set) => {
             set.isCompleted = true;
         });
+        // The sweep completes whatever is left — those sets are being done RIGHT NOW, so
+        // the clock's end moves with them. Never invent a START, though: a session closed
+        // from the calendar days later was never timed, and a fabricated anchor would show
+        // a meaningless 0:00 clock.
         if (pendingSets.length && workoutItem.firstSetAt) {
-            workoutItem.lastSetAt = prospectiveLastSetAt;
+            workoutItem.lastSetAt = new Date().toISOString();
         }
-        if (clockAnswer.durationMinutes !== null) {
-            workoutItem.durationOverride = clockAnswer.durationMinutes;
-        }
+        // Finishing asks nothing. The clock is there to be looked at, not to negotiate
+        // with: duration is set deliberately, from the «Тривалість» picker in the editor,
+        // and a dialog in the way of the finish button was one more thing to dismiss
+        // while standing in a gym.
         workoutItem.status = "completed";
         workoutItem.finishedAt = new Date().toISOString();
         workoutItem.updatedAt = new Date().toISOString();
@@ -6768,40 +6755,6 @@ import {
     }
 
     // Rounded to something a person would say out loud (see suggestedDurationMinutes).
-    // Skipped when there is no clock, when the span is implausible, and when the workout
-    // already carries exactly this duration — a dialog that changes nothing is noise.
-    /**
-     * @returns {{cancelled: boolean, durationMinutes: number|null}}
-     *
-     * `cancelled` means the athlete backed out of FINISHING, not just out of changing the
-     * duration — the X and the backdrop are the only ways to say "I did not mean to press
-     * this", and there is nowhere else in the flow to say it.
-     */
-    async function offerClockDuration(workoutItem) {
-        const clock = gymClockState(workoutItem);
-        if (!clock || clock.overflow) {
-            return { cancelled: false, durationMinutes: null };
-        }
-        const suggestion = suggestedDurationMinutes(clock.ms);
-        if (!suggestion || Number(workoutItem.durationOverride) === suggestion) {
-            return { cancelled: false, durationMinutes: null };
-        }
-        const label = formatDurationLabel(suggestion);
-        const choice = await choiceDialog(`Секундомір показав ${formatClock(clock.ms)} — від першого підходу до останнього. Записати тривалість як ${label}?`, {
-            title: "Тривалість тренування",
-            closable: true,
-            choices: [
-                { label: `Так, ${label}`, value: "apply", variant: "primary" },
-                { label: "Не змінювати", value: "skip" }
-            ]
-        });
-        // null is the X or the backdrop; "skip" is the explicit «Не змінювати».
-        if (choice === null || choice === undefined) {
-            return { cancelled: true, durationMinutes: null };
-        }
-        return { cancelled: false, durationMinutes: choice === "apply" ? suggestion : null };
-    }
-
     async function saveCardio(workoutId, cardioId = null) {
         const workoutItem = ownWorkout(workoutId);
         if (!workoutItem) {
@@ -7480,6 +7433,61 @@ import {
         return post.title || "Тренування";
     }
 
+    /**
+     * Who posted this, with the same framed avatar the rest of the app uses.
+     *
+     * The post screen was the one place a person appeared without their face — just a
+     * name in a caption under the headline — which made the busiest screen in the app
+     * the least recognisable.
+     */
+    function postAuthorBlock(post) {
+        const author = post.author || {};
+        const local = author.id ? userById(author.id) : null;
+        const person = local || {
+            id: author.id,
+            displayName: author.displayName,
+            avatarInitials: initialsOf(author.displayName),
+            avatarColor: "#2f3a44",
+            avatarUrl: author.avatarUrl
+        };
+        const when = post.date ? formatDate(post.date) : timeAgo(post.createdAt);
+        const meta = [when, post.workoutType ? workoutTypeLabel(post.workoutType) : ""].filter(Boolean).join(" · ");
+        return `<div class="post-author">
+            ${local ? framedAvatar(person, "small") : avatar(person, "small")}
+            <div class="post-author-text">
+                <button class="post-author-name" type="button" data-action="open-user" data-user-id="${escapeHtml(author.id || "")}">${escapeHtml(author.displayName || "Учасник")}</button>
+                <span class="post-author-meta">${escapeHtml(meta)}</span>
+            </div>
+        </div>`;
+    }
+
+    function postStatTile(icon, value, label) {
+        return `<span class="post-stat"><i data-lucide="${icon}"></i><strong>${value}</strong><em>${escapeHtml(label)}</em></span>`;
+    }
+
+    /**
+     * One exercise line, with the catalogue thumbnail.
+     *
+     * Matched by id when the payload carries one and by name otherwise, so a post
+     * rendered from an older response still finds its picture.
+     */
+    function postExerciseRow(entry) {
+        const known = entry.exerciseId
+            ? state.database.exercises.find((item) => item.id === entry.exerciseId)
+            : null;
+        const exercise = known || exerciseByName(entry.name);
+        const detail = `${entry.sets} ${pluralUk(entry.sets, "підхід", "підходи", "підходів")}`
+            + `${entry.topWeightKg ? ` · до ${number(entry.topWeightKg)} кг` : ""}`;
+        return `<div class="post-ex">
+            ${exerciseThumb(exercise)}
+            <div class="post-ex-text">
+                <span class="post-ex-name">${escapeHtml(entry.name)}</span>
+                ${entry.muscleGroup ? `<span class="post-ex-muscle">${escapeHtml(entry.muscleGroup)}</span>` : ""}
+            </div>
+            <span class="post-ex-sets">${detail}</span>
+        </div>`;
+    }
+
     function renderPostView() {
         const host = element("postView");
         if (!host) {
@@ -7501,19 +7509,20 @@ import {
         const liked = post.reactions && post.reactions.mine;
         const roots = threadComments(post.comments || []);
         host.innerHTML = `
-            <section class="card post-head">
+            <section class="card post-head post-${post.type}">
                 <div class="post-head-row">
                     <button class="icon-button" type="button" data-action="navigate" data-section="feed" aria-label="Назад"><i data-lucide="chevron-left"></i></button>
-                    <div class="post-title"><h2>${escapeHtml(postHeadline(post))}</h2><p class="card-caption">${escapeHtml(post.author?.displayName || "")} · ${post.date ? formatDate(post.date) : timeAgo(post.createdAt)}${post.workoutType ? ` · ${workoutTypeLabel(post.workoutType)}` : ""}</p></div>
+                    ${postAuthorBlock(post)}
                     <button class="icon-button" type="button" title="Поскаржитись" data-action="open-report" data-type="${post.type}" data-id="${post.id}"><i data-lucide="more-vertical"></i></button>
                 </div>
+                <h2 class="post-headline">${escapeHtml(postHeadline(post))}</h2>
                 ${post.type === "workout" ? `<div class="post-stats">
-                    <span><strong>${number(post.volumeKg)}</strong><em>кг</em></span>
-                    <span><strong>${post.setCount}</strong><em>підходів</em></span>
-                    <span><strong>${post.exerciseCount}</strong><em>вправ</em></span>
-                    ${post.durationMinutes ? `<span><strong>${post.durationMinutes}</strong><em>хв</em></span>` : ""}
+                    ${postStatTile("boxes", number(post.volumeKg), "кг")}
+                    ${postStatTile("list-checks", post.setCount, pluralUk(post.setCount, "підхід", "підходи", "підходів"))}
+                    ${postStatTile("dumbbell", post.exerciseCount, pluralUk(post.exerciseCount, "вправа", "вправи", "вправ"))}
+                    ${post.durationMinutes ? postStatTile("timer", post.durationMinutes, "хв") : ""}
                 </div>
-                <div class="post-exercises">${(post.exercises || []).map((exercise) => `<div class="post-ex"><span>${escapeHtml(exercise.name)}</span><span class="post-ex-sets">${exercise.sets} ${pluralUk(exercise.sets, "підхід", "підходи", "підходів")}${exercise.topWeightKg ? ` · до ${number(exercise.topWeightKg)} кг` : ""}</span></div>`).join("")}</div>` : ""}
+                <div class="post-exercises">${(post.exercises || []).map(postExerciseRow).join("")}</div>` : ""}
                 ${post.type === "record" ? `<div class="feed-body feed-record-body"><span class="feed-record-ico"><i data-lucide="flame"></i></span><div><strong>${escapeHtml(post.exercise || "Вправа")}</strong><p class="card-caption">${number(post.weightKg)} кг${post.repetitions ? ` × ${post.repetitions}` : ""}${post.estimatedOneRepMax ? ` · 1ПМ ${number(post.estimatedOneRepMax)} кг` : ""}</p></div></div>` : ""}
                 ${post.type === "achievement" ? `<div class="feed-body feed-ach-body"><span class="feed-ach-ico"><i data-lucide="award"></i></span><div><strong>${escapeHtml(post.title || "Досягнення")}</strong><p class="card-caption">${escapeHtml(post.description || "")}</p></div></div>` : ""}
                 <div class="post-react-row">
