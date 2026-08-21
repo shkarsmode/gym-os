@@ -7451,11 +7451,14 @@ import {
             avatarUrl: author.avatarUrl
         };
         const when = post.date ? formatDate(post.date) : timeAgo(post.createdAt);
-        const meta = [when, post.workoutType ? workoutTypeLabel(post.workoutType) : ""].filter(Boolean).join(" · ");
+        // A plain avatar, not the framed one. The level frame carries an aura and its own
+        // wrapper sized for a profile header; dropped into a compact row it fights the
+        // layout instead of decorating it.
+        const meta = [author.displayName || "Учасник", when, post.workoutType ? workoutTypeLabel(post.workoutType) : ""].filter(Boolean).join(" · ");
         return `<div class="post-author">
-            ${local ? framedAvatar(person, "small") : avatar(person, "small")}
+            ${avatar(person, "tiny")}
             <div class="post-author-text">
-                <button class="post-author-name" type="button" data-action="open-user" data-user-id="${escapeHtml(author.id || "")}">${escapeHtml(author.displayName || "Учасник")}</button>
+                <h2 class="post-title-line">${escapeHtml(postHeadline(post))}</h2>
                 <span class="post-author-meta">${escapeHtml(meta)}</span>
             </div>
         </div>`;
@@ -7515,7 +7518,6 @@ import {
                     ${postAuthorBlock(post)}
                     <button class="icon-button" type="button" title="Поскаржитись" data-action="open-report" data-type="${post.type}" data-id="${post.id}"><i data-lucide="more-vertical"></i></button>
                 </div>
-                <h2 class="post-headline">${escapeHtml(postHeadline(post))}</h2>
                 ${post.type === "workout" ? `<div class="post-stats">
                     ${postStatTile("boxes", number(post.volumeKg), "кг")}
                     ${postStatTile("list-checks", post.setCount, pluralUk(post.setCount, "підхід", "підходи", "підходів"))}
