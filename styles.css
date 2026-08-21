@@ -56,7 +56,7 @@ html {
 }
 
 body {
-    min-height: 100vh;
+    min-height: 100dvh;
     margin: 0;
     max-width: 100%;
     background:
@@ -140,7 +140,7 @@ textarea:focus-visible {
 .app-shell {
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-    min-height: 100vh;
+    min-height: 100dvh;
 }
 
 /* ---------- Admin impersonation bar ----------
@@ -660,8 +660,12 @@ h3 {
     gap: 12px;
 }
 
+/* No min-height. It used to reserve calc(100vh - 150px), guessing the chrome above it
+   at a flat 150px — the real topbar is taller, so every page shorter than a screen got
+   a stretch of empty scroll under it (the sign-in screen most visibly). Filling the
+   viewport is .app-shell's job, and it already does it. */
 .page-content {
-    min-height: calc(100vh - 150px);
+    min-width: 0;
 }
 
 /* ---------- Grid ---------- */
