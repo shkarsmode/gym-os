@@ -9,6 +9,8 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 // evaluateAchievements is no longer called here — the kernel owns that. ACHIEVEMENTS
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
+import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
+import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
@@ -3040,7 +3042,7 @@ import {
         // bail out to a read-only stub rather than throwing on a screen the user reached
         // in one tap from the profile.
         if (!isHydratedWorkout(workoutItem)) {
-            return `<section class="card workout-head"><div class="card-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption">${escapeHtml(owner ? owner.displayName : "Учасник")} · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)}</p></div></div>${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: workoutSetCount(workoutItem), label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }])}<div class="action-row" style="margin-top:14px;"><button class="button button-primary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="external-link"></i>Відкрити деталі</button></div></section>`;
+            return `<section class="card workout-head"><div class="card-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption">${escapeHtml(owner ? owner.displayName : "Учасник")} · ${formatDate(workoutItem.date)} · ${statusLabel(workoutStatusOf(workoutItem))}</p></div></div>${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: workoutSetCount(workoutItem), label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }])}<div class="action-row" style="margin-top:14px;"><button class="button button-primary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="external-link"></i>Відкрити деталі</button></div></section>`;
         }
         const completedSets = workoutItem.exercises.flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
         const active = activeWorkoutFor(currentUser().id);
@@ -3048,7 +3050,7 @@ import {
         const dateAttrs = dateBounds.min ? ` min="${dateBounds.min}" max="${dateBounds.max}"` : "";
         const isOtherThanActive = !readonly && active && active.id !== workoutItem.id;
         const contextBanner = !readonly && workoutItem.status !== "active"
-            ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutItem.status).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
+            ? `<div class="readonly-layer info">Ви редагуєте ${statusLabel(workoutStatusOf(workoutItem)).toLowerCase()} тренування. Зміни зберігаються автоматично.${active ? ` <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Перейти до активного</button>` : ""}</div>`
             : isOtherThanActive ? `<div class="readonly-layer info">У вас є активне тренування. <button class="link-button" type="button" data-action="edit-workout" data-workout-id="${active.id}">Відкрити активне</button></div>` : "";
         const clockChip = readonly ? "" : gymClockChip(workoutItem);
         // `has-clock` lets the CSS know whether the buttons have to share the row. Without
@@ -3063,7 +3065,7 @@ import {
             ${actionBar}
             <section class="card workout-head">
                 <div class="card-header">
-                    <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button></div><div class="workout-title-line"><h2>${escapeHtml(workoutLabel(workoutItem))}</h2>${readonly ? `<span class="chip">${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span>` : `<button class="chip chip-button workout-type-chip" type="button" data-action="open-workout-type" data-workout-id="${workoutItem.id}" title="Змінити тип тренування"><span>${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span><i data-lucide="chevron-down"></i></button>`}</div><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
+                    <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button></div><div class="workout-title-line"><h2>${escapeHtml(workoutLabel(workoutItem))}</h2>${readonly ? `<span class="chip">${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span>` : `<button class="chip chip-button workout-type-chip" type="button" data-action="open-workout-type" data-workout-id="${workoutItem.id}" title="Змінити тип тренування"><span>${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span><i data-lucide="chevron-down"></i></button>`}</div><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
                 </div>
                 ${contextBanner}
                 ${readonly ? "" : `<div class="field-grid two" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div></div>`}
@@ -3165,7 +3167,7 @@ import {
             || lastExerciseSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastNote = lastExerciseNote(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastResults = lastSets && lastSets.sets.length
-            ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => `<span class="chip" data-set-index="${setIndex}">${number(set.weight)}×${set.repetitions}</span>`).join("")}</div></div>`
+            ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => `<span class="chip" data-set-index="${setIndex}">${isTimedSet(set) ? `${number(set.weight) ? `${number(set.weight)}×` : ""}${formatDuration(set.durationSeconds)}` : `${number(set.weight)}×${set.repetitions}`}</span>`).join("")}</div></div>`
             : "";
         const previousNote = lastNote
             ? `<div class="previous-note"><span class="previous-note-label"><i data-lucide="sticky-note"></i>Остання нотатка · ${formatDate(lastNote.date)}</span><p>${escapeHtml(lastNote.notes)}</p></div>`
@@ -3186,7 +3188,11 @@ import {
         const collapsed = allDone && !state.expandedExercises.has(workoutExercise.id) && state.collapseAnimId !== workoutExercise.id;
         const articleClass = `workout-exercise${allDone ? " we-done" : ""}${collapsed ? " we-collapsed" : ""}`;
         const collapseToggle = allDone ? `<button class="icon-button we-collapse-btn" type="button" title="Згорнути / розгорнути" aria-label="Згорнути / розгорнути" data-action="toggle-exercise-collapse" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="chevron-down"></i></button>` : "";
-        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
+        // A block is "timed" when its sets are. The header toggle flips the whole block
+        // at once, because mixing seconds and reps inside one exercise is almost always
+        // a mistake rather than an intent.
+        const blockTimed = (workoutExercise.sets || []).some(isTimedSet);
+        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
     }
 
     // Small "+N кг" / "−N кг" tag showing the weight change from the previous set.
@@ -3242,6 +3248,10 @@ import {
         const hintChip = hintOn
             ? `<div class="setdone-hint" role="status"><span>Тисни кружечок, щоб завершити</span><span class="setdone-hint-caret" aria-hidden="true"></span></div>`
             : "";
+        // Reps and seconds are alternatives, not companions: a plank has no rep count and
+        // a bench press has no hold time, and showing both invites logging into the wrong
+        // one. Which it is lives on the SET, so one exercise can be done either way.
+        const timed = isTimedSet(set);
         return `<div class="set-row ${set.isCompleted ? "completed" : ""}${hintOn ? " has-hint" : ""}">
             <div class="set-row-head">${hintChip}
                 <span class="set-index">${index}</span>
@@ -3251,10 +3261,11 @@ import {
                     <button class="icon-button" type="button" title="Видалити підхід" data-action="delete-set" ${target} ${lock}><i data-lucide="trash-2"></i></button>
                 </div>
             </div>
-            <div class="set-fields${set.durationSeconds === null || set.durationSeconds === undefined ? "" : " has-duration"}">
+            <div class="set-fields${timed ? " is-timed" : ""}">
                 <label class="set-field"><span class="set-field-label">Вага, кг${weightDeltaBadge(prevWeight, set.weight)}</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
-                <label class="set-field"><span class="set-field-label">Повтори</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions" ${lock}></label>
-                ${set.durationSeconds === null || set.durationSeconds === undefined ? "" : `<label class="set-field"><span class="set-field-label">Час, с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="set-field" ${target} data-field="durationSeconds" ${lock}></label>`}
+                ${timed
+                    ? `<label class="set-field"><span class="set-field-label">Час, с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="set-field" ${target} data-field="durationSeconds" ${lock}></label>`
+                    : `<label class="set-field"><span class="set-field-label">Повтори</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions" ${lock}></label>`}
                 <label class="set-field"><span class="set-field-label">Відпочинок, с</span><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds" ${lock}></label>
             </div>
         </div>`;
@@ -3267,7 +3278,11 @@ import {
     }
 
     function exercises() {
-        content(`<section class="card"><div class="card-header"><div><h2>Каталог вправ</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням + фільтри за групою м'язів і обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div id="exerciseCatalogFilters">${catalogFilterRow()}</div></section><section class="exercise-card-grid" id="exerciseCatalogGrid" style="margin-top:16px;">${exerciseCatalogCards()}</section>`);
+        // Filtered once and handed to both the counter and the grid: computing it twice
+        // is how a counter starts disagreeing with the cards underneath it.
+        const items = filteredExercises();
+        const catalogShown = items.length;
+        content(`<section class="card"><div class="card-header"><div><h2>Каталог вправ</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням + фільтри за групою м'язів і обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div id="exerciseCatalogFilters">${catalogFilterRow()}</div><div class="catalog-count" id="catalogCount" data-shown="${catalogShown}">${catalogCounterMarkup(catalogShown)}</div></section><section class="exercise-card-grid" id="exerciseCatalogGrid" style="margin-top:16px;">${exerciseCatalogCards(items)}</section>`);
     }
 
     // Same filter row as the add-exercise modal: search + visual muscle-grid trigger
@@ -3285,9 +3300,125 @@ import {
             </div>`;
     }
 
-    function exerciseCatalogCards() {
+    function exerciseCatalogCards(items) {
+        const list = items || filteredExercises();
+        return list.length ? list.map(exerciseCard).join("") : emptyInline("Нічого не знайдено", "Спробуй іншу назву, м'язову групу або обладнання.");
+    }
+
+    // ---- Catalogue counter ---------------------------------------------------------------
+    //
+    // How much of the library the current filter leaves standing. The number TWEENS
+    // rather than snapping, because the informative part is the CHANGE: 149 to 23 as a
+    // filter lands is the feedback that the filter did something, where a swapped digit
+    // reads as nothing having happened.
+
+    function catalogCounterLabel(shown, total) {
+        if (!total) {
+            return "Каталог порожній";
+        }
+        if (!shown) {
+            return "нічого не знайдено — спробуй інший фільтр";
+        }
+        if (shown === total) {
+            return `${pluralUk(total, "вправа", "вправи", "вправ")} у каталозі`;
+        }
+        return `${pluralUk(shown, "вправа", "вправи", "вправ")} з <b>${total}</b> за фільтром`;
+    }
+
+    // A sliver of bar for a single match, so "1 of 149" still reads as a bar rather than
+    // an empty track indistinguishable from "nothing found".
+    function catalogCounterShare(shown, total) {
+        if (!total || !shown) {
+            return 0;
+        }
+        return Math.max(4, Math.round((shown / total) * 100));
+    }
+
+    function catalogCounterMarkup(shown) {
+        const total = state.database.exercises.length;
+        const mine = state.database.exercises.filter(isMyExercise).length;
+        const pending = state.database.exercises.filter((exercise) => exercise.status === "pending").length;
+        const chips = `${mine ? `<span class="cc-chip"><i data-lucide="bookmark-check"></i>${mine} ${pluralUk(mine, "твоя", "твої", "твоїх")}</span>` : ""}${pending ? `<span class="cc-chip warn"><i data-lucide="clock"></i>${pending} на модерації</span>` : ""}`;
+        return `<span class="cc-num">${shown}</span><div class="cc-text"><span class="cc-label">${catalogCounterLabel(shown, total)}</span><div class="cc-bar"><span style="width:${catalogCounterShare(shown, total)}%"></span></div></div>${chips ? `<div class="cc-chips">${chips}</div>` : ""}`;
+    }
+
+    function updateCatalogCounter(shown) {
+        const host = element("catalogCount");
+        if (!host) {
+            return;
+        }
+        const total = state.database.exercises.length;
+        const previous = Number(host.dataset.shown);
+        const num = host.querySelector(".cc-num");
+        const label = host.querySelector(".cc-label");
+        const bar = host.querySelector(".cc-bar > span");
+        if (num && label && bar) {
+            // Targeted: the chips and their icons do not change while you type, and
+            // rebuilding them would re-run icon replacement once per keystroke.
+            label.innerHTML = catalogCounterLabel(shown, total);
+            bar.style.width = `${catalogCounterShare(shown, total)}%`;
+        } else {
+            host.innerHTML = catalogCounterMarkup(shown);
+            iconsIn(host);
+        }
+        host.dataset.shown = String(shown);
+        host.classList.toggle("is-empty", shown === 0);
+        tweenCount(host.querySelector(".cc-num"), Number.isFinite(previous) ? previous : shown, shown);
+    }
+
+    /**
+     * Count from one number to another over a third of a second.
+     *
+     * Backed by a timeout that force-writes the final value: requestAnimationFrame is
+     * throttled to a crawl — or never delivered at all — in a backgrounded or automated
+     * tab, and a counter frozen mid-tween is not a cosmetic problem, it is a number on
+     * screen that is simply wrong.
+     */
+    function tweenCount(node, from, to) {
+        if (!node) {
+            return;
+        }
+        const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (reduced || Math.abs(to - from) < 2) {
+            node.textContent = String(to);
+            return;
+        }
+        const duration = 340;
+        const started = performance.now();
+        node.textContent = String(from);
+        const step = (now) => {
+            const progress = Math.min(1, (now - started) / duration);
+            // Ease-out, so the number lands softly instead of stopping dead.
+            const eased = 1 - Math.pow(1 - progress, 3);
+            node.textContent = String(Math.round(from + (to - from) * eased));
+            if (progress < 1 && node.isConnected) {
+                requestAnimationFrame(step);
+            }
+        };
+        requestAnimationFrame(step);
+        setTimeout(() => {
+            if (node.isConnected) {
+                node.textContent = String(to);
+            }
+        }, duration + 90);
+    }
+
+    /**
+     * One entry point for repainting the catalogue.
+     *
+     * The counter and the grid come from the SAME filtered array, so the headline number
+     * cannot drift from the cards below it — which is exactly what happens when three
+     * separate call sites each refresh only the half they remembered about.
+     */
+    function refreshCatalog() {
+        const grid = element("exerciseCatalogGrid");
+        if (!grid) {
+            return;
+        }
         const items = filteredExercises();
-        return items.length ? items.map(exerciseCard).join("") : emptyInline("Нічого не знайдено", "Спробуй іншу назву, м'язову групу або обладнання.");
+        grid.innerHTML = exerciseCatalogCards(items);
+        iconsIn(grid);
+        updateCatalogCounter(items.length);
     }
 
     function stats() {
@@ -4514,11 +4645,7 @@ import {
                     catalogFilters.innerHTML = catalogFilterRow();
                     iconsIn(catalogFilters);
                 }
-                const catalogGrid = document.getElementById("exerciseCatalogGrid");
-                if (catalogGrid) {
-                    catalogGrid.innerHTML = exerciseCatalogCards();
-                    iconsIn(catalogGrid);
-                }
+                refreshCatalog();
             },
             "muscle-grid-back": closeSheet,
             "open-save-template": () => openSaveTemplateModal(actionElement.dataset.workoutId),
@@ -4550,6 +4677,7 @@ import {
             "react-exercise": () => reactToExercise(actionElement.dataset.exerciseId, actionElement.dataset.reaction),
             "open-user": () => goToUser(actionElement.dataset.userId),
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
+            "toggle-timed-block": () => toggleTimedBlock(actionElement.dataset.workoutExerciseId),
             "toggle-set": () => isWatchedTarget(actionElement)
                 ? editWatchedSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, { isCompleted: !watchedSet(actionElement)?.isCompleted })
                 : toggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
@@ -4572,7 +4700,7 @@ import {
             "focus-jump-set": () => focusJumpSet(actionElement.dataset.setId),
             "focus-start-set": focusStartSet,
             "focus-show-rest": focusShowRest,
-            "focus-apply-hint": () => focusApplyHint(actionElement.dataset.weight, actionElement.dataset.reps),
+            "focus-apply-hint": () => focusApplyHint(actionElement.dataset.weight, actionElement.dataset.reps, actionElement.dataset.seconds),
             "focus-step": () => focusStepField(actionElement.dataset.field, Number(actionElement.dataset.delta)),
             "focus-finish-workout": focusFinishWorkout,
             "open-profile-editor": openProfileEditor,
@@ -4819,6 +4947,7 @@ import {
             "save-custom-exercise": "Зберігаємо вправу",
             "suggest-exercise-media": "Підбираємо GIF",
             "add-set": "Додаємо підхід",
+            "toggle-timed-block": "Змінюємо вимір",
             "toggle-set": "Оновлюємо підхід",
             "delete-set": "Видаляємо підхід",
             "finish-workout": "Завершуємо тренування",
@@ -4884,11 +5013,7 @@ import {
             // input keeps focus + caret while typing — re-rendering #pageContent
             // destroyed the input and dropped focus after every character.
             state.filters.exerciseSearch = actionElement.value;
-            const grid = element("exerciseCatalogGrid");
-            if (grid) {
-                grid.innerHTML = exerciseCatalogCards();
-                iconsIn(grid);
-            }
+            refreshCatalog();
         }
 
         if (actionElement.dataset.action === "exercise-picker-search") {
@@ -5244,7 +5369,7 @@ import {
             const owner = userById(workoutItem.userId);
             const own = workoutItem.userId === meId;
             const manage = canManage(workoutItem);
-            return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${number(workoutVolumeOf(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions"><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="list"></i>Деталі</button>${manage ? `<button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : ""}</div></article>`;
+            return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${number(workoutVolumeOf(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions"><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="list"></i>Деталі</button>${manage ? `<button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : ""}</div></article>`;
         }).join("");
         openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div><div class="day-sheet-action">${startWorkoutButton(date, { label: isToday ? "Почати тренування" : "Додати тренування", buttonClass: "button button-primary" })}</div>`);
     }
@@ -5330,12 +5455,8 @@ import {
             grid.innerHTML = exercisePickerCards();
             icons();
         }
-        // The catalog shares the same filter state — refresh its grid too when open.
-        const catalogGrid = element("exerciseCatalogGrid");
-        if (catalogGrid) {
-            catalogGrid.innerHTML = exerciseCatalogCards();
-            iconsIn(catalogGrid);
-        }
+        // The catalog shares the same filter state — refresh it too when open.
+        refreshCatalog();
     }
 
     function pickerExercises() {
@@ -5409,7 +5530,7 @@ import {
         const moderationHint = isEdit
             ? `<p class="card-caption">${isAdmin() ? "Зміни застосуються одразу." : "Після збереження вправа знову піде на модерацію."}</p>`
             : `<p class="card-caption">${isAdmin() ? "Вправа з'явиться в каталозі одразу." : "Нова вправа піде на модерацію адміну."}</p>`;
-        openModal(`<div class="modal-header"><div><h2>${isEdit ? "Редагувати вправу" : "Власна вправа"}</h2>${moderationHint}</div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="hidden" id="customExerciseId" value="${val(data?.id)}"><div class="field-grid"><div class="field"><label>Назва</label><input id="customExerciseName" type="text" placeholder="Жим у Smith під кутом" value="${val(data?.name)}"></div><div class="field"><label>Аліаси</label><input id="customExerciseAliases" type="text" placeholder="Через кому" value="${val(aliasesValue)}"></div><div class="field"><label>Основний м'яз</label>${select("customExerciseMuscle", muscles(), data?.primaryMuscleGroup || "Груди")}</div><div class="field"><label>Патерн руху</label>${select("customExercisePattern", patterns(), data?.movementPattern || "Горизонтальний жим")}</div><div class="field"><label>Обладнання</label>${select("customExerciseEquipment", equipment(), data?.equipment || "Тренажер")}</div><div class="field"><label>Складність</label>${select("customExerciseDifficulty", ["Початковий", "Середній", "Просунутий"], data?.difficulty || "Середній")}</div></div><div class="field" style="margin-top:14px;"><label>Опис</label><textarea id="customExerciseDescription" placeholder="Коротке пояснення">${val(data?.description)}</textarea></div><div class="field" style="margin-top:14px;"><label>Зображення / GIF (посилання)</label><input id="customExerciseMedia" type="url" placeholder="https://...jpg, .png або .gif" data-action="custom-exercise-media" value="${val(data?.mediaUrl)}"><div class="action-row" style="margin-top:8px;"><button class="button button-secondary compact" type="button" data-action="suggest-exercise-media"><i data-lucide="sparkles"></i>Підібрати GIF</button></div>${previewBlock}</div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-custom-exercise">${isEdit ? "Зберегти зміни" : "Зберегти вправу"}</button></div>`);
+        openModal(`<div class="modal-header"><div><h2>${isEdit ? "Редагувати вправу" : "Власна вправа"}</h2>${moderationHint}</div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><input type="hidden" id="customExerciseId" value="${val(data?.id)}"><div class="field-grid"><div class="field"><label>Назва</label><input id="customExerciseName" type="text" placeholder="Жим у Smith під кутом" value="${val(data?.name)}"></div><div class="field"><label>Аліаси</label><input id="customExerciseAliases" type="text" placeholder="Через кому" value="${val(aliasesValue)}"></div><div class="field"><label>Основний м'яз</label>${select("customExerciseMuscle", muscles(), data?.primaryMuscleGroup || "Груди")}</div><div class="field"><label>Патерн руху</label>${select("customExercisePattern", patterns(), data?.movementPattern || "Горизонтальний жим")}</div><div class="field"><label>Обладнання</label>${select("customExerciseEquipment", equipment(), data?.equipment || "Тренажер")}</div><div class="field"><label>Складність</label>${select("customExerciseDifficulty", ["Початковий", "Середній", "Просунутий"], data?.difficulty || "Середній")}</div></div><label class="toggle-row" style="margin-top:14px;"><input type="checkbox" id="customExerciseTimed" ${data?.isTimed ? "checked" : ""}><span class="toggle-row-text"><strong>Вимірюється часом</strong><span class="card-caption">Планка, віс на перекладині, утримання — підходи рахуються в секундах, а не в повтореннях.</span></span></label><div class="field" style="margin-top:14px;"><label>Опис</label><textarea id="customExerciseDescription" placeholder="Коротке пояснення">${val(data?.description)}</textarea></div><div class="field" style="margin-top:14px;"><label>Зображення / GIF (посилання)</label><input id="customExerciseMedia" type="url" placeholder="https://...jpg, .png або .gif" data-action="custom-exercise-media" value="${val(data?.mediaUrl)}"><div class="action-row" style="margin-top:8px;"><button class="button button-secondary compact" type="button" data-action="suggest-exercise-media"><i data-lucide="sparkles"></i>Підібрати GIF</button></div>${previewBlock}</div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button><button class="button button-primary" type="button" data-action="save-custom-exercise">${isEdit ? "Зберегти зміни" : "Зберегти вправу"}</button></div>`);
     }
 
     function editExercise(exerciseId) {
@@ -5433,19 +5554,53 @@ import {
             toast("Немає доступу", "Видаляти можна лише власні вправи.");
             return;
         }
-        const confirmed = await confirmDialog(`Видалити вправу «${exercise.name}»? Дію не можна скасувати.`, { confirmLabel: "Видалити" });
+        // How much history leans on it. Only hydrated workouts can be counted — a peer
+        // summary carries no exercises — so this is "yours", which is the number that
+        // actually matters to the person deciding.
+        const used = state.database.workouts.filter(
+            (workoutItem) => isHydratedWorkout(workoutItem)
+                && workoutItem.exercises.some((entry) => entry.exerciseId === exercise.id)
+        ).length;
+        const confirmed = await confirmDialog(`«${exercise.name}»`, {
+            title: "Видалити вправу з каталогу?",
+            detail: used
+                ? `Використана у ${used} ${pluralUk(used, "твоєму тренуванні", "твоїх тренуваннях", "твоїх тренуваннях")} — записи залишаться, але вправа зникне з каталогу.`
+                : "Жодне тренування її не використовує.",
+            confirmLabel: "Видалити",
+            note: "Матимеш 20 секунд, щоб повернути."
+        });
         if (!confirmed) {
             return;
         }
-        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
-            await storage.apiClient.deleteExercise(exercise.id);
-        }
+        const index = state.database.exercises.findIndex((item) => item.id === exercise.id);
         state.database.exercises = state.database.exercises.filter((item) => item.id !== exercise.id);
-        if (storage.mode !== "api") {
-            await persist({ silent: true });
-        }
         renderSection();
-        toast("Вправу видалено", exercise.name);
+
+        removeWithUndo({
+            key: `exercise:${exercise.id}`,
+            title: "Вправу видалено",
+            message: used ? `${exercise.name} · була у ${used} ${pluralUk(used, "тренуванні", "тренуваннях", "тренуваннях")}` : exercise.name,
+            restore: () => {
+                if (!state.database.exercises.some((item) => item.id === exercise.id)) {
+                    state.database.exercises.splice(index < 0 ? state.database.exercises.length : index, 0, exercise);
+                }
+                renderSection();
+                showSyncIndicator("success", "Повернуто");
+            },
+            commit: async () => {
+                if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+                    try {
+                        await storage.apiClient.deleteExercise(exercise.id);
+                    } catch (error) {
+                        if (Number(error?.status) !== 404) {
+                            showSyncIndicator("error", friendlyError(error));
+                        }
+                    }
+                } else {
+                    await persist({ silent: true });
+                }
+            }
+        });
     }
 
     async function approveExerciseEntry(exerciseId) {
@@ -5586,7 +5741,8 @@ import {
             safetyTips: existing?.safetyTips?.length ? existing.safetyTips : safetyFor(pattern),
             mediaUrl,
             mediaType,
-            isCustom: true
+            isCustom: true,
+            isTimed: checkboxValue("customExerciseTimed")
         };
         const apiMode = storage.mode === "api" && storage.apiClient.hasBaseUrl();
 
@@ -6099,34 +6255,62 @@ import {
             toast("Лише перегляд", "Видаляти можна тільки власні тренування.");
             return;
         }
-        if (!(await confirmDialog("Видалити це тренування? Дію не можна скасувати.", { confirmLabel: "Видалити" }))) {
+        const summary = workoutRemovalSummary(workoutItem);
+        const confirmed = await confirmDialog(workoutLabel(workoutItem), {
+            title: "Видалити тренування?",
+            detail: summary || "Порожня сесія",
+            confirmLabel: "Видалити",
+            note: "Матимеш 20 секунд, щоб повернути."
+        });
+        if (!confirmed) {
             return;
         }
         const removedLabel = workoutLabel(workoutItem);
+        const wasEditing = state.editingWorkoutId === workoutId;
+        // Where it sat, so putting it back does not reshuffle the list under the cursor.
+        const index = state.database.workouts.findIndex((item) => item.id === workoutId);
         cancelWorkoutSave(workoutId);
         state.database.workouts = state.database.workouts.filter((item) => item.id !== workoutId);
-        if (state.editingWorkoutId === workoutId) {
+        if (wasEditing) {
             state.editingWorkoutId = null;
-        }
-        if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
-            showSyncIndicator("loading", "Видаляємо тренування");
-            try {
-                await storage.apiClient.deleteWorkout(workoutId);
-                showSyncIndicator("success", "Видалено");
-            } catch (error) {
-                if (isNetworkError(error)) {
-                    enqueueOffline({ kind: "delete", id: workoutId });
-                } else if (Number(error?.status) !== 404) {
-                    showSyncIndicator("error", friendlyError(error));
-                    throw error;
-                }
-            }
-        } else {
-            await persist({ silent: true });
         }
         closeOverlay();
         renderSection();
-        toast("Тренування видалено", removedLabel);
+
+        removeWithUndo({
+            key: `workout:${workoutId}`,
+            title: "Тренування видалено",
+            message: summary ? `${removedLabel} · ${summary}` : removedLabel,
+            restore: () => {
+                // Nothing was ever sent, so this is a plain put-it-back — no re-create,
+                // no new id, no rows to stitch together again.
+                if (!state.database.workouts.some((item) => item.id === workoutId)) {
+                    state.database.workouts.splice(index < 0 ? state.database.workouts.length : index, 0, workoutItem);
+                }
+                if (wasEditing) {
+                    state.editingWorkoutId = workoutId;
+                }
+                renderSection();
+                showSyncIndicator("success", "Повернуто");
+            },
+            commit: async () => {
+                if (storage.mode === "api" && storage.apiClient.hasBaseUrl()) {
+                    showSyncIndicator("loading", "Видаляємо тренування");
+                    try {
+                        await storage.apiClient.deleteWorkout(workoutId);
+                        showSyncIndicator("success", "Видалено");
+                    } catch (error) {
+                        if (isNetworkError(error)) {
+                            enqueueOffline({ kind: "delete", id: workoutId });
+                        } else if (Number(error?.status) !== 404) {
+                            showSyncIndicator("error", friendlyError(error));
+                        }
+                    }
+                } else {
+                    await persist({ silent: true });
+                }
+            }
+        });
     }
 
     async function ensureSingleActiveWorkout(excludedWorkoutId = null) {
@@ -6238,14 +6422,111 @@ import {
         if (!workoutItem) {
             return;
         }
-        if (!(await confirmDialog("Видалити цю вправу з тренування?", { confirmLabel: "Видалити" }))) {
+        const entry = workoutItem.exercises.find((item) => item.id === workoutExerciseId);
+        if (!entry) {
             return;
         }
+        const entryName = exerciseById(entry.exerciseId)?.name || "Вправа";
+        const setCount = (entry.sets || []).length;
+        const doneCount = (entry.sets || []).filter((set) => set.isCompleted).length;
+        const detail = setCount
+            ? `${setCount} ${pluralUk(setCount, "підхід", "підходи", "підходів")}${doneCount ? `, з них ${doneCount} виконано` : ", жодного не виконано"}`
+            : "Підходів ще немає";
+        if (!(await confirmDialog(`«${entryName}»`, {
+            title: "Прибрати вправу з тренування?",
+            detail,
+            confirmLabel: "Прибрати",
+            note: "Матимеш 20 секунд, щоб повернути."
+        }))) {
+            return;
+        }
+        const index = workoutItem.exercises.findIndex((item) => item.id === workoutExerciseId);
         workoutItem.exercises = workoutItem.exercises.filter((item) => item.id !== workoutExerciseId);
         touchGymClock(workoutItem);
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
+
+        // Saved straight away and restored the same way. Set ids are stable now, so
+        // putting the entry back writes byte-identical rows; deferring the SAVE instead
+        // would leave the server disagreeing with the screen for twenty seconds, and a
+        // second device would show the exercise still there.
+        removeWithUndo({
+            key: `workout-exercise:${workoutExerciseId}`,
+            title: "Вправу прибрано",
+            message: `${entryName} · ${detail}`,
+            restore: async () => {
+                const live = state.database.workouts.find((item) => item.id === workoutItem.id);
+                if (!live || !isHydratedWorkout(live) || live.exercises.some((item) => item.id === workoutExerciseId)) {
+                    return;
+                }
+                live.exercises.splice(Math.min(index < 0 ? live.exercises.length : index, live.exercises.length), 0, entry);
+                touchGymClock(live);
+                live.updatedAt = new Date().toISOString();
+                await persistWorkout(live);
+                renderSection();
+                showSyncIndicator("success", "Повернуто");
+            },
+            // Already saved; the window is the only thing being waited on.
+            commit: () => undefined
+        });
+    }
+
+    // Rep counts parked across a reps → time → reps round trip, keyed by set id. Session
+    // scoped on purpose: it exists to make an accidental tap free to take back, not to
+    // be a second, invisible copy of the workout that outlives a reload.
+    const timedFlipMemory = new Map();
+
+    // «12 кг обсягу · 1ПМ …» says nothing about a plank. What a hold is tracked on is
+    // how long it was held and how long the longest one was.
+    function timedBlockCaption(workoutExercise) {
+        const totals = timedTotals(workoutExercise.sets);
+        if (!totals.count) {
+            return "На час";
+        }
+        return `На час · ${totals.completed}/${totals.count} ${pluralUk(totals.count, "утримання", "утримання", "утримань")}`
+            + `${totals.totalSeconds ? ` · разом ${formatDuration(totals.totalSeconds)}` : ""}`
+            + `${totals.bestSeconds ? ` · найдовше ${formatDuration(totals.bestSeconds)}` : ""}`;
+    }
+
+    /**
+     * Flip a whole exercise block between counting reps and counting seconds.
+     *
+     * The whole block rather than one set: mixing the two measures inside one exercise
+     * is almost always a slip, and per-set flipping makes it a slip you can make without
+     * noticing. A set keeps its weight and its rest either way.
+     */
+    async function toggleTimedBlock(workoutExerciseId) {
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        if (!workoutExercise) {
+            return;
+        }
+        const goingTimed = !(workoutExercise.sets || []).some(isTimedSet);
+        // Seed from what this exercise was last held for, so flipping a plank on does
+        // not start everyone at the same arbitrary 30 seconds forever.
+        const seed = goingTimed
+            ? (workoutExercise.sets || []).map((set) => Number(set.durationSeconds)).find((value) => value > 0) || DEFAULT_HOLD_SECONDS
+            : 0;
+        workoutExercise.sets = (workoutExercise.sets || []).map((set) => {
+            if (goingTimed) {
+                // Flipping to time ZEROES the reps, because volume is weight × reps and
+                // a plank remembering "8" would keep adding tonnage nobody lifted. The
+                // count is parked here so flipping straight back — the shape of an
+                // accidental tap — restores 10/8/8 rather than a flat default.
+                timedFlipMemory.set(set.id, Number(set.repetitions) || 0);
+                return toTimedSet(set, seed);
+            }
+            const remembered = timedFlipMemory.get(set.id);
+            timedFlipMemory.delete(set.id);
+            return toRepSet(set, remembered);
+        });
+        const workoutItem = editWorkout();
+        if (workoutItem) {
+            workoutItem.updatedAt = new Date().toISOString();
+        }
+        await persistWorkout(workoutItem);
+        renderSection();
+        showSyncIndicator("success", goingTimed ? "Рахуємо час" : "Рахуємо повтори");
     }
 
     async function addSet(workoutExerciseId) {
@@ -6254,7 +6535,15 @@ import {
             return;
         }
         const previousSet = workoutExercise.sets.at(-1);
-        workoutExercise.sets.push(previousSet ? { ...previousSet, id: createId("set"), isCompleted: false } : createSet(getPref("defaultSetType"), 0, 8, 8, Number(getPref("defaultRest")) || 90, false));
+        if (previousSet) {
+            workoutExercise.sets.push({ ...previousSet, id: createId("set"), isCompleted: false });
+        } else {
+            // First set of an empty block: a static exercise starts on the clock, so
+            // adding a plank never means typing a rep count you have to undo.
+            const exercise = exerciseById(workoutExercise.exerciseId);
+            const fresh = createSet(getPref("defaultSetType"), 0, 8, 8, Number(getPref("defaultRest")) || 90, false);
+            workoutExercise.sets.push(exercise?.isTimed ? toTimedSet(fresh) : fresh);
+        }
         await persistWorkout(editWorkout());
         renderSection();
     }
@@ -6313,13 +6602,45 @@ import {
         if (!workoutExercise) {
             return;
         }
-        if (!(await confirmDialog("Видалити цей підхід?", { confirmLabel: "Видалити" }))) {
+        const removed = workoutExercise.sets.find((item) => item.id === setId);
+        if (!removed) {
             return;
         }
-        workoutExercise.sets = workoutExercise.sets.filter((set) => set.id !== setId);
+        const index = workoutExercise.sets.findIndex((item) => item.id === setId);
+        const detail = describeSet(removed, setTypeLabels[removed.type] || "");
+        if (!(await confirmDialog(`Підхід №${index + 1}`, {
+            title: "Видалити підхід?",
+            detail,
+            confirmLabel: "Видалити",
+            note: "Матимеш 12 секунд, щоб повернути."
+        }))) {
+            return;
+        }
+        workoutExercise.sets = workoutExercise.sets.filter((item) => item.id !== setId);
         touchGymClock(editWorkout());
         await persistWorkout(editWorkout());
         renderSection();
+
+        removeWithUndo({
+            key: `set:${setId}`,
+            title: "Підхід видалено",
+            message: detail,
+            // Shorter than a workout: a set is one tap to re-add, and a banner sitting
+            // over the action bar for twenty seconds is in the way of the next set.
+            seconds: 12,
+            restore: async () => {
+                const live = editWorkoutExercise(workoutExerciseId);
+                if (!live || live.sets.some((item) => item.id === setId)) {
+                    return;
+                }
+                live.sets.splice(Math.min(index, live.sets.length), 0, removed);
+                touchGymClock(editWorkout());
+                await persistWorkout(editWorkout());
+                renderSection();
+                showSyncIndicator("success", "Повернуто");
+            },
+            commit: () => undefined
+        });
     }
 
     async function updateSetField(workoutExerciseId, setId, field, value) {
@@ -6580,7 +6901,7 @@ import {
         // summary is told apart from a genuinely empty session (that one has []). Without
         // this the drawer claimed "Вправ ще немає" for a workout whose own chip said 6.
         const needsDetail = !Array.isArray(workoutItem.exercises) && !workoutItem.detailUnavailable;
-        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutItem.status)} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${partnerInviteCta(workoutItem, readonly)}<button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" data-workout-detail="${workoutItem.id}" style="margin-top:14px;">${workoutDetailBody(workoutItem, needsDetail)}</div>`, { fullscreen: true });
+        openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutStatusOf(workoutItem))} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${partnerInviteCta(workoutItem, readonly)}<button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" data-workout-detail="${workoutItem.id}" style="margin-top:14px;">${workoutDetailBody(workoutItem, needsDetail)}</div>`, { fullscreen: true });
         if (needsDetail) {
             hydrateWorkoutDetail(workoutId);
         }
@@ -8039,7 +8360,7 @@ import {
             ? `<div class="exercise-card-actions">${pending && isAdmin() ? `<button class="icon-button success" type="button" title="Схвалити" data-action="approve-exercise" data-exercise-id="${exercise.id}"><i data-lucide="check"></i></button>` : ""}<button class="icon-button" type="button" title="Редагувати" data-action="edit-exercise" data-exercise-id="${exercise.id}"><i data-lucide="pen-line"></i></button><button class="icon-button danger" type="button" title="Видалити" data-action="delete-exercise" data-exercise-id="${exercise.id}"><i data-lucide="trash-2"></i></button></div>`
             : "";
         const meta = `<div class="exercise-meta" title="${escapeHtml(ownerName)}${added ? ` · ${added}` : ""}">${owner ? avatar(owner, "tiny") : `<span class="exercise-meta-fallback"><i data-lucide="user-round"></i></span>`}<div class="exercise-meta-text"><span class="exercise-meta-name">${escapeHtml(ownerName)}</span>${added ? `<span class="exercise-meta-date">${added}</span>` : ""}</div></div>`;
-        return `<article class="exercise-card has-thumb${pending ? " is-pending" : ""}${exercise.myReaction === "dislike" ? " is-disliked" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}${overlay}<div class="exercise-card-body"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption exercise-card-desc">${escapeHtml(exercise.description)}</p><div class="tag-row"><span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></div><div class="exercise-card-footer">${meta}${actions}</div>${reactionBar(exercise)}</article>`;
+        return `<article class="exercise-card has-thumb${pending ? " is-pending" : ""}${exercise.myReaction === "dislike" ? " is-disliked" : ""}" data-action="open-exercise" data-exercise-id="${exercise.id}">${exerciseThumb(exercise)}${overlay}<div class="exercise-card-body"><h3>${escapeHtml(exercise.name)}</h3><p class="card-caption exercise-card-desc">${escapeHtml(exercise.description)}</p><div class="tag-row">${exercise.isTimed ? `<span class="chip chip-timed"><i data-lucide="timer"></i>На час</span>` : ""}<span class="chip">${escapeHtml(exercise.primaryMuscleGroup)}</span><span class="chip">${escapeHtml(exercise.movementPattern)}</span><span class="chip">${escapeHtml(exercise.equipment)}</span></div></div><div class="exercise-card-footer">${meta}${actions}</div>${reactionBar(exercise)}</article>`;
     }
 
     // Like / dislike controls + shared counts. Lives in its own bottom row so it
@@ -8347,8 +8668,8 @@ import {
         // "Завершено" is the norm in a history list — only the exceptions earn a badge.
         const statusBadge = workoutItem.status === "completed"
             ? ""
-            : `<span class="status-badge ${workoutItem.status}">${statusLabel(workoutItem.status)}</span>`;
-        return `<article class="hist-row status-${workoutItem.status}" data-action="open-workout" data-workout-id="${workoutItem.id}">
+            : `<span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span>`;
+        return `<article class="hist-row status-${workoutStatusOf(workoutItem)}" data-action="open-workout" data-workout-id="${workoutItem.id}">
             <div class="hist-date" aria-hidden="true"><span class="hist-day">${parsed.getDate()}</span><span class="hist-mon">${MONTH_SHORT[parsed.getMonth()] || ""}</span></div>
             <div class="hist-main">
                 <div class="hist-top"><strong class="hist-weekday">${weekdayLabel(day)}</strong><span class="chip hist-type">${workoutTypeLabel(workoutItem.workoutType)}</span>${statusBadge}<span class="hist-num">#${workoutNumber(workoutItem)}</span>${ownerChip}</div>
@@ -8494,7 +8815,7 @@ import {
                     id: workoutItem.id,
                     title: owner.displayName,
                     start: workoutItem.date,
-                    classNames: [`workout-status-${workoutItem.status}`, ...(mine ? ["workout-mine"] : [])],
+                    classNames: [`workout-status-${workoutStatusOf(workoutItem)}`, ...(mine ? ["workout-mine"] : [])],
                     extendedProps: {
                         workoutId: workoutItem.id,
                         date: workoutItem.date,
@@ -8800,9 +9121,25 @@ import {
         // time this exercise was done, just reset to not-completed.
         const last = currentUserId ? lastExerciseSets(currentUserId, exercise.id) : null;
         if (last && last.sets.length) {
-            return last.sets.map((set) => createSet(set.type || "working", Number(set.weight) || 0, Number(set.repetitions) || 0, set.rpe, Number(set.restSeconds) || 90, false));
+            // Carry the MEASURE over too, not just the numbers: without this a plank you
+            // held for 45 s last week came back as a set of 45 repetitions.
+            return last.sets.map((set) => createSet(
+                set.type || "working",
+                Number(set.weight) || 0,
+                Number(set.repetitions) || 0,
+                set.rpe,
+                Number(set.restSeconds) || 90,
+                false,
+                isTimedSet(set) ? Number(set.durationSeconds) || 0 : null
+            ));
         }
         const weight = seedWeight(exercise.name, 0);
+        if (exercise.isTimed) {
+            return [
+                createSet("working", 0, 0, 7, 60, false, DEFAULT_HOLD_SECONDS),
+                createSet("working", 0, 0, 8, 60, false, DEFAULT_HOLD_SECONDS)
+            ];
+        }
         if (exercise.movementPattern === "Кор") {
             return [createSet("working", 0, 45, 7, 60, false), createSet("working", 0, 45, 8, 60, false)];
         }
@@ -9427,9 +9764,9 @@ import {
     }
 
     function focusHintChip(icon, label, set) {
-        return `<button class="focus-hint" type="button" data-action="focus-apply-hint" data-weight="${set.weight}" data-reps="${set.repetitions}" title="Підставити ці значення">
+        return `<button class="focus-hint" type="button" data-action="focus-apply-hint" data-weight="${set.weight}" data-reps="${set.repetitions}" data-seconds="${isTimedSet(set) ? set.durationSeconds : ""}" title="Підставити ці значення">
             <span class="focus-hint-label"><i data-lucide="${icon}"></i>${label}</span>
-            <strong class="focus-hint-value">${number(set.weight)} × ${set.repetitions}</strong>
+            <strong class="focus-hint-value">${isTimedSet(set) ? `${number(set.weight) ? `${number(set.weight)} × ` : ""}${formatDuration(set.durationSeconds)}` : `${number(set.weight)} × ${set.repetitions}`}</strong>
             <span class="focus-hint-use"><i data-lucide="corner-down-left"></i></span>
         </button>`;
     }
@@ -9450,6 +9787,9 @@ import {
             return `${exerciseNav}<div class="focus-set-card"><p class="card-caption" style="text-align:center;">Підходів ще немає — додай перший.</p>
                 <button class="button button-primary focus-cta" type="button" data-action="focus-add-set"><i data-lucide="plus"></i>Додати підхід</button></div>`;
         }
+        // The middle stepper measures whatever this set measures — never both.
+        const timed = isTimedSet(set);
+        const measure = timed ? "durationSeconds" : "repetitions";
         const last = lastExerciseSets(workoutItem.userId, exercise.exerciseId, workoutItem.id);
         const lastSet = last ? (last.sets[setIndex] || last.sets.at(-1)) : null;
         const previousSet = setIndex > 0 ? sets[setIndex - 1] : null;
@@ -9460,7 +9800,7 @@ import {
         return `${exerciseNav}${dots}
         <div class="focus-set-card">
             <div class="focus-set-heading">
-                <span class="focus-set-label">Підхід ${setIndex + 1} з ${sets.length}</span>
+                <span class="focus-set-label">Підхід ${setIndex + 1} з ${sets.length}${timed ? " · на час" : ""}</span>
                 ${set.isCompleted ? `<span class="status-badge completed">Виконано</span>` : ""}
             </div>
             ${hints}
@@ -9478,11 +9818,11 @@ import {
                     </div>
                 </div>
                 <div class="focus-field">
-                    <span class="focus-field-label">Повтори</span>
+                    <span class="focus-field-label">${timed ? "Час, с" : "Повтори"}</span>
                     <div class="focus-stepper">
-                        <button class="focus-step" type="button" data-action="focus-step" data-field="repetitions" data-delta="-1" title="−1"><i data-lucide="minus"></i></button>
-                        <input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions">
-                        <button class="focus-step" type="button" data-action="focus-step" data-field="repetitions" data-delta="1" title="+1"><i data-lucide="plus"></i></button>
+                        <button class="focus-step" type="button" data-action="focus-step" data-field="${measure}" data-delta="${timed ? -5 : -1}" title="${timed ? "−5 с" : "−1"}"><i data-lucide="minus"></i></button>
+                        <input type="number" inputmode="numeric" step="${timed ? 5 : 1}" min="0" value="${timed ? set.durationSeconds : set.repetitions}" data-action="set-field" ${target} data-field="${measure}">
+                        <button class="focus-step" type="button" data-action="focus-step" data-field="${measure}" data-delta="${timed ? 5 : 1}" title="${timed ? "+5 с" : "+1"}"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
             </div>
@@ -9519,7 +9859,7 @@ import {
         const overtime = state.timer.overtime;
         const label = running ? (overtime ? "Час вийшов — рахуємо далі" : "Відпочинок") : "Перерва без таймера";
         const bottom = nextSet
-            ? `<div class="focus-next-preview"><span>Далі</span><strong>Підхід ${nextSetIndex + 1} · ${number(nextSet.weight)} кг × ${nextSet.repetitions}</strong></div>
+            ? `<div class="focus-next-preview"><span>Далі</span><strong>Підхід ${nextSetIndex + 1} · ${number(nextSet.weight)} кг × ${isTimedSet(nextSet) ? formatDuration(nextSet.durationSeconds) : nextSet.repetitions}</strong></div>
                <button class="button button-primary focus-cta" type="button" data-action="focus-start-set">Почати підхід</button>`
             : `<div class="focus-done-panel">
                 <p class="focus-done-title">Вправу завершено</p>
@@ -9673,13 +10013,22 @@ import {
         renderFocus();
     }
 
-    function focusApplyHint(weight, reps) {
+    function focusApplyHint(weight, reps, seconds) {
         const context = focusContext();
         if (!context || !context.set) {
             return;
         }
         context.set.weight = Number(weight) || 0;
-        context.set.repetitions = Number(reps) || 0;
+        // The hint carries whichever measure the set it came from was recorded in. A
+        // timed hint must not write a rep count into a plank, and a rep hint must not
+        // leave a stale hold time behind — so the two are set as a pair.
+        if (seconds !== undefined && seconds !== null && seconds !== "") {
+            context.set.durationSeconds = Number(seconds) || 0;
+            context.set.repetitions = 0;
+        } else {
+            context.set.repetitions = Number(reps) || 0;
+            context.set.durationSeconds = null;
+        }
         schedulePersistWorkout(context.workout);
         renderFocus();
     }
@@ -10031,6 +10380,17 @@ import {
         return statusLabels[status] || capitalize(status);
     }
 
+    /**
+     * The status a workout is SHOWN as, which is not always the one stored on it.
+     *
+     * Every user-facing status goes through here, so a teammate's finished session
+     * cannot read «Заплановано» in the day sheet and «Завершено» in the history list two
+     * taps later. The rule and its reasoning live in lib/workout-status.js.
+     */
+    function workoutStatusOf(workoutItem) {
+        return effectiveWorkoutStatus(workoutItem, dateInput(new Date()));
+    }
+
     function setTypeLabel(type) {
         return setTypeLabels[type] || capitalize(type);
     }
@@ -10359,9 +10719,13 @@ import {
 
     // Reliable in-app confirmation (native confirm() is unreliable/blocked on mobile).
     function confirmDialog(message, options = {}) {
-        const { title = "Підтвердження", confirmLabel = "Підтвердити", cancelLabel = "Скасувати", danger = true } = options;
+        const { title = "Підтвердження", confirmLabel = "Підтвердити", cancelLabel = "Скасувати", danger = true, detail = "", note = "" } = options;
         return new Promise((resolve) => {
-            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
+            // Two optional extras, each its own element rather than line breaks smuggled
+            // through an escaped string: `detail` is what exactly is being acted on, and
+            // `note` is the reassuring half — "you can take this back" — kept apart from
+            // the question so it cannot be misread as part of the warning.
+            const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p>${detail ? `<p class="confirm-detail">${escapeHtml(detail)}</p>` : ""}${note ? `<p class="confirm-note"><i data-lucide="undo-2"></i>${escapeHtml(note)}</p>` : ""}<div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
             // If a modal is already open, STACK the confirm on top (sheet layer) so it
             // doesn't replace it and cancelling returns to it. Standalone → modal layer.
             const stacked = !element("modalBackdrop").classList.contains("hidden");
@@ -11043,18 +11407,73 @@ import {
         return rawMessage || "Запит не виконано. Спробуй ще раз.";
     }
 
-    function toast(title, message = "", type = "default") {
+    /**
+     * `options` turns a notice into something you can act on:
+     *   duration — how long it stays up (default 4.2 s)
+     *   action   — {label, icon, onClick}; adds a button and a visible countdown
+     *   onExpire — the timer ran out, or the toast was flicked away un-acted-on
+     *
+     * A toast carrying an action does NOT dismiss on a body tap and does NOT pause on
+     * hover. Both would be lies: the number on it is a promise about when something
+     * irreversible happens, and a countdown that quietly stops while the pointer rests
+     * on it — or a stray tap that throws the window away — makes that promise false.
+     */
+    function toast(title, message = "", type = "default", options = {}) {
+        const duration = Number(options.duration) > 0 ? Number(options.duration) : 4200;
+        const action = options.action || null;
         const toastElement = document.createElement("div");
-        toastElement.className = `toast toast-${type}`;
+        toastElement.className = `toast toast-${type}${action ? " has-action" : ""}`;
         toastElement.setAttribute("role", type === "error" ? "alert" : "status");
-        const icon = type === "error" ? "alert-triangle" : type === "achievement" ? "trophy" : "sparkles";
-        toastElement.innerHTML = `<span class="toast-icon"><i data-lucide="${icon}"></i></span><div class="toast-body"><strong>${escapeHtml(title)}</strong>${message ? `<p class="toast-message">${escapeHtml(message)}</p>` : ""}</div><span class="toast-progress" aria-hidden="true"></span>`;
+        const icon = type === "error" ? "alert-triangle" : type === "achievement" ? "trophy" : type === "undo" ? "trash-2" : "sparkles";
+        const actionMarkup = action
+            ? `<button class="toast-action" type="button"><i data-lucide="${action.icon || "undo-2"}"></i><span>${escapeHtml(action.label)}</span><span class="toast-count">${Math.ceil(duration / 1000)}</span></button>`
+            : "";
+        toastElement.innerHTML = `<span class="toast-icon"><i data-lucide="${icon}"></i></span><div class="toast-body"><strong>${escapeHtml(title)}</strong>${message ? `<p class="toast-message">${escapeHtml(message)}</p>` : ""}</div>${actionMarkup}<span class="toast-progress" aria-hidden="true" style="animation-duration:${duration}ms"></span>`;
         element("toastStack").appendChild(toastElement);
         iconsIn(toastElement);
 
         let timer = null;
+        let ticker = null;
         let leaving = false;
-        const remove = () => toastElement.remove();
+        let expired = false;
+        const remove = () => {
+            clearInterval(ticker);
+            toastElement.remove();
+        };
+
+        // Fires exactly once, whichever way the window closes: the countdown ending, a
+        // swipe, or the page going away with the toast still up.
+        const expire = () => {
+            if (expired) {
+                return;
+            }
+            expired = true;
+            clearInterval(ticker);
+            if (options.onExpire) {
+                options.onExpire();
+            }
+        };
+
+        if (action) {
+            const counter = toastElement.querySelector(".toast-count");
+            const endsAt = performance.now() + duration;
+            ticker = setInterval(() => {
+                const left = Math.max(0, Math.ceil((endsAt - performance.now()) / 1000));
+                counter.textContent = String(left);
+                if (!left) {
+                    clearInterval(ticker);
+                }
+            }, 250);
+            toastElement.querySelector(".toast-action").addEventListener("click", (event) => {
+                event.stopPropagation();
+                // Acted on: the thing the countdown was waiting for must never happen.
+                expired = true;
+                clearInterval(ticker);
+                clearTimeout(timer);
+                action.onClick();
+                dismiss();
+            });
+        }
 
         // Standard exit (tap / auto-dismiss): slide-up + fade via CSS animation.
         const dismiss = () => {
@@ -11079,6 +11498,7 @@ import {
                 return;
             }
             leaving = true;
+            expire();
             clearTimeout(timer);
             const offX = direction === "left" ? -window.innerWidth : direction === "right" ? window.innerWidth : 0;
             const offY = direction === "up" ? -180 : 0;
@@ -11090,19 +11510,32 @@ import {
         };
 
         const startTimer = () => {
-            timer = setTimeout(dismiss, 4200);
+            if (action) {
+                // Scheduled once, below. Restarting it here — which every drag and every
+                // mouseleave would do — hands back time the visible counter has already
+                // spent, and the two stop agreeing.
+                return;
+            }
+            timer = setTimeout(dismiss, duration);
         };
-        startTimer();
+        if (action) {
+            timer = setTimeout(() => {
+                expire();
+                dismiss();
+            }, duration);
+        } else {
+            startTimer();
+        }
 
-        // Hover pauses the auto-dismiss (desktop).
+        // Hover pauses the auto-dismiss (desktop) — but never a countdown.
         toastElement.addEventListener("mouseenter", () => {
-            if (!leaving) {
+            if (!leaving && !action) {
                 clearTimeout(timer);
                 toastElement.classList.add("is-paused");
             }
         });
         toastElement.addEventListener("mouseleave", () => {
-            if (!leaving) {
+            if (!leaving && !action) {
                 toastElement.classList.remove("is-paused");
                 startTimer();
             }
@@ -11129,7 +11562,9 @@ import {
             dy = 0;
             dragging = true;
             moved = false;
-            clearTimeout(timer);
+            if (!action) {
+                clearTimeout(timer);
+            }
             toastElement.style.animation = "none"; // free the transform for dragging
             toastElement.classList.add("is-paused", "is-dragging");
             try {
@@ -11185,7 +11620,7 @@ import {
                 toastElement.style.opacity = "";
                 toastElement.removeEventListener("transitionend", clear);
             }, { once: true });
-            if (!leaving) {
+            if (!leaving && !action) {
                 toastElement.classList.remove("is-paused");
                 startTimer();
             }
@@ -11199,8 +11634,89 @@ import {
                 moved = false;
                 return; // a swipe/drag, not a tap
             }
+            if (action) {
+                return; // a stray tap must not throw away the undo window
+            }
             dismiss();
         });
+
+        return { expireNow: () => { expire(); dismiss(); } };
+    }
+
+    // ---- Take-it-back deletions -----------------------------------------------------------
+    //
+    // Nothing reaches the server while the window is open. The row leaves the screen at
+    // once and the delete commits only when the countdown ends — the opposite order to
+    // "delete now, re-create if they change their mind", which has to rebuild the row
+    // from the client's copy and can fail halfway, leaving the person with neither their
+    // workout nor a clean error to act on.
+    const pendingRemovals = new Map();
+
+    function removeWithUndo({ key, title, message, undoLabel = "Повернути", seconds = 20, restore, commit }) {
+        // Deleting the same row twice would leave two timers racing to commit it; settle
+        // the older one first so its work is not silently dropped.
+        commitPendingRemovals(key);
+        let settled = false;
+        const settle = (run) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            pendingRemovals.delete(key);
+            Promise.resolve()
+                .then(run)
+                .catch((error) => console.warn("Undo settle failed", error));
+        };
+        pendingRemovals.set(key, () => settle(commit));
+        toast(title, message, "undo", {
+            duration: seconds * 1000,
+            action: { label: undoLabel, icon: "undo-2", onClick: () => settle(restore) },
+            onExpire: () => settle(commit)
+        });
+    }
+
+    /**
+     * Settle outstanding windows now — one by key, or all of them.
+     *
+     * Called when the tab goes away, because an undo window is a promise to delete
+     * LATER, and a promise nobody is left running is just a row that quietly came back
+     * from the dead on the next boot.
+     */
+    function commitPendingRemovals(key) {
+        for (const [id, commit] of [...pendingRemovals]) {
+            if (key === undefined || id === key) {
+                pendingRemovals.delete(id);
+                try {
+                    commit();
+                } catch (error) {
+                    console.warn("Undo commit failed", error);
+                }
+            }
+        }
+    }
+
+    // Plain-language "what am I throwing away" for the confirm and the toast. Both read
+    // from the same function so the dialog cannot promise one thing and the toast report
+    // another.
+    function workoutRemovalSummary(workoutItem) {
+        const exercises = workoutExerciseCount(workoutItem);
+        const sets = workoutSetCount(workoutItem);
+        const volume = workoutVolumeOf(workoutItem);
+        const cardio = workoutCardioMinutes(workoutItem);
+        const parts = [];
+        if (exercises) {
+            parts.push(`${exercises} ${pluralUk(exercises, "вправа", "вправи", "вправ")}`);
+        }
+        if (sets) {
+            parts.push(`${sets} ${pluralUk(sets, "підхід", "підходи", "підходів")}`);
+        }
+        if (volume) {
+            parts.push(`${number(volume)} кг обсягу`);
+        }
+        if (cardio) {
+            parts.push(`${cardio} хв кардіо`);
+        }
+        return parts.join(" · ");
     }
 
     function icons() {
@@ -11261,6 +11777,10 @@ import {
 
     function inputValue(id) {
         return element(id)?.value || "";
+    }
+
+    function checkboxValue(id) {
+        return Boolean(element(id)?.checked);
     }
 
     function round(value, precision = 1) {
@@ -13387,6 +13907,7 @@ import {
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
             flushPendingWorkoutSaves();
+            commitPendingRemovals();
             // A backgrounded tab holding an open stream keeps the radio busy for events
             // it cannot show anyone. Phones suspend the connection anyway; closing it
             // deliberately means the reconnect happens on returning, not at some
@@ -13400,6 +13921,10 @@ import {
     });
     window.addEventListener("pagehide", () => {
         flushPendingWorkoutSaves();
+        // An open undo window is a delete that has been promised but not sent. Left
+        // unsettled it is simply a row that comes back from the dead on the next boot,
+        // so the tab going away settles every one of them.
+        commitPendingRemovals();
         stopLiveStream();
     });
 

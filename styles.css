@@ -1487,6 +1487,15 @@ select option {
     background: var(--color-info-dim);
 }
 
+/* A past day that was planned and then never logged. Muted on purpose: it is not an
+   error, it is simply a session that did not happen, and it should not compete with the
+   completed ones for attention. See lib/workout-status.js. */
+.status-badge.missed {
+    border-color: var(--color-border-strong);
+    color: var(--color-faint);
+    background: var(--color-surface-2);
+}
+
 .status-badge.readonly,
 .badge.locked {
     border-color: var(--color-border);
@@ -2620,6 +2629,12 @@ tr:last-child td {
     background: color-mix(in srgb, var(--color-info) 16%, var(--color-surface-2)) !important;
 }
 
+.fc-event.workout-status-missed {
+    border-left-color: var(--color-faint) !important;
+    background: color-mix(in srgb, var(--color-faint) 12%, var(--color-surface-2)) !important;
+    opacity: 0.75;
+}
+
 .fc-event.workout-status-active {
     border-left-color: var(--color-warning) !important;
     background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface-2)) !important;
@@ -2651,6 +2666,10 @@ tr:last-child td {
 
 .fc-list-event.workout-status-planned .fc-list-event-dot {
     border-color: var(--color-info) !important;
+}
+
+.fc-list-event.workout-status-missed .fc-list-event-dot {
+    border-color: var(--color-faint) !important;
 }
 
 .fc-list-event.workout-status-active .fc-list-event-dot {
@@ -2974,6 +2993,34 @@ tr:last-child td {
     line-height: 1.55;
 }
 
+/* What exactly is being acted on, under the question. */
+.confirm-detail {
+    margin: 6px 0 0;
+    color: var(--color-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.confirm-note {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 12px 0 0;
+    padding: 8px 11px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-elevated));
+    color: var(--color-text);
+    font-size: 12.5px;
+}
+
+.confirm-note svg {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    color: var(--color-accent);
+}
+
 /* Multi-choice dialog buttons: right-aligned, wrap on narrow screens. */
 .confirm-choices {
     justify-content: flex-end;
@@ -3108,6 +3155,82 @@ tr:last-child td {
 
 .toast.is-paused .toast-progress {
     animation-play-state: paused;
+}
+
+/* ---- Take-it-back toast ------------------------------------------------------------
+   A toast with an action is a decision still hanging, not a receipt: it is not
+   tap-to-dismiss, so it loses the pointer cursor that promises otherwise. */
+.toast.has-action {
+    cursor: default;
+    align-items: center;
+    padding-right: 11px;
+}
+
+.toast-undo .toast-icon {
+    color: var(--color-danger);
+    background: var(--color-danger-dim);
+}
+
+.toast-undo .toast-progress {
+    background: linear-gradient(90deg, var(--color-danger), var(--color-warning));
+}
+
+.toast-action {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: center;
+    padding: 7px 10px 7px 9px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    color: var(--color-accent-strong);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.toast-action:hover {
+    background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+    border-color: var(--color-accent);
+}
+
+.toast-action svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Tabular + a fixed box so 20 → 9 does not resize the button mid-countdown. */
+.toast-count {
+    min-width: 2ch;
+    padding: 2px 5px;
+    border-radius: var(--radius-pill);
+    background: rgba(0, 0, 0, 0.28);
+    color: var(--color-text);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    text-align: center;
+}
+
+@media (max-width: 480px) {
+    /* The button drops under the text rather than squeezing the message to two words. */
+    .toast.has-action {
+        flex-wrap: wrap;
+    }
+
+    .toast.has-action .toast-body {
+        flex: 1 1 100%;
+    }
+
+    .toast-action {
+        margin-left: auto;
+    }
 }
 
 .toast.is-leaving .toast-progress {
@@ -3606,6 +3729,10 @@ tr:last-child td {
 .hist-row.status-active .hist-date {
     border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
     color: var(--color-warning);
+}
+
+.hist-row.status-missed .hist-date {
+    color: var(--color-faint);
 }
 
 .hist-main {
@@ -5031,6 +5158,198 @@ ul {
 /* Catalog filter block sits below the card header («Власна вправа») — give it room. */
 #exerciseCatalogFilters {
     margin-top: 14px;
+}
+
+/* ---- Timed sets --------------------------------------------------------------------
+   Static holds — planks, hangs, carries — are prescribed in seconds. A set measures ONE
+   of the two, so `.set-fields` keeps the same three-column shape either way and only the
+   middle label changes. */
+.chip.chip-timed {
+    gap: 4px;
+    border-color: var(--color-info-dim);
+    color: var(--color-info);
+    background: color-mix(in srgb, var(--color-info) 12%, transparent);
+}
+
+.chip.chip-timed svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* The header toggle, lit while the block is on the clock. */
+.icon-button.is-on {
+    border-color: var(--color-info-dim);
+    color: var(--color-info);
+    background: color-mix(in srgb, var(--color-info) 14%, transparent);
+}
+
+.set-fields.is-timed .set-field:nth-child(2) .set-field-label {
+    color: var(--color-info);
+}
+
+/* An explained switch: the label carries a sentence, so the box must not stretch to the
+   height of the text next to it. */
+.toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 17px;
+    height: 17px;
+    margin: 1px 0 0;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+}
+
+.toggle-row-text {
+    display: block;
+    min-width: 0;
+}
+
+.toggle-row-text strong {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+.toggle-row-text .card-caption {
+    margin-top: 2px;
+}
+
+/* ---- Catalogue counter -------------------------------------------------------------
+   How much of the library the current filter leaves standing. Tabular figures are not
+   optional here: the number counts up, and proportional digits make it jitter sideways
+   the whole way. */
+.catalog-count {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface-2));
+}
+
+.cc-num {
+    flex: 0 0 auto;
+    min-width: 2.4ch;
+    text-align: right;
+    font-size: 27px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    color: var(--color-accent);
+}
+
+.cc-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.cc-label {
+    display: block;
+    font-size: 12px;
+    color: var(--color-muted);
+}
+
+.cc-label b {
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.cc-bar {
+    margin-top: 6px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--color-border);
+    overflow: hidden;
+}
+
+.cc-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--color-accent), var(--color-accent-strong));
+    transition: width 320ms ease;
+}
+
+.cc-chips {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    font-size: 11px;
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.cc-chip svg {
+    width: 12px;
+    height: 12px;
+}
+
+.cc-chip.warn {
+    color: var(--color-warning);
+    border-color: var(--color-warning-dim);
+}
+
+/* Nothing matched: the strip goes quiet rather than shouting a green zero. */
+.catalog-count.is-empty {
+    border-color: var(--color-border);
+    background: var(--color-surface-2);
+}
+
+.catalog-count.is-empty .cc-num {
+    color: var(--color-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cc-bar > span {
+        transition: none;
+    }
+}
+
+@media (max-width: 560px) {
+    .catalog-count {
+        flex-wrap: wrap;
+        gap: 10px 12px;
+        padding: 10px 12px;
+    }
+
+    .cc-num {
+        font-size: 24px;
+    }
+
+    .cc-text {
+        flex: 1 1 140px;
+    }
+
+    /* Below the number rather than squeezed beside it — at 390px the two chips and a
+       three-digit total do not fit on one line without the label ellipsising. */
+    .cc-chips {
+        flex: 1 1 100%;
+    }
 }
 
 .picker-filter-row {
@@ -8536,7 +8855,6 @@ html.compact-ui .chip {
 }
 
 /* ===== AI-тренування ===================================================== */
-.set-fields.has-duration { grid-template-columns: repeat(4, 1fr); }
 
 #aiWorkoutBlock { display: grid; gap: 16px; margin-bottom: 16px; }
 
@@ -8691,7 +9009,6 @@ html.compact-ui .chip {
 .ai-req-time { color: var(--color-faint); }
 
 @media (max-width: 700px) {
-    .set-fields.has-duration { grid-template-columns: repeat(2, 1fr); }
     .ai-set-grid { grid-template-columns: repeat(2, 1fr); }
     .ai-cardio-fields { grid-template-columns: repeat(2, 1fr); }
     .ai-cardio-intensity { grid-column: 1 / -1; }
