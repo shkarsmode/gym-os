@@ -5160,6 +5160,312 @@ ul {
     margin-top: 14px;
 }
 
+/* ==== Onboarding =====================================================================
+   One question per screen. The same six fields laid out as a form are a wall that gets
+   abandoned; asked one at a time under a progress bar they read as a minute of work.
+   Sits above every other overlay because it is the first thing a new account sees. */
+.ob-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: grid;
+    /* An explicit, bounded row. Without it the row is auto-sized to the card's content,
+       so the card's own `max-height: 100%` resolves against 856px of content and clamps
+       nothing — the muscle grid ran off a 640px-tall phone and took the «Далі» button
+       with it. minmax(0, 1fr) is a DEFINITE height for the percentage to bite on. */
+    grid-template-rows: minmax(0, 1fr);
+    place-items: center;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--color-page) 82%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    opacity: 0;
+    transition: opacity 0.24s ease;
+}
+
+.ob-layer.visible { opacity: 1; }
+.ob-layer.hidden { display: none; }
+
+.ob-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    width: min(480px, 100%);
+    max-height: 100%;
+    /* A grid item defaults to min-height:auto and refuses to shrink below its content,
+       which would undo the clamp above. */
+    min-height: 0;
+    padding: 22px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    background:
+        radial-gradient(120% 90% at 50% -20%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 60%),
+        var(--color-surface);
+    box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.75);
+    transform: translateY(10px) scale(0.985);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ob-layer.visible .ob-card { transform: none; }
+
+/* Progress, not a step count: "3 of 5" invites arithmetic, pips are read at a glance. */
+.ob-pips { display: flex; gap: 5px; }
+
+.ob-pips span {
+    flex: 1 1 0;
+    height: 3px;
+    border-radius: var(--radius-pill);
+    background: var(--color-border);
+    transition: background 0.24s ease;
+}
+
+.ob-pips span.done { background: color-mix(in srgb, var(--color-accent) 55%, transparent); }
+.ob-pips span.on { background: var(--color-accent); }
+
+.ob-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ob-head { text-align: center; }
+
+.ob-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    margin-bottom: 10px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    color: var(--color-accent);
+}
+
+.ob-icon svg { width: 22px; height: 22px; }
+
+.ob-head h2 {
+    margin: 0;
+    font-size: 21px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+}
+
+.ob-sub {
+    margin: 6px 0 0;
+    color: var(--color-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* Deliberately large: these are the only controls on the screen, and a thumb on a phone
+   should not have to aim. */
+.ob-input {
+    width: 100%;
+    padding: 13px 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 16px;   /* under 16px iOS zooms the whole page on focus */
+    text-align: center;
+}
+
+.ob-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.ob-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ob-field { display: block; }
+
+.ob-field > span:first-child {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.ob-input-wrap { position: relative; display: block; }
+
+.ob-input-wrap em {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    color: var(--color-faint);
+    font-size: 12px;
+    font-style: normal;
+    pointer-events: none;
+}
+
+.ob-input-wrap .ob-input { padding-right: 34px; }
+
+.ob-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--color-accent);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ob-hint svg { width: 14px; height: 14px; }
+
+.ob-error {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--color-danger);
+    font-size: 12.5px;
+}
+
+.ob-error svg { flex: 0 0 auto; width: 14px; height: 14px; }
+
+/* The catalogue's own muscle cards, tightened for a dialog. */
+.muscle-grid.ob-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+.ob-choices { display: grid; gap: 10px; }
+
+.ob-choice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.ob-choice:hover { border-color: var(--color-border-strong); }
+
+.ob-choice.active {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-2));
+}
+
+.ob-choice-ic {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--color-elevated);
+    color: var(--color-muted);
+}
+
+.ob-choice.active .ob-choice-ic {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--color-accent);
+}
+
+.ob-choice-ic svg { width: 17px; height: 17px; }
+.ob-choice-text { flex: 1 1 auto; min-width: 0; }
+.ob-choice-text strong { display: block; font-size: 14px; font-weight: 600; }
+
+.ob-choice-text span {
+    display: block;
+    margin-top: 2px;
+    color: var(--color-muted);
+    font-size: 12.5px;
+}
+
+/* Present but invisible until chosen, so picking an option does not shift the row. */
+.ob-choice-tick {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    color: var(--color-accent);
+    opacity: 0;
+    transition: opacity 0.16s ease;
+}
+
+.ob-choice.active .ob-choice-tick { opacity: 1; }
+
+.ob-teasers { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+
+.ob-teaser {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.ob-teaser svg { width: 13px; height: 13px; }
+
+.ob-perks { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+
+.ob-perks li {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 11px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+}
+
+.ob-perks svg {
+    flex: 0 0 auto;
+    width: 17px;
+    height: 17px;
+    margin-top: 1px;
+    color: var(--color-accent);
+}
+
+.ob-perks strong { display: block; font-size: 13.5px; font-weight: 600; }
+
+.ob-perks span {
+    display: block;
+    min-width: 0;
+    color: var(--color-muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.ob-foot { display: flex; gap: 10px; }
+.ob-foot .button { flex: 1 1 0; justify-content: center; }
+.ob-foot.single .button { flex: 1 1 100%; }
+
+@media (max-width: 560px) {
+    .ob-card { gap: 14px; padding: 18px 16px; }
+    .ob-head h2 { font-size: 19px; }
+    .muscle-grid.ob-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+}
+
+/* Short screens: shed the decoration rather than the question. */
+@media (max-height: 720px) {
+    .ob-icon { width: 38px; height: 38px; margin-bottom: 6px; }
+    .ob-icon svg { width: 18px; height: 18px; }
+    .ob-head h2 { font-size: 18px; }
+    .ob-perks li { padding: 9px 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ob-layer,
+    .ob-card { transition: none; }
+}
+
 /* ---- Timed sets --------------------------------------------------------------------
    Static holds — planks, hangs, carries — are prescribed in seconds. A set measures ONE
    of the two, so `.set-fields` keeps the same three-column shape either way and only the

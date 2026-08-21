@@ -11,6 +11,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
 import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
+import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
@@ -1328,8 +1329,9 @@ import {
                 renderSection();
             }
             // Deliberately late: landing straight into a dialog on open is how a setting
-            // gets dismissed without being read.
-            setTimeout(maybeAskAboutPrivacy, 3000);
+            // gets dismissed without being read. Privacy is now one of the onboarding
+            // questions rather than its own ambush, so there is a single entry point.
+            setTimeout(maybeStartOnboarding, 2200);
         });
         // Cheers that arrived while the app was closed. This used to run only on
         // returning to an already-open tab, which is the rarer case: a phone in a gym is
@@ -3484,7 +3486,7 @@ import {
         const summary = userStats(user.id);
         const info = userLevel(user.id);
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: true })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal)}</span></div><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="levels"><i data-lucide="medal"></i>Прокачка</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="changelog"><i data-lucide="sparkles"></i>Що нового</button></div>${achievementBadges(user.id)}</section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: true })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal)}</span></div><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="open-onboarding"><i data-lucide="hand-metal"></i>Знайомство</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="levels"><i data-lucide="medal"></i>Прокачка</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="changelog"><i data-lucide="sparkles"></i>Що нового</button></div>${achievementBadges(user.id)}</section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
@@ -4704,6 +4706,19 @@ import {
             "focus-step": () => focusStepField(actionElement.dataset.field, Number(actionElement.dataset.delta)),
             "focus-finish-workout": focusFinishWorkout,
             "open-profile-editor": openProfileEditor,
+            "open-onboarding": openOnboarding,
+            "onboarding-next": onboardingNext,
+            "onboarding-back": onboardingBack,
+            "onboarding-skip": closeOnboarding,
+            "onboarding-finish": finishOnboarding,
+            "onboarding-muscle": () => {
+                setOnboardingField("favoriteMuscleGroup", actionElement.dataset.value);
+                renderOnboardingBody();
+            },
+            "onboarding-privacy": () => {
+                setOnboardingField("hideWorkoutDetails", actionElement.dataset.value === "true");
+                renderOnboardingBody();
+            },
             "save-profile": saveProfile,
             "save-bodyweight": saveBodyweight,
             "open-workout": () => openWorkout(actionElement.dataset.workoutId),
@@ -4758,6 +4773,12 @@ import {
     async function handleChange(event) {
         const actionElement = event.target.closest("[data-action]");
         if (!actionElement) {
+            return;
+        }
+
+        // gym-date fires `change`, not `input`, so the birthday step is read here.
+        if (actionElement.dataset.action === "onboarding-field") {
+            setOnboardingField(actionElement.dataset.obField, actionElement.value);
             return;
         }
 
@@ -4905,6 +4926,14 @@ import {
             "open-exercise",
             "open-user",
             "open-profile-editor",
+            // Onboarding paints its own next screen; a spinner on the button would be a
+            // loading state for something that is already on screen.
+            "open-onboarding",
+            "onboarding-next",
+            "onboarding-back",
+            "onboarding-skip",
+            "onboarding-muscle",
+            "onboarding-privacy",
             "open-workout",
             "open-cardio-modal",
             "timer-add",
@@ -5005,6 +5034,11 @@ import {
     function handleInput(event) {
         const actionElement = event.target.closest("[data-action]");
         if (!actionElement) {
+            return;
+        }
+
+        if (actionElement.dataset.action === "onboarding-field") {
+            setOnboardingField(actionElement.dataset.obField, actionElement.value);
             return;
         }
 
@@ -13057,6 +13091,304 @@ import {
             <p class="card-caption">${escapeHtml(name)} приховує вправи, підходи й ваги. Видно, що тренування було — решта лише за згодою.</p>
             ${action ? `<div class="action-row" style="justify-content:center;">${action}</div>` : ""}
         </section>`;
+    }
+
+    // ---- Onboarding ---------------------------------------------------------------------
+    //
+    // One flow that asks everything an account is missing, privacy included. Privacy used
+    // to be its own dialog that appeared three seconds after opening the app, which is
+    // the worst possible moment to read a setting about who can see your data: you came
+    // to log a workout, and a modal about visibility is something to dismiss. As a step
+    // among five, with the same weight as height and bodyweight, it gets answered.
+    //
+    // One question per screen on purpose. The same six fields as a form are a wall that
+    // gets abandoned; asked one at a time with a progress bar they are a minute.
+    const onboardingState = { open: false, index: 0, draft: null, steps: [], saving: false, error: "" };
+
+    function maybeStartOnboarding() {
+        if (onboardingState.open || storage.mode !== "api" || !accessState.loaded) {
+            return;
+        }
+        // Never over a workout in progress — that screen is somebody mid-set.
+        if (state.section === "workout" && activeWorkoutFor(currentUser().id)) {
+            return;
+        }
+        // Once per session. Dismissing it must not mean being asked again on the next
+        // route change, and completing it must not race a second copy into existence.
+        if (sessionStorage.getItem("gymos-onboarding-seen")) {
+            return;
+        }
+        const user = currentUser();
+        if (!needsOnboarding(user, Boolean(accessState.privacyChoiceAt))) {
+            return;
+        }
+        openOnboarding();
+    }
+
+    function openOnboarding() {
+        const user = currentUser();
+        const missing = missingOnboarding(user, Boolean(accessState.privacyChoiceAt));
+        onboardingState.open = true;
+        onboardingState.index = 0;
+        onboardingState.saving = false;
+        onboardingState.error = "";
+        // Only what is actually missing, wrapped in the intro and the payoff. Asking
+        // somebody to re-confirm a height they entered last year is how a one-minute
+        // flow becomes something to close.
+        onboardingState.steps = ["intro", ...ONBOARDING_QUESTIONS.filter((step) => missing.includes(step)), "done"];
+        onboardingState.draft = {
+            displayName: user.displayName || user.name || "",
+            birthDate: user.birthDate || (user.birthYear ? `${user.birthYear}-01-01` : ""),
+            height: user.height || "",
+            bodyweight: user.bodyweight || "",
+            favoriteMuscleGroup: user.favoriteMuscleGroup || "",
+            hideWorkoutDetails: accessState.privacyChoiceAt ? accessState.hideWorkoutDetails : null
+        };
+        try {
+            sessionStorage.setItem("gymos-onboarding-seen", "1");
+        } catch (error) {
+            // A private-mode browser simply gets asked again next open.
+        }
+        renderOnboarding();
+        lockBackgroundScroll();
+    }
+
+    function closeOnboarding() {
+        onboardingState.open = false;
+        const layer = element("onboardingLayer");
+        if (layer) {
+            layer.classList.remove("visible");
+            setTimeout(() => {
+                if (!onboardingState.open) {
+                    layer.innerHTML = "";
+                    layer.classList.add("hidden");
+                }
+            }, 260);
+        }
+        unlockBackgroundScroll();
+    }
+
+    function currentOnboardingStep() {
+        return onboardingState.steps[onboardingState.index] || "done";
+    }
+
+    function renderOnboarding() {
+        let layer = element("onboardingLayer");
+        if (!layer) {
+            layer = document.createElement("div");
+            layer.id = "onboardingLayer";
+            layer.className = "ob-layer hidden";
+            document.body.appendChild(layer);
+        }
+        const step = currentOnboardingStep();
+        // The intro and the payoff are not questions, so they get no progress pip and no
+        // back button — a progress bar that counts screens you cannot fail is noise.
+        const questions = onboardingState.steps.filter((item) => item !== "intro" && item !== "done");
+        const position = step === "done" ? questions.length : questions.indexOf(step);
+        const pips = questions.length > 1
+            ? `<div class="ob-pips" aria-hidden="true">${questions.map((item, index) => `<span class="${index < position ? "done" : index === position ? "on" : ""}"></span>`).join("")}</div>`
+            : "";
+        layer.innerHTML = `<div class="ob-card ob-${step}" role="dialog" aria-modal="true" aria-label="Знайомство">
+            ${pips}
+            <div class="ob-body" id="onboardingBody">${onboardingStepMarkup(step)}</div>
+            ${onboardingFooter(step)}
+        </div>`;
+        layer.classList.remove("hidden");
+        iconsIn(layer);
+        requestAnimationFrame(() => layer.classList.add("visible"));
+        // Autofocus the one field a step is waiting on — but never on a touch screen,
+        // where it summons the keyboard over the question you are meant to read first.
+        if (!matchMedia("(pointer: coarse)").matches) {
+            layer.querySelector("input[data-ob-field]")?.focus();
+        }
+    }
+
+    function onboardingHead(icon, title, subtitle) {
+        return `<div class="ob-head"><span class="ob-icon"><i data-lucide="${icon}"></i></span><h2>${escapeHtml(title)}</h2>${subtitle ? `<p class="ob-sub">${escapeHtml(subtitle)}</p>` : ""}</div>`;
+    }
+
+    function onboardingStepMarkup(step) {
+        const draft = onboardingState.draft;
+        const error = onboardingState.error ? `<p class="ob-error" role="alert"><i data-lucide="alert-circle"></i>${escapeHtml(onboardingState.error)}</p>` : "";
+
+        if (step === "intro") {
+            const name = (currentUser().displayName || "").split(" ")[0];
+            return `${onboardingHead("hand-metal", name ? `Привіт, ${name}!` : "Привіт!", "Кілька коротких питань — і GymOS рахуватиме твій прогрес, рівні та рекорди.")}
+                <div class="ob-teasers">
+                    <span class="ob-teaser"><i data-lucide="timer"></i>1 хвилина</span>
+                    <span class="ob-teaser"><i data-lucide="pencil"></i>Змінити можна будь-коли</span>
+                </div>`;
+        }
+
+        if (step === "identity") {
+            return `${onboardingHead("user-round", "Як тебе показувати?", "Це імʼя бачитимуть у команді, стрічці й рейтингах.")}
+                <input class="ob-input" type="text" maxlength="40" placeholder="Твоє імʼя" value="${escapeHtml(draft.displayName)}" data-action="onboarding-field" data-ob-field="displayName" autocomplete="nickname">${error}`;
+        }
+
+        if (step === "birth") {
+            const age = validBirthDate(draft.birthDate) ? ageFromBirthDate(draft.birthDate) : null;
+            return `${onboardingHead("cake", "Коли твій день народження?", "Вік впливає на силові нормативи й на те, скільки часу треба на відновлення.")}
+                <gym-date class="ob-date" id="onboardingBirth" value="${escapeHtml(draft.birthDate)}" data-action="onboarding-field" data-ob-field="birthDate"></gym-date>
+                ${age === null ? "" : `<p class="ob-hint"><i data-lucide="sparkles"></i>${age} ${pluralUk(age, "рік", "роки", "років")}</p>`}${error}`;
+        }
+
+        if (step === "body") {
+            return `${onboardingHead("ruler", "Зріст і вага", "Потрібні для нормативів і графіка ваги тіла.")}
+                <div class="ob-pair">
+                    <label class="ob-field"><span>Зріст</span><span class="ob-input-wrap"><input class="ob-input" type="number" inputmode="numeric" min="100" max="250" placeholder="180" value="${escapeHtml(String(draft.height || ""))}" data-action="onboarding-field" data-ob-field="height"><em>см</em></span></label>
+                    <label class="ob-field"><span>Вага</span><span class="ob-input-wrap"><input class="ob-input" type="number" inputmode="decimal" step="0.1" min="30" max="300" placeholder="80" value="${escapeHtml(String(draft.bodyweight || ""))}" data-action="onboarding-field" data-ob-field="bodyweight"><em>кг</em></span></label>
+                </div>${error}`;
+        }
+
+        if (step === "focus") {
+            // The catalogue's own muscle grid — silhouettes, not a dropdown of words.
+            const card = (value) => `<button type="button" class="muscle-card${draft.favoriteMuscleGroup === value ? " active" : ""}" data-action="onboarding-muscle" data-value="${escapeHtml(value)}"><span class="muscle-card-ic">${muscleIcon(value)}</span><span class="muscle-card-label">${escapeHtml(muscleLabel(value))}</span></button>`;
+            return `${onboardingHead("target", "Що любиш тренувати?", "Підсвітимо твій фокус у профілі й рейтингах.")}
+                <div class="muscle-grid ob-grid">${orderedMuscleGroups().map(card).join("")}</div>${error}`;
+        }
+
+        if (step === "privacy") {
+            const pick = (value, icon, title, text) => `<button type="button" class="ob-choice${draft.hideWorkoutDetails === (value === "true") ? " active" : ""}" data-action="onboarding-privacy" data-value="${value}">
+                <span class="ob-choice-ic"><i data-lucide="${icon}"></i></span>
+                <span class="ob-choice-text"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></span>
+                <i data-lucide="check" class="ob-choice-tick"></i>
+            </button>`;
+            return `${onboardingHead("eye", "Хто бачить твої тренування?", "Профіль, рівень і сам факт тренування видно завжди.")}
+                <div class="ob-choices">
+                    ${pick("false", "users", "Уся команда", "Бачать вправи, підходи й ваги")}
+                    ${pick("true", "lock", "Тільки я", "Деталі приховані, доступ — за запитом")}
+                </div>${error}`;
+        }
+
+        const name = (onboardingState.draft.displayName || "").split(" ")[0];
+        return `${onboardingHead("party-popper", name ? `Готово, ${name}!` : "Готово!", "")}
+            <ul class="ob-perks">
+                <li><i data-lucide="trending-up"></i><span><strong>Тренуйся і трекай</strong>Кожен підхід рахується — обсяг, рекорди, прогрес по вправах</span></li>
+                <li><i data-lucide="medal"></i><span><strong>Отримуй рівні</strong>500 рівнів, рамки для аватара й досягнення за реальну роботу</span></li>
+                <li><i data-lucide="users"></i><span><strong>Тренуйся разом</strong>Дивись сесії команди наживо, підбадьорюй і тренуйся в парі</span></li>
+                <li><i data-lucide="lightbulb"></i><span><strong>Пропонуй фічі</strong>Ідеї з дошки справді доїжджають у застосунок</span></li>
+            </ul>${error}`;
+    }
+
+    function onboardingFooter(step) {
+        if (step === "intro") {
+            return `<div class="ob-foot">
+                <button class="button button-ghost" type="button" data-action="onboarding-skip">Пізніше</button>
+                <button class="button button-primary" type="button" data-action="onboarding-next"><span>Почнемо</span><i data-lucide="arrow-right"></i></button>
+            </div>`;
+        }
+        if (step === "done") {
+            return `<div class="ob-foot single">
+                <button class="button button-primary" type="button" data-action="onboarding-finish" ${onboardingState.saving ? "disabled" : ""}><i data-lucide="${onboardingState.saving ? "loader" : "check"}"></i><span>${onboardingState.saving ? "Зберігаємо…" : "До тренування"}</span></button>
+            </div>`;
+        }
+        const first = onboardingState.steps.indexOf(step) <= 1;
+        return `<div class="ob-foot">
+            <button class="button button-ghost" type="button" data-action="onboarding-back" ${first ? "disabled" : ""}><i data-lucide="arrow-left"></i><span>Назад</span></button>
+            <button class="button button-primary" type="button" data-action="onboarding-next"><span>Далі</span><i data-lucide="arrow-right"></i></button>
+        </div>`;
+    }
+
+    function setOnboardingField(field, value) {
+        onboardingState.draft[field] = value;
+        onboardingState.error = "";
+        // Repaint only what the value changes — the live age line and the selected card.
+        // Re-rendering the step would recreate the input and drop the caret mid-typing.
+        if (field === "birthDate") {
+            renderOnboardingBody();
+        }
+    }
+
+    function renderOnboardingBody() {
+        const host = element("onboardingBody");
+        if (!host) {
+            return;
+        }
+        host.innerHTML = onboardingStepMarkup(currentOnboardingStep());
+        iconsIn(host);
+    }
+
+    function onboardingNext() {
+        const step = currentOnboardingStep();
+        const blocker = stepBlocker(step, onboardingState.draft);
+        if (blocker) {
+            onboardingState.error = blocker;
+            renderOnboardingBody();
+            return;
+        }
+        onboardingState.error = "";
+        onboardingState.index = Math.min(onboardingState.index + 1, onboardingState.steps.length - 1);
+        renderOnboarding();
+    }
+
+    function onboardingBack() {
+        onboardingState.error = "";
+        onboardingState.index = Math.max(0, onboardingState.index - 1);
+        renderOnboarding();
+    }
+
+    /**
+     * Save everything at the end, in one go.
+     *
+     * Per-step saving would leave a half-answered profile behind whenever somebody closed
+     * the tab in the middle — and a profile that is missing exactly one field is a
+     * profile that gets asked again, which is the outcome this flow exists to avoid.
+     */
+    async function finishOnboarding() {
+        if (onboardingState.saving) {
+            return;
+        }
+        onboardingState.saving = true;
+        renderOnboarding();
+        const draft = onboardingState.draft;
+        const user = currentUser();
+        const payload = {};
+        if (draft.displayName) {
+            payload.displayName = draft.displayName.trim();
+        }
+        if (validBirthDate(draft.birthDate)) {
+            payload.birthDate = draft.birthDate;
+            // Sent too, so a backend that predates birthDate still records the age.
+            payload.birthYear = Number(draft.birthDate.slice(0, 4));
+        }
+        if (Number(draft.height) > 0) {
+            payload.height = Math.round(Number(draft.height));
+        }
+        if (Number(draft.bodyweight) > 0) {
+            payload.bodyweight = Number(draft.bodyweight);
+        }
+        if (draft.favoriteMuscleGroup) {
+            payload.favoriteMuscleGroup = draft.favoriteMuscleGroup;
+        }
+        const apiMode = storage.mode === "api" && storage.apiClient.hasBaseUrl();
+        try {
+            if (Object.keys(payload).length) {
+                if (apiMode) {
+                    await storage.apiClient.updateProfile(payload);
+                }
+                Object.assign(user, payload, { updatedAt: new Date().toISOString() });
+                if (!apiMode) {
+                    await persist({ silent: true });
+                }
+            }
+            if (!apiMode) {
+                // Nothing to record the privacy choice against without a backend.
+            } else if (draft.hideWorkoutDetails === true) {
+                await setPrivacy(true);
+            } else if (draft.hideWorkoutDetails === false) {
+                accessState.privacyChoiceAt = new Date().toISOString();
+                await storage.apiClient.acknowledgePrivacy();
+            }
+            closeOnboarding();
+            renderSection();
+            renderCurrentUserButton();
+            renderSidebarProfile();
+            toast("Профіль готовий", "Гарного тренування!");
+        } catch (error) {
+            onboardingState.saving = false;
+            onboardingState.error = friendlyError(error);
+            renderOnboarding();
+        }
     }
 
     // ---- The one-time prompt for people who were here before this shipped ---------------
