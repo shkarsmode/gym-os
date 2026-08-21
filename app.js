@@ -3086,10 +3086,10 @@ import {
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 ${noteField(`workout:${workoutItem.id}`, "Нотатки тренування", "Додати нотатку до тренування", workoutItem.notes, `data-action="update-workout-notes"`, readonly)}
             </section>
+            ${readonly ? "" : supersetEntryRow(workoutItem)}
             ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutBlocks(workoutItem.exercises).map((block, blockIndex) => block.kind === "superset"
                 ? supersetBlockEditor(workoutItem, block, readonly)
                 : workoutExerciseEditor(workoutItem, block.exercise, readonly, blockIndex === 0)).join("")}</div>` : `${readonly ? "" : repeatSuggestionCard(workoutItem)}${emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}`}
-            ${readonly ? "" : supersetEntryRow(workoutItem)}
             ${cardioBlock(workoutItem, readonly)}
         `;
     }
@@ -4671,6 +4671,14 @@ import {
         document.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
                 hide();
+                // Topmost first, and then STOP. Falling through would close the sheet the
+                // confirmation was asked from and leave the confirmation over nothing.
+                if (activeConfirmDismiss) {
+                    const dismiss = activeConfirmDismiss;
+                    activeConfirmDismiss = null;
+                    dismiss();
+                    return;
+                }
                 closeSheet();
                 // Focus mode exits on Escape, but only when nothing is stacked above it.
                 if (state.focus && element("modalBackdrop").classList.contains("hidden")) {
@@ -4783,6 +4791,16 @@ import {
                 restSeconds: supersetBuilder.restSeconds
             }),
             "open-superset-menu": () => openSupersetMenu(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
+            "superset-set-rest": async () => {
+                const groupId = actionElement.dataset.supersetId;
+                const workoutItem = editWorkout();
+                const current = workoutItem ? supersetRestSeconds(workoutItem, groupId) : SUPERSET_DEFAULT_REST;
+                await supersetSetRest(groupId, resolveRestValue(actionElement, current));
+            },
+            "superset-builder-rest": () => {
+                supersetBuilder.restSeconds = resolveRestValue(actionElement, supersetBuilder.restSeconds);
+                refreshSupersetBuilder();
+            },
             "superset-add-round": () => supersetAddRound(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
             "superset-remove-round": () => supersetRemoveRound(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
             "superset-move-member": () => supersetMoveMember(actionElement.dataset.supersetId, actionElement.dataset.exerciseBlockId, actionElement.dataset.dir),
@@ -4881,6 +4899,7 @@ import {
             "ai-stats-refresh": () => loadAiStats(),
             reset: resetData,
             "close-overlay": closeOverlay,
+            "close-confirm": closeConfirmOverlay,
             "apply-update": applyUpdate,
             "open-note": () => openNote(actionElement.dataset.noteKey),
             "open-workout-type": () => openWorkoutTypePicker(actionElement.dataset.workoutId),
@@ -4911,8 +4930,17 @@ import {
             return;
         }
 
+        if (actionElement.dataset.action === "superset-builder-rest") {
+            supersetBuilder.restSeconds = resolveRestValue(actionElement, supersetBuilder.restSeconds);
+            refreshSupersetBuilder();
+            return;
+        }
+
         if (actionElement.dataset.action === "superset-set-rest") {
-            await supersetSetRest(actionElement.dataset.supersetId, actionElement.value);
+            const groupId = actionElement.dataset.supersetId;
+            const workoutItem = editWorkout();
+            const current = workoutItem ? supersetRestSeconds(workoutItem, groupId) : SUPERSET_DEFAULT_REST;
+            await supersetSetRest(groupId, resolveRestValue(actionElement, current));
             return;
         }
 
@@ -5080,6 +5108,11 @@ import {
             "superset-open-round",
             "superset-close-round",
             "open-superset-menu",
+            // Rest is nudged repeatedly; a spinner on every tap would strobe.
+            "superset-set-rest",
+            "superset-builder-rest",
+            "superset-add-round",
+            "superset-remove-round",
             "onboarding-next",
             "onboarding-back",
             "onboarding-skip",
@@ -6018,8 +6051,12 @@ import {
         ];
         // Stack on top if a modal is already open (e.g. day-sheet → "Почати" → quota),
         // so dismissing returns to it instead of closing everything.
-        const stacked = !element("modalBackdrop").classList.contains("hidden");
-        const closeAction = stacked ? "close-sheet" : "close-overlay";
+        // The paywall can be raised from a sheet (the superset menu asks for PRO when the
+        // rest is changed), so it has to sit above whatever asked — same reason the
+        // confirm dialogs use their own level.
+        const stacked = !element("modalBackdrop").classList.contains("hidden")
+            || !element("modalBackdrop2").classList.contains("hidden");
+        const closeAction = stacked ? "close-confirm" : "close-overlay";
         const html = `<div class="paywall">
             <div class="paywall-glow"></div>
             <button class="icon-button paywall-close" type="button" data-action="${closeAction}"><i data-lucide="x"></i></button>
@@ -6032,7 +6069,7 @@ import {
             <p class="paywall-foot">Оплата скоро з'явиться — зараз це прев'ю тарифу.</p>
         </div>`;
         if (stacked) {
-            openSheet(html);
+            openConfirmOverlay(html);
         } else {
             openModal(html);
         }
@@ -9472,10 +9509,14 @@ import {
      *
      * Deliberately NOT in the action bar: that row is already three buttons wide and has
      * to stay one line on a 390px phone. And deliberately not an unlabelled icon on the
-     * exercise card, which already carries six. Under the list is where the athlete has
-     * just been adding exercises, which is exactly when pairing two of them occurs to
-     * them — so a single labelled button sits there and «+ Вправа» keeps working
-     * untouched for everybody who never uses supersets.
+     * exercise card, which already carries six.
+     *
+     * It sits ABOVE the exercise list rather than below it. Below, it fell past the fold
+     * the moment a session had more than a couple of exercises — you had to scroll to the
+     * bottom, past everything, to find it, which read as an afterthought. Above the list
+     * it is next to the exercises it acts on and reachable without scrolling, while
+     * «+ Вправа» in the action bar keeps working untouched for everybody who never uses
+     * supersets.
      *
      * Hidden entirely unless the account says it uses supersets. A free account still
      * sees it, with a PRO mark, and meets the paywall only on the tap.
@@ -9493,7 +9534,7 @@ import {
             <button class="button button-secondary compact" type="button" data-action="open-superset-builder" data-workout-id="${workoutItem.id}">
                 <i data-lucide="repeat-2"></i><span>Створити суперсет</span>${locked ? `<span class="ss-pro">PRO</span>` : ""}
             </button>
-            <span class="ss-entry-hint">2–3 вправи поспіль, відпочинок після раунду</span>
+            <span class="ss-entry-hint">2–3 вправи поспіль, один відпочинок після раунду. Не користуєшся? Вимкни в <button class="ss-entry-link" type="button" data-action="navigate" data-section="settings">Налаштуваннях</button>.</span>
         </div>`;
     }
 
@@ -9616,15 +9657,14 @@ import {
         const problem = mergeProblem(supersetBuilder.picked
             .map((id) => (workoutItem.exercises || []).find((item) => item.id === id))
             .filter(Boolean));
-        const restOptions = [60, 90, 120, 150, 180, 240].map((value) =>
-            `<option value="${value}" ${supersetBuilder.restSeconds === value ? "selected" : ""}>${formatRest(value)}</option>`).join("");
-        const roundOptions = [2, 3, 4, 5, 6].map((value) =>
+        const restPicker = restPickerMarkup(supersetBuilder.restSeconds, { action: "superset-builder-rest" });
+        const roundOptions = [2, 3, 4, 5, 6, 7, 8, 10].map((value) =>
             `<option value="${value}" ${supersetBuilder.rounds === value ? "selected" : ""}>${value}</option>`).join("");
         return `<div class="modal-header"><div><h2>Новий суперсет</h2><p class="card-caption">Обери 2–3 вправи — вони виконуються поспіль, відпочинок після раунду.</p></div><button class="icon-button" type="button" data-action="close-overlay" aria-label="Закрити"><i data-lucide="x"></i></button></div>
             <div class="ss-picks" id="supersetPicks">${rows}</div>
             <div class="field-grid two" style="margin-top:14px;">
                 <div class="field"><label for="supersetRounds">Раундів</label><gym-select id="supersetRounds" data-action="superset-builder-field" data-field="rounds">${roundOptions}</gym-select></div>
-                <div class="field"><label for="supersetRest">Відпочинок після раунду</label><gym-select id="supersetRest" data-action="superset-builder-field" data-field="restSeconds">${restOptions}</gym-select></div>
+                <div class="field"><label>Відпочинок після раунду</label>${restPicker}</div>
             </div>
             ${problem && supersetBuilder.picked.length ? `<p class="ob-error" role="alert"><i data-lucide="alert-circle"></i>${escapeHtml(problem)}</p>` : ""}
             <div class="form-actions" style="justify-content:flex-end;margin-top:16px;">
@@ -9696,6 +9736,26 @@ import {
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
+        // Pressing the button in focus mode is a request to DO that round, so land on it.
+        // Without this the screen stayed on the finished round it was already showing and
+        // only the counter moved, which reads as the button having done nothing.
+        if (state.focus && block.members.some((member) => member.id === state.focus.exerciseId)) {
+            const first = block.members[0];
+            const set = ((first || {}).sets || [])[currentRoundIndex(block.members)];
+            if (first && set) {
+                state.focus.exerciseId = first.id;
+                state.focus.setId = set.id;
+                state.focus.view = "set";
+            }
+        }
+        if (state.focus) {
+            renderFocus();
+        }
+        // The sheet shows the round count it just changed — redraw it so the number and
+        // the disabled state of «−» stay truthful without closing the menu.
+        if (!element("modalBackdrop2").classList.contains("hidden")) {
+            openSupersetMenu(workoutItem.id, groupId);
+        }
     }
 
     async function supersetRemoveRound(workoutId, groupId) {
@@ -9727,6 +9787,14 @@ import {
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
+        if (state.focus) {
+            renderFocus();
+        }
+        // The sheet shows the round count it just changed — redraw it so the number and
+        // the disabled state of «−» stay truthful without closing the menu.
+        if (!element("modalBackdrop2").classList.contains("hidden")) {
+            openSupersetMenu(workoutItem.id, groupId);
+        }
     }
 
     /**
@@ -9842,13 +9910,15 @@ import {
                 </span>
             </div>`;
         }).join("");
-        const restOptions = [60, 90, 120, 150, 180, 240].map((value) =>
-            `<option value="${value}" ${rest === value ? "selected" : ""}>${formatRest(value)}</option>`).join("");
+        const restPicker = restPickerMarkup(rest, {
+            action: "superset-set-rest",
+            extraAttrs: `data-superset-id="${escapeHtml(groupId)}"`
+        });
         openSheet(`<div class="modal-header"><div><h2>Суперсет</h2><p class="card-caption">${block.members.length} ${pluralUk(block.members.length, "вправа", "вправи", "вправ")} · ${rounds} ${pluralUk(rounds, "раунд", "раунди", "раундів")}</p></div><button class="icon-button" type="button" data-action="close-sheet" aria-label="Закрити"><i data-lucide="x"></i></button></div>
             <div class="ss-menu-members">${memberRows}</div>
             ${canAdd ? `<button class="button button-secondary compact ss-menu-add" type="button" data-action="superset-add-member" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i>Додати третю вправу</button>` : ""}
             <div class="field-grid two" style="margin-top:14px;">
-                <div class="field"><label for="supersetMenuRest">Відпочинок після раунду</label><gym-select id="supersetMenuRest" data-action="superset-set-rest" data-superset-id="${escapeHtml(groupId)}">${restOptions}</gym-select></div>
+                <div class="field"><label>Відпочинок після раунду</label>${restPicker}</div>
                 <div class="field"><label>Раунди</label><div class="ss-menu-rounds"><button class="icon-button" type="button" aria-label="Прибрати раунд" data-action="superset-remove-round" data-superset-id="${escapeHtml(groupId)}" ${rounds <= 1 ? "disabled" : ""}><i data-lucide="minus"></i></button><strong>${rounds}</strong><button class="icon-button" type="button" aria-label="Додати раунд" data-action="superset-add-round" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i></button></div></div>
             </div>
             <div class="ss-menu-danger">
@@ -9972,10 +10042,18 @@ import {
         if (!group || !canManage(workoutItem) || !requireSupersetPro()) {
             return;
         }
-        group.restSeconds = Math.max(0, Math.round(Number(seconds) || SUPERSET_DEFAULT_REST));
+        group.restSeconds = Math.max(0, Math.min(3600, Math.round(Number(seconds))));
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
+        // The picker shows the value it just set, so whichever surface is showing it has
+        // to be redrawn — otherwise the readout and the active preset lag one tap behind.
+        if (state.focus) {
+            renderFocus();
+        }
+        if (!element("modalBackdrop2").classList.contains("hidden")) {
+            openSupersetMenu(workoutItem.id, groupId);
+        }
     }
 
     /**
@@ -10025,6 +10103,43 @@ import {
     function supersetRestSeconds(workoutItem, groupId) {
         const group = supersetGroupOf(workoutItem, groupId);
         return Math.max(0, Math.round(Number(group?.restSeconds ?? SUPERSET_DEFAULT_REST)));
+    }
+
+    /**
+     * Rest picker — a stepper plus presets, not a fixed dropdown.
+     *
+     * The old control was a six-option select (1:00 … 4:00), which could express neither
+     * "thirty seconds is plenty" nor "four minutes is not enough". Rest is the one number
+     * in a superset the athlete tunes most, so it takes any value: ±15 s steps, a direct
+     * numeric field, and presets for the values people actually reach for.
+     */
+    const REST_PRESETS = [30, 60, 90, 120, 180, 300];
+
+    function restPickerMarkup(seconds, { action, extraAttrs = "", idAttr = "" }) {
+        const value = Math.max(0, Math.round(Number(seconds) || 0));
+        const presets = REST_PRESETS.map((preset) =>
+            `<button class="rest-preset${preset === value ? " active" : ""}" type="button" data-action="${action}" ${extraAttrs} data-rest="${preset}">${formatRest(preset)}</button>`).join("");
+        return `<div class="rest-picker">
+            <div class="focus-stepper focus-stepper-rest">
+                <button class="focus-step" type="button" aria-label="Менше на 15 секунд" data-action="${action}" ${extraAttrs} data-rest-delta="-15"><i data-lucide="minus"></i></button>
+                <input type="number" inputmode="numeric" step="5" min="0" max="3600" value="${value}" aria-label="Відпочинок у секундах" data-action="${action}" ${extraAttrs} ${idAttr}>
+                <span class="focus-rest-unit">с</span>
+                <button class="focus-step" type="button" aria-label="Більше на 15 секунд" data-action="${action}" ${extraAttrs} data-rest-delta="15"><i data-lucide="plus"></i></button>
+            </div>
+            <div class="rest-presets">${presets}</div>
+            <span class="rest-readout">${formatRest(value)}</span>
+        </div>`;
+    }
+
+    /** Resolve what a rest control was asked to do: a preset, a step, or a typed value. */
+    function resolveRestValue(actionElement, current) {
+        if (actionElement.dataset.rest !== undefined) {
+            return Math.max(0, Math.round(Number(actionElement.dataset.rest) || 0));
+        }
+        if (actionElement.dataset.restDelta !== undefined) {
+            return Math.max(0, current + Math.round(Number(actionElement.dataset.restDelta) || 0));
+        }
+        return Math.max(0, Math.min(3600, Math.round(Number(actionElement.value) || 0)));
     }
 
     function formatRest(seconds) {
@@ -10590,7 +10705,38 @@ import {
         }
         state.focus.exerciseId = exercise.id;
         state.focus.setId = set ? set.id : null;
-        return { workout: workoutItem, list, index, exercise, set };
+
+        /*
+         * Focus mode used to treat every superset member as a standalone exercise: it
+         * walked A1's sets to the end before ever reaching A2, which is the opposite of
+         * how a superset is performed. The group is resolved here so the view can show
+         * the round and the advance can go A1 → A2 → A3 → rest.
+         *
+         * The round is the set's own index — the same identity the rest of the app uses,
+         * so nothing here can disagree with the editor.
+         */
+        let superset = null;
+        const groupId = exercise.supersetGroupId;
+        if (groupId) {
+            const block = supersetBlockOf(workoutItem, groupId);
+            if (block && block.members.length) {
+                const setIndex = set ? exercise.sets.findIndex((item) => item.id === set.id) : -1;
+                const rounds = roundCount(block.members);
+                const roundIndex = setIndex === -1
+                    ? Math.min(currentRoundIndex(block.members), Math.max(0, rounds - 1))
+                    : setIndex;
+                superset = {
+                    groupId,
+                    members: block.members,
+                    names: block.members.map((member) => exerciseById(member.exerciseId)?.name || "Вправа"),
+                    memberIndex: Math.max(0, block.members.findIndex((member) => member.id === exercise.id)),
+                    roundIndex,
+                    rounds,
+                    rest: supersetRestSeconds(workoutItem, groupId)
+                };
+            }
+        }
+        return { workout: workoutItem, list, index, exercise, set, superset };
     }
 
     function openFocusMode(workoutExerciseId = null) {
@@ -10687,8 +10833,51 @@ import {
         </button>`;
     }
 
+    /**
+     * The superset strip: which group you are in, which round, and which member.
+     *
+     * Without it focus mode said "Вправа 3 з 7" and nothing else, so a superset was
+     * indistinguishable from three unrelated exercises that happened to follow each
+     * other — the complaint that it "isn't managed at all" in focus mode.
+     */
+    function focusSupersetStrip(superset) {
+        const { names, memberIndex, roundIndex, rounds, groupId, rest } = superset;
+        const dots = Array.from({ length: rounds }, (_, index) =>
+            `<i class="${index < roundIndex ? "done" : index === roundIndex ? "on" : ""}"></i>`).join("");
+        const chips = names.map((name, index) => `<span class="focus-ss-member${index === memberIndex ? " current" : ""}${index < memberIndex ? " done" : ""}">
+            <span class="ss-pos">${positionLabel(index)}</span><span class="focus-ss-member-name">${escapeHtml(name)}</span>
+        </span>`).join("");
+        return `<div class="focus-superset" data-superset-id="${escapeHtml(groupId)}">
+            <div class="focus-ss-top">
+                <span class="ss-badge"><i data-lucide="repeat-2"></i>Суперсет</span>
+                <span class="focus-ss-round">Раунд ${Math.min(roundIndex + 1, rounds)} з ${rounds}</span>
+                <span class="ss-progress" aria-hidden="true">${dots}</span>
+            </div>
+            <div class="focus-ss-members">${chips}</div>
+            <p class="focus-ss-hint">Виконуй поспіль без відпочинку. Пауза ${formatRest(rest)} — після ${positionLabel(names.length - 1)}.</p>
+        </div>`;
+    }
+
+    /** Inside a round the button promises what happens next, not just "done". */
+    function supersetCtaLabel(superset) {
+        if (!superset) {
+            return "Підхід виконано";
+        }
+        const next = nextMemberInRound(superset.members, superset.roundIndex);
+        const remaining = superset.members
+            .map((member, index) => ({ member, index }))
+            .filter(({ index }) => index !== superset.memberIndex);
+        const upcoming = next !== null && next !== superset.memberIndex
+            ? next
+            : remaining.find(({ member }) => !((member.sets || [])[superset.roundIndex] || {}).isCompleted)?.index;
+        if (upcoming !== undefined && upcoming !== null) {
+            return `Готово → ${positionLabel(upcoming)}`;
+        }
+        return superset.roundIndex + 1 < superset.rounds ? "Раунд завершено → відпочинок" : "Останній раунд завершено";
+    }
+
     function focusSetView(context) {
-        const { workout: workoutItem, list, index, exercise, set } = context;
+        const { workout: workoutItem, list, index, exercise, set, superset } = context;
         const meta = exerciseById(exercise.exerciseId);
         const sets = exercise.sets;
         const setIndex = set ? sets.findIndex((item) => item.id === set.id) : -1;
@@ -10713,10 +10902,12 @@ import {
             ? `<div class="focus-hints-wrap"><span class="focus-hints-caption"><i data-lucide="wand-2"></i>Натисни, щоб підставити значення</span><div class="focus-hints">${lastSet ? focusHintChip("history", "Минулого разу", lastSet) : ""}${previousSet ? focusHintChip("corner-left-up", "Попередній підхід", previousSet) : ""}</div></div>`
             : "";
         const nextExercise = list[index + 1] || null;
-        return `${exerciseNav}${dots}
+        return `${superset ? focusSupersetStrip(superset) : ""}${exerciseNav}${superset ? "" : dots}
         <div class="focus-set-card">
             <div class="focus-set-heading">
-                <span class="focus-set-label">Підхід ${setIndex + 1} з ${sets.length}${timed ? " · на час" : ""}</span>
+                <span class="focus-set-label">${superset
+                    ? `${positionLabel(superset.memberIndex)} · раунд ${Math.min(superset.roundIndex + 1, superset.rounds)} з ${superset.rounds}${timed ? " · на час" : ""}`
+                    : `Підхід ${setIndex + 1} з ${sets.length}${timed ? " · на час" : ""}`}</span>
                 ${set.isCompleted ? `<span class="status-badge completed">Виконано</span>` : ""}
             </div>
             ${hints}
@@ -10743,20 +10934,28 @@ import {
                 </div>
             </div>
             <div class="focus-rest-field">
-                <span class="focus-field-label">Відпочинок</span>
-                <div class="focus-stepper focus-stepper-rest">
+                <span class="focus-field-label">${superset ? "Відпочинок після раунду" : "Відпочинок"}</span>
+                ${superset
+                    // One rest for the whole group, edited here so the athlete never has to
+                    // leave focus mode to change it mid-workout.
+                    ? restPickerMarkup(superset.rest, { action: "superset-set-rest", extraAttrs: `data-superset-id="${escapeHtml(superset.groupId)}"` })
+                    : `<div class="focus-stepper focus-stepper-rest">
                     <button class="focus-step" type="button" data-action="focus-step" data-field="restSeconds" data-delta="-15" title="−15 с"><i data-lucide="minus"></i></button>
                     <input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds">
                     <span class="focus-rest-unit">с</span>
                     <button class="focus-step" type="button" data-action="focus-step" data-field="restSeconds" data-delta="15" title="+15 с"><i data-lucide="plus"></i></button>
-                </div>
+                </div>`}
             </div>
             ${set.isCompleted
                 ? `<button class="button button-secondary focus-cta" type="button" data-action="focus-uncomplete-set"><i data-lucide="rotate-ccw"></i>Зняти позначку «виконано»</button>`
-                : `<button class="button button-primary focus-cta" type="button" data-action="focus-complete-set"><i data-lucide="check"></i>Підхід виконано</button>`}
+                : `<button class="button button-primary focus-cta" type="button" data-action="focus-complete-set"><i data-lucide="check"></i>${supersetCtaLabel(superset)}</button>`}
         </div>
         <div class="focus-secondary-row">
-            <button class="button button-secondary compact" type="button" data-action="focus-add-set"><i data-lucide="plus"></i>Підхід</button>
+            ${superset
+                // «+ Підхід» would add a set to ONE member and break the round alignment,
+                // so inside a group the round control replaces it.
+                ? `<button class="button button-secondary compact" type="button" data-action="superset-add-round" data-workout-id="${workoutItem.id}" data-superset-id="${escapeHtml(superset.groupId)}"><i data-lucide="plus"></i>Раунд</button>`
+                : `<button class="button button-secondary compact" type="button" data-action="focus-add-set"><i data-lucide="plus"></i>Підхід</button>`}
             ${nextExercise
                 ? `<button class="button button-secondary compact" type="button" data-action="focus-next-exercise" data-dir="1">Наступна вправа<i data-lucide="arrow-right"></i></button>`
                 : `<button class="button button-secondary compact" type="button" data-action="focus-finish-workout"><i data-lucide="flag"></i>Завершити тренування</button>`}
@@ -10764,8 +10963,11 @@ import {
     }
 
     function focusRestView(context) {
-        const { list, index, exercise } = context;
+        const { list, index, exercise, superset } = context;
         const meta = exerciseById(exercise.exerciseId);
+        if (superset) {
+            return focusSupersetRestView(context);
+        }
         const nextSet = exercise.sets.find((item) => !item.isCompleted);
         const nextSetIndex = nextSet ? exercise.sets.findIndex((item) => item.id === nextSet.id) : -1;
         const nextExercise = list[index + 1] || null;
@@ -10796,6 +10998,65 @@ import {
                 <button class="chip chip-button" type="button" data-action="timer-stop">Стоп</button>
                 <button class="chip chip-button" type="button" data-action="timer-add" data-delta="15">+15 с</button>
             </div>` : ""}
+            ${bottom}
+        </div>`;
+    }
+
+    /**
+     * Rest between rounds.
+     *
+     * Differs from the per-set rest screen in what it promises next: not "set 3 of 4" of
+     * the exercise you just did, but the FIRST member of the next round — which is where
+     * the athlete actually goes. The timer length is the group's, editable right here, so
+     * "four minutes is not enough" is a two-tap fix without leaving focus mode.
+     */
+    function focusSupersetRestView(context) {
+        const { superset } = context;
+        const { members, names, roundIndex, rounds, rest, groupId } = superset;
+        const running = state.timer.running;
+        const overtime = state.timer.overtime;
+        // focusCompleteSet has ALREADY moved the context on to the round about to be
+        // done, so `roundIndex` is that round — adding one to it here counted the same
+        // round twice and declared the superset finished after round 2 of 3.
+        //
+        // Whether anything is left is therefore not arithmetic on an index whose meaning
+        // shifts between the two ways of arriving here: it is simply whether the round we
+        // are pointing at has already been done.
+        // The first round still to be done, whatever route led here. Adding a round from
+        // the finished panel makes one available again, and asking "is the round we are
+        // pointing at complete" kept answering yes about the round that had just ended.
+        const upcomingRound = currentRoundIndex(members);
+        const finished = upcomingRound >= rounds;
+        const label = running ? (overtime ? "Час вийшов — рахуємо далі" : "Відпочинок після раунду") : "Перерва без таймера";
+        const firstSet = ((members[0] || {}).sets || [])[upcomingRound] || null;
+        const bottom = finished
+            ? `<div class="focus-done-panel">
+                <p class="focus-done-title">Суперсет завершено · ${rounds} ${pluralUk(rounds, "раунд", "раунди", "раундів")}</p>
+                <button class="button button-secondary focus-cta" type="button" data-action="superset-add-round" data-workout-id="${context.workout.id}" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i>Ще один раунд</button>
+                <button class="button button-primary focus-cta" type="button" data-action="focus-next-exercise" data-dir="1">Далі<i data-lucide="arrow-right"></i></button>
+                <button class="button button-secondary focus-cta" type="button" data-action="focus-finish-workout"><i data-lucide="flag"></i>Завершити тренування</button>
+            </div>`
+            : `<div class="focus-next-preview">
+                   <span>Далі · раунд ${upcomingRound + 1} з ${rounds}</span>
+                   <strong>${positionLabel(0)} ${escapeHtml(names[0] || "Вправа")}${firstSet ? ` · ${number(firstSet.weight)} кг × ${isTimedSet(firstSet) ? formatDuration(firstSet.durationSeconds) : firstSet.repetitions}` : ""}</strong>
+               </div>
+               <button class="button button-primary focus-cta" type="button" data-action="focus-start-set">Почати раунд ${upcomingRound + 1}</button>`;
+        return `<div class="focus-rest${overtime ? " overtime" : ""}" id="focusRest">
+            <p class="focus-rest-exercise"><span class="ss-badge"><i data-lucide="repeat-2"></i>Суперсет</span> ${escapeHtml(names.join(" · "))}</p>
+            <p class="focus-rest-label" id="focusRestLabel">${label}</p>
+            <div class="focus-ring">
+                <span class="focus-ring-fill" aria-hidden="true"></span>
+                <strong class="focus-ring-value" id="focusTimerValue">${running ? timerDisplayValue() : "—"}</strong>
+            </div>
+            ${running ? `<div class="focus-rest-controls">
+                <button class="chip chip-button" type="button" data-action="timer-add" data-delta="-15">−15 с</button>
+                <button class="chip chip-button" type="button" data-action="timer-stop">Стоп</button>
+                <button class="chip chip-button" type="button" data-action="timer-add" data-delta="15">+15 с</button>
+            </div>` : ""}
+            <div class="focus-ss-restedit">
+                <span class="focus-field-label">Відпочинок після раунду</span>
+                ${restPickerMarkup(rest, { action: "superset-set-rest", extraAttrs: `data-superset-id="${escapeHtml(groupId)}"` })}
+            </div>
             ${bottom}
         </div>`;
     }
@@ -10845,10 +11106,36 @@ import {
         }
         context.set.isCompleted = true;
         touchGymClock(context.workout);
-        startTimer(context.set.restSeconds || Number(getPref("defaultRest")) || 90);
-        const next = context.exercise.sets.find((item) => !item.isCompleted);
-        state.focus.setId = next ? next.id : context.set.id;
-        state.focus.view = "rest";
+
+        if (context.superset) {
+            // Inside a superset the rest belongs to the ROUND. Move straight to the next
+            // member with no timer at all; only once the round is complete does the shared
+            // rest start and the screen hand over to the rest view.
+            const { members, roundIndex, rounds, rest } = context.superset;
+            const nextIndex = nextMemberInRound(members, roundIndex);
+            if (nextIndex !== null) {
+                const member = members[nextIndex];
+                state.focus.exerciseId = member.id;
+                state.focus.setId = ((member.sets || [])[roundIndex] || {}).id || null;
+                state.focus.view = "set";
+            } else {
+                const nextRound = roundIndex + 1;
+                const first = members[0];
+                if (nextRound < rounds) {
+                    startTimer(rest);
+                    state.focus.exerciseId = first.id;
+                    state.focus.setId = ((first.sets || [])[nextRound] || {}).id || null;
+                } else {
+                    state.focus.setId = context.set.id;
+                }
+                state.focus.view = "rest";
+            }
+        } else {
+            startTimer(context.set.restSeconds || Number(getPref("defaultRest")) || 90);
+            const next = context.exercise.sets.find((item) => !item.isCompleted);
+            state.focus.setId = next ? next.id : context.set.id;
+            state.focus.view = "rest";
+        }
         context.workout.updatedAt = new Date().toISOString();
         // Debounced (650ms) rather than immediate: focus mode is tapped rapidly set
         // after set, and each save rewrites the whole workout tree server-side. The
@@ -10915,6 +11202,21 @@ import {
     function focusStartSet() {
         if (!state.focus) {
             return;
+        }
+        const context = focusContext();
+        // Inside a superset "start the round" has to POINT at that round's first set, not
+        // just flip the view: arriving from the finished panel — after «+ Раунд» made a
+        // new round available — leaves the context on the set that was just completed, so
+        // flipping alone would reopen the round that had already ended.
+        if (context && context.superset) {
+            const { members } = context.superset;
+            const round = currentRoundIndex(members);
+            const first = members[0];
+            const set = ((first || {}).sets || [])[round];
+            if (first && set) {
+                state.focus.exerciseId = first.id;
+                state.focus.setId = set.id;
+            }
         }
         state.focus.view = "set";
         stopTimer();
@@ -11548,6 +11850,7 @@ import {
 
     let overlayCloseTimer = null;
     let sheetCloseTimer = null;
+    let confirmCloseTimer = null;
 
     // Dismiss hooks for a stacked sheet that somebody is AWAITING a decision from.
     // Three separate code paths close the sheet without knowing a promise is pending:
@@ -11633,6 +11936,62 @@ import {
         }, 240);
     }
 
+    /**
+     * The confirm level — a third overlay that always draws above the other two.
+     *
+     * A question can be asked from the page, from a modal, or from a sheet (the superset
+     * menu is one). Picking between the modal and sheet layers meant a confirm raised
+     * FROM a sheet landed on the lower layer and was hidden behind it, so the dialog was
+     * invisible and its action looked broken. Confirmations never stack on each other, so
+     * one dedicated top level removes the choice entirely.
+     */
+    function openConfirmOverlay(html) {
+        clearTimeout(confirmCloseTimer);
+        const backdrop = element("modalBackdrop3");
+        const layer = element("modalLayer3");
+        layer.innerHTML = html;
+        iconsIn(layer);
+        backdrop.classList.remove("hidden");
+        layer.classList.remove("hidden");
+        if (!layer.classList.contains("visible")) {
+            void layer.offsetWidth; // commit the enter-from state so the transition plays
+        }
+        backdrop.classList.add("visible");
+        layer.classList.add("visible");
+    }
+
+    function closeConfirmOverlay() {
+        const backdrop = element("modalBackdrop3");
+        const layer = element("modalLayer3");
+        if (backdrop.classList.contains("hidden")) {
+            return;
+        }
+        backdrop.classList.remove("visible");
+        layer.classList.remove("visible");
+        clearTimeout(confirmCloseTimer);
+        confirmCloseTimer = setTimeout(() => {
+            backdrop.classList.add("hidden");
+            layer.classList.add("hidden");
+            layer.innerHTML = "";
+        }, 240);
+    }
+
+    /** True when neither lower overlay is open, so the confirm owns the scroll lock. */
+    /**
+     * How to dismiss the confirmation currently on screen, or null when there is none.
+     *
+     * A dialog that cannot be closed with Escape is a keyboard trap, and the three
+     * dialogs each bound only their own buttons. Kept as one reference rather than three
+     * listeners so the key handler can dismiss the TOPMOST thing and stop — otherwise
+     * Escape closed the sheet underneath and left the confirm floating over nothing.
+     */
+    let activeConfirmDismiss = null;
+
+    function confirmIsStandalone() {
+        return element("modalBackdrop").classList.contains("hidden")
+            && element("modalBackdrop2").classList.contains("hidden");
+    }
+
     // Reliable in-app confirmation (native confirm() is unreliable/blocked on mobile).
     function confirmDialog(message, options = {}) {
         const { title = "Підтвердження", confirmLabel = "Підтвердити", cancelLabel = "Скасувати", danger = true, detail = "", note = "" } = options;
@@ -11642,40 +12001,31 @@ import {
             // `note` is the reassuring half — "you can take this back" — kept apart from
             // the question so it cannot be misread as part of the warning.
             const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><p class="confirm-message">${escapeHtml(message)}</p>${detail ? `<p class="confirm-detail">${escapeHtml(detail)}</p>` : ""}${note ? `<p class="confirm-note"><i data-lucide="undo-2"></i>${escapeHtml(note)}</p>` : ""}<div class="form-actions" style="justify-content:flex-end;margin-top:18px;"><button class="button button-secondary" type="button" id="confirmCancelBtn">${escapeHtml(cancelLabel)}</button><button class="button ${danger ? "button-danger" : "button-primary"}" type="button" id="confirmOkBtn">${escapeHtml(confirmLabel)}</button></div></div>`;
-            // If a modal is already open, STACK the confirm on top (sheet layer) so it
-            // doesn't replace it and cancelling returns to it. Standalone → modal layer.
-            const stacked = !element("modalBackdrop").classList.contains("hidden");
-            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
-            if (stacked) {
-                openSheet(html);
-            } else {
-                clearTimeout(overlayCloseTimer);
-                const drawer = element("drawerLayer");
-                drawer.classList.add("hidden");
-                drawer.classList.remove("visible");
-                drawer.innerHTML = "";
-                const layer = element("modalLayer");
-                layer.classList.remove("modal-fullscreen"); // confirm is always a compact card
-                layer.innerHTML = html;
-                iconsIn(layer);
+            // Always on the confirm level, so the question is visible whether it came
+            // from the page, a modal, or a sheet — and cancelling never disturbs what is
+            // underneath it.
+            const standalone = confirmIsStandalone();
+            const backdrop = element("modalBackdrop3");
+            if (standalone) {
                 lockBackgroundScroll();
-                revealOverlay(layer);
             }
+            openConfirmOverlay(html);
             let settled = false;
             const finish = (result) => {
                 if (settled) {
                     return;
                 }
                 settled = true;
+                activeConfirmDismiss = null;
                 backdrop.removeEventListener("click", onBackdrop);
-                if (stacked) {
-                    closeSheet();
-                } else {
-                    closeOverlay();
+                closeConfirmOverlay();
+                if (standalone) {
+                    unlockBackgroundScroll();
                 }
                 resolve(result);
             };
             const onBackdrop = () => finish(false);
+            activeConfirmDismiss = () => finish(false);
             backdrop.addEventListener("click", onBackdrop);
             element("confirmOkBtn").addEventListener("click", () => finish(true));
             element("confirmCancelBtn").addEventListener("click", () => finish(false));
@@ -11692,40 +12042,29 @@ import {
             const buttons = choices.map((choice, index) => `<button class="button ${variantClass(choice.variant)}" type="button" data-choice="${index}">${escapeHtml(choice.label)}</button>`).join("");
             const closeBtn = closable ? `<button class="icon-button" type="button" data-choice-close="1" aria-label="Закрити"><i data-lucide="x"></i></button>` : "";
             const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div>${closeBtn}</div><p class="confirm-message">${escapeHtml(message)}</p><div class="form-actions confirm-choices">${buttons}</div></div>`;
-            const stacked = !element("modalBackdrop").classList.contains("hidden");
-            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
-            let layer;
-            if (stacked) {
-                openSheet(html);
-                layer = element("modalLayer2");
-            } else {
-                clearTimeout(overlayCloseTimer);
-                const drawer = element("drawerLayer");
-                drawer.classList.add("hidden");
-                drawer.classList.remove("visible");
-                drawer.innerHTML = "";
-                layer = element("modalLayer");
-                layer.classList.remove("modal-fullscreen");
-                layer.innerHTML = html;
-                iconsIn(layer);
+            const standalone = confirmIsStandalone();
+            const backdrop = element("modalBackdrop3");
+            if (standalone) {
                 lockBackgroundScroll();
-                revealOverlay(layer);
             }
+            openConfirmOverlay(html);
+            const layer = element("modalLayer3");
             let settled = false;
             const finish = (result) => {
                 if (settled) {
                     return;
                 }
                 settled = true;
+                activeConfirmDismiss = null;
                 backdrop.removeEventListener("click", onBackdrop);
-                if (stacked) {
-                    closeSheet();
-                } else {
-                    closeOverlay();
+                closeConfirmOverlay();
+                if (standalone) {
+                    unlockBackgroundScroll();
                 }
                 resolve(result);
             };
             const onBackdrop = () => finish(null);
+            activeConfirmDismiss = () => finish(null);
             backdrop.addEventListener("click", onBackdrop);
             layer.querySelectorAll("[data-choice]").forEach((button) => {
                 button.addEventListener("click", () => finish(choices[Number(button.dataset.choice)].value));
@@ -11792,36 +12131,24 @@ import {
     function promptDialog(title, initialValue = "") {
         return new Promise((resolve) => {
             const html = `<div class="confirm-dialog"><div class="modal-header"><div><h2>${escapeHtml(title)}</h2></div></div><div class="field" style="margin-top:8px;"><textarea id="promptDialogInput" rows="3">${escapeHtml(initialValue)}</textarea></div><div class="form-actions" style="justify-content:flex-end;margin-top:16px;"><button class="button button-secondary" type="button" id="promptCancelBtn">Скасувати</button><button class="button button-primary" type="button" id="promptOkBtn">Зберегти</button></div></div>`;
-            const stacked = !element("modalBackdrop").classList.contains("hidden");
-            const backdrop = element(stacked ? "modalBackdrop2" : "modalBackdrop");
-            let layer;
-            if (stacked) {
-                openSheet(html);
-                layer = element("modalLayer2");
-            } else {
-                clearTimeout(overlayCloseTimer);
-                const drawer = element("drawerLayer");
-                drawer.classList.add("hidden");
-                drawer.classList.remove("visible");
-                drawer.innerHTML = "";
-                layer = element("modalLayer");
-                layer.classList.remove("modal-fullscreen");
-                layer.innerHTML = html;
-                iconsIn(layer);
+            const standalone = confirmIsStandalone();
+            const backdrop = element("modalBackdrop3");
+            if (standalone) {
                 lockBackgroundScroll();
-                revealOverlay(layer);
             }
+            openConfirmOverlay(html);
+            const layer = element("modalLayer3");
             let settled = false;
             const finish = (result) => {
                 if (settled) {
                     return;
                 }
                 settled = true;
+                activeConfirmDismiss = null;
                 backdrop.removeEventListener("click", onBackdrop);
-                if (stacked) {
-                    closeSheet();
-                } else {
-                    closeOverlay();
+                closeConfirmOverlay();
+                if (standalone) {
+                    unlockBackgroundScroll();
                 }
                 resolve(result);
             };

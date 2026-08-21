@@ -2963,6 +2963,17 @@ tr:last-child td {
     z-index: 120;
 }
 
+/* Confirmations sit above BOTH levels. The superset menu is a sheet (z 120), so a
+   confirm on the modal level was being drawn behind it — which is what made
+   "remove round" look like it did nothing. */
+.confirm-backdrop {
+    z-index: 150;
+}
+
+.confirm-layer {
+    z-index: 160;
+}
+
 /* Content-heavy modals go full-screen on phones (edge-to-edge, no border/radius).
    Toggled via the .modal-fullscreen class in openModal/openSheet; desktop ignores it. */
 @media (max-width: 920px) {
@@ -11336,3 +11347,171 @@ html.compact-ui .chip {
 }
 
 .watch-banner.can-edit svg { color: var(--color-improve, var(--color-accent)); }
+
+
+/* ---- Rest picker (superset builder + menu) ---------------------------------------
+   Replaces a fixed dropdown, so 30 s and 6 min are both one gesture away. The stepper
+   and the presets write the same value; the readout underneath is the confirmation
+   that the tap landed. */
+.rest-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rest-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.rest-preset {
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2, rgba(255, 255, 255, 0.04));
+    color: var(--color-text-soft, #9aa5b5);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.rest-preset:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+}
+
+.rest-preset.active {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    font-weight: 600;
+}
+
+.rest-readout {
+    font-size: 12px;
+    color: var(--color-text-soft, #9aa5b5);
+    font-variant-numeric: tabular-nums;
+}
+
+/* The settings shortcut inside the superset entry hint reads as part of the sentence,
+   not as another button competing with the one above it. */
+.ss-entry-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-accent);
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.ss-entry-link:hover {
+    filter: brightness(1.15);
+}
+
+
+/* ---- Superset inside focus mode -------------------------------------------------
+   Focus mode is one exercise at a time, so a superset needs to say out loud that the
+   next thing is A2 and not a rest. This strip is that statement. */
+.focus-superset {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2, rgba(255, 255, 255, 0.03));
+}
+
+.focus-ss-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.focus-ss-round {
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.focus-ss-top .ss-progress {
+    margin-left: auto;
+}
+
+.focus-ss-members {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.focus-ss-member {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 5px 9px 5px 5px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-soft, #9aa5b5);
+    font-size: 12px;
+}
+
+.focus-ss-member-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.focus-ss-member.current {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    font-weight: 600;
+}
+
+.focus-ss-member.done {
+    opacity: 0.55;
+}
+
+.focus-ss-hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-text-soft, #9aa5b5);
+    line-height: 1.45;
+}
+
+/* Editing the round rest from the rest screen itself — the "four minutes is not
+   enough" fix, without leaving focus mode. */
+.focus-ss-restedit {
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 4px 0 2px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2, rgba(255, 255, 255, 0.03));
+}
+
+.focus-ss-restedit .rest-presets {
+    justify-content: center;
+}
+
+.focus-ss-restedit .rest-readout {
+    text-align: center;
+}
+
+.focus-rest-exercise .ss-badge {
+    margin-right: 6px;
+    vertical-align: middle;
+}
