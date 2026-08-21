@@ -13109,6 +13109,51 @@ import {
     // gets abandoned; asked one at a time with a progress bar they are a minute.
     const onboardingState = { open: false, index: 0, draft: null, steps: [], saving: false, error: "" };
 
+    /**
+     * Onboarding answers survive a reload.
+     *
+     * Measured on production: phones discard this PWA and boot it again about every six
+     * minutes — 67 full boots across three people in three hours, and half the live
+     * streams died inside thirty seconds. A five-question flow that only writes anything
+     * at the very end will therefore lose somebody's answers as a matter of routine, and
+     * the way it showed up was the save being cut off mid-request (HTTP 499) with the
+     * button stuck on «Зберігаємо…» until the twenty-second timeout.
+     */
+    function onboardingDraftKey() {
+        return `gymos-onboarding-${storage.currentUser?.id || state.database?.currentUserId || "anon"}`;
+    }
+
+    function saveOnboardingDraft() {
+        if (!onboardingState.open) {
+            return;
+        }
+        try {
+            localStorage.setItem(onboardingDraftKey(), JSON.stringify({
+                draft: onboardingState.draft,
+                step: currentOnboardingStep()
+            }));
+        } catch (error) {
+            // A full or private-mode storage just means the old behaviour.
+        }
+    }
+
+    function readOnboardingDraft() {
+        try {
+            const raw = localStorage.getItem(onboardingDraftKey());
+            return raw ? JSON.parse(raw) : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function clearOnboardingDraft() {
+        try {
+            localStorage.removeItem(onboardingDraftKey());
+        } catch (error) {
+            // nothing to clear
+        }
+    }
+
     function maybeStartOnboarding() {
         if (onboardingState.open || storage.mode !== "api" || !accessState.loaded) {
             return;
@@ -13119,7 +13164,9 @@ import {
         }
         // Once per session. Dismissing it must not mean being asked again on the next
         // route change, and completing it must not race a second copy into existence.
-        if (sessionStorage.getItem("gymos-onboarding-seen")) {
+        // An INTERRUPTED flow is the exception: a page thrown away mid-answer should come
+        // back to where it was, not stay silent because this session had already seen it.
+        if (sessionStorage.getItem("gymos-onboarding-seen") && !readOnboardingDraft()) {
             return;
         }
         const user = currentUser();
@@ -13148,6 +13195,16 @@ import {
             favoriteMuscleGroup: user.favoriteMuscleGroup || "",
             hideWorkoutDetails: accessState.privacyChoiceAt ? accessState.hideWorkoutDetails : null
         };
+        // Pick up where a discarded page left off, rather than asking the same five
+        // questions again.
+        const saved = readOnboardingDraft();
+        if (saved && saved.draft) {
+            Object.assign(onboardingState.draft, saved.draft);
+            const resumeAt = onboardingState.steps.indexOf(saved.step);
+            if (resumeAt > 0) {
+                onboardingState.index = resumeAt;
+            }
+        }
         try {
             sessionStorage.setItem("gymos-onboarding-seen", "1");
         } catch (error) {
@@ -13290,7 +13347,7 @@ import {
         }
         if (step === "done") {
             return `<div class="ob-foot single">
-                <button class="button button-primary" type="button" data-action="onboarding-finish" ${onboardingState.saving ? "disabled" : ""}><i data-lucide="${onboardingState.saving ? "loader" : "check"}"></i><span>${onboardingState.saving ? "Зберігаємо…" : "До тренування"}</span></button>
+                <button class="button button-primary" type="button" data-action="onboarding-finish" ${onboardingState.saving ? "disabled" : ""}><i data-lucide="${onboardingState.saving ? "loader" : onboardingState.error ? "rotate-ccw" : "check"}"></i><span>${onboardingState.saving ? "Зберігаємо…" : onboardingState.error ? "Спробувати ще раз" : "До тренування"}</span></button>
             </div>`;
         }
         const first = onboardingState.steps.indexOf(step) <= 1;
@@ -13303,6 +13360,7 @@ import {
     function setOnboardingField(field, value) {
         onboardingState.draft[field] = value;
         onboardingState.error = "";
+        saveOnboardingDraft();
         // Repaint only what the value changes — the live age line and the selected card.
         // Re-rendering the step would recreate the input and drop the caret mid-typing.
         if (field === "birthDate") {
@@ -13329,6 +13387,7 @@ import {
         }
         onboardingState.error = "";
         onboardingState.index = Math.min(onboardingState.index + 1, onboardingState.steps.length - 1);
+        saveOnboardingDraft();
         renderOnboarding();
     }
 
@@ -13390,14 +13449,19 @@ import {
                 accessState.privacyChoiceAt = new Date().toISOString();
                 await storage.apiClient.acknowledgePrivacy();
             }
+            clearOnboardingDraft();
             closeOnboarding();
             renderSection();
             renderCurrentUserButton();
             renderSidebarProfile();
             toast("Профіль готовий", "Гарного тренування!");
         } catch (error) {
+            // The answers stay on disk, so pressing the button again resends them — and
+            // so does reopening after the page has been thrown away mid-request.
             onboardingState.saving = false;
-            onboardingState.error = friendlyError(error);
+            onboardingState.error = error?.timedOut
+                ? "Звʼязок обірвався. Твої відповіді збережені — спробуй ще раз."
+                : friendlyError(error);
             renderOnboarding();
         }
     }
