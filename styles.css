@@ -5486,6 +5486,276 @@ ul {
     .ob-card { transition: none; }
 }
 
+/* ==== Supersets ======================================================================
+   ONE card for the whole group. What happens in the gym is a ROUND — A1, then A2, then
+   A3, then rest — so the card is a list of rounds, not a stack of exercise cards: the
+   current round is open, finished ones collapse to a line you can reopen, and the rest
+   belongs to the round rather than to any set inside it. */
+.superset-block {
+    position: relative;
+    display: grid;
+    gap: 10px;
+    padding: 14px 15px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 5%, transparent), transparent 40%),
+        var(--color-surface);
+}
+
+/* The accent rail is what says "these belong together" from across the screen. */
+.superset-block::before {
+    content: "";
+    position: absolute;
+    top: 14px;
+    bottom: 14px;
+    left: 0;
+    width: 3px;
+    border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+    background: linear-gradient(180deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 25%, transparent));
+}
+
+.superset-block.is-done { border-color: var(--color-border); }
+.superset-block.is-done::before { background: var(--color-border-strong); }
+
+.ss-head { display: flex; align-items: flex-start; gap: 10px; }
+.ss-head-text { flex: 1 1 auto; min-width: 0; }
+.ss-title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.ss-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    color: var(--color-accent-strong);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.ss-badge svg { width: 13px; height: 13px; }
+.ss-count { font-size: 12px; color: var(--color-muted); }
+.ss-names { margin: 6px 0 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-status { display: flex; align-items: center; gap: 8px; margin-top: 5px; font-size: 12px; color: var(--color-muted); }
+.ss-progress { display: inline-flex; gap: 3px; }
+.ss-progress i { width: 14px; height: 3px; border-radius: var(--radius-pill); background: var(--color-border); }
+.ss-progress i.done { background: color-mix(in srgb, var(--color-accent) 55%, transparent); }
+.ss-progress i.on { background: var(--color-accent); }
+
+.ss-rounds { display: grid; gap: 6px; }
+
+.ss-round {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+}
+
+/* A finished round is one line and a tap away from being editable again — the commonest
+   reason to look at one is that a number went in wrong. */
+.ss-round.is-collapsed {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 11px;
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ss-round.is-collapsed:hover { border-color: var(--color-border-strong); }
+.ss-round-caret { width: 15px; height: 15px; margin-left: auto; color: var(--color-faint); }
+
+.ss-round-no {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--radius-pill);
+    background: var(--color-elevated);
+    color: var(--color-muted);
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
+.ss-round.is-done .ss-round-no { background: color-mix(in srgb, var(--color-accent) 20%, transparent); color: var(--color-accent-strong); }
+.ss-round-no svg { width: 13px; height: 13px; }
+.ss-round-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--color-muted); font-variant-numeric: tabular-nums; }
+
+.ss-round.is-open { padding: 10px 11px 11px; }
+.ss-round-head { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.ss-round-label { font-size: 13px; font-weight: 600; }
+.ss-round-collapse { margin-left: auto; padding: 0; border: 0; background: none; color: var(--color-faint); cursor: pointer; }
+.ss-round-collapse svg { width: 16px; height: 16px; }
+
+/* A member inside a round: who, then the two numbers, then the tick. Compact enough that
+   a three-exercise round still fits a phone screen without scrolling between them. */
+.ss-member { display: grid; gap: 5px; padding: 7px 0; border-top: 1px solid var(--color-border); }
+.ss-member:first-of-type { border-top: 0; padding-top: 0; }
+.ss-member.is-done { opacity: 0.66; }
+.ss-member-head { display: flex; align-items: center; gap: 8px; }
+.ss-member-name { flex: 1 1 auto; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ss-pos {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    min-width: 26px;
+    height: 20px;
+    padding: 0 6px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-accent-strong);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* Label BESIDE the input, not above it, and the tick on the same row. The ordinary
+   stacked field is 66px tall; three of those per round is a card you scroll inside. */
+.ss-member-fields { display: grid; grid-template-columns: 1fr 1fr auto; gap: 7px; align-items: center; }
+/* flex-direction ROW: the shared .set-field is a column (label above input), which is
+   right on an ordinary card and 66px too tall when a round stacks three of them. */
+.ss-member-fields .set-field { flex-direction: row; align-items: center; gap: 6px; }
+.ss-member-fields .set-field-label { flex: 0 0 auto; display: block; padding: 0; font-size: 11px; white-space: nowrap; }
+.ss-member-fields .set-field input { flex: 1 1 auto; height: 38px; min-width: 0; text-align: center; }
+.ss-member-fields .set-done { width: 38px; height: 38px; }
+.ss-member.is-missing { display: flex; align-items: center; gap: 8px; }
+
+.ss-round-rest {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 9px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--color-border);
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.ss-round-rest svg, .ss-rest-note svg { width: 13px; height: 13px; }
+.ss-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ss-rest-note { display: inline-flex; align-items: center; gap: 5px; color: var(--color-faint); font-size: 12px; }
+
+/* Entry point, under the exercise list. */
+.ss-entry { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.ss-entry-hint { color: var(--color-faint); font-size: 12px; }
+
+.ss-pro {
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+    color: var(--color-warning);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+/* Builder */
+.ss-picks { display: grid; gap: 7px; margin-top: 14px; max-height: 46vh; overflow-y: auto; }
+
+.ss-pick {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ss-pick:hover { border-color: var(--color-border-strong); }
+.ss-pick.active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-2)); }
+
+.ss-pick-mark {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 26px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--color-accent-strong);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.ss-pick.active .ss-pick-mark { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+.ss-pick-name { flex: 1 1 auto; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-pick-muscle { flex: 0 0 auto; color: var(--color-faint); font-size: 11.5px; }
+
+/* Management sheet */
+.ss-menu-members { display: grid; gap: 7px; margin-top: 14px; }
+.ss-menu-member { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-2); }
+.ss-menu-name { flex: 1 1 auto; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-menu-tools { flex: 0 0 auto; display: flex; gap: 4px; }
+.ss-menu-add { margin-top: 10px; }
+.ss-menu-rounds { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-2); }
+.ss-menu-rounds strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+/* The three destructive actions read differently on purpose: only one loses work. */
+.ss-menu-danger { display: grid; gap: 8px; margin-top: 16px; }
+.ss-menu-danger .button { justify-content: flex-start; gap: 10px; text-align: left; height: auto; padding: 11px 13px; }
+.ss-menu-danger .button span { display: grid; }
+.ss-menu-danger .button strong { font-size: 13.5px; font-weight: 600; }
+.ss-menu-danger .button em { font-style: normal; font-size: 11.5px; opacity: 0.75; }
+
+/* Onboarding: the superset question rides along with the focus step. */
+.ob-aside { display: grid; gap: 8px; padding: 11px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-2); }
+.ob-aside-text strong { display: block; font-size: 13.5px; }
+.ob-aside-text span { display: block; margin-top: 2px; color: var(--color-muted); font-size: 12px; line-height: 1.45; }
+.ob-mini-row { display: flex; gap: 8px; }
+
+.ob-mini {
+    flex: 1 1 0;
+    min-height: 38px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-elevated);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ob-mini.active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 14%, transparent); color: var(--color-accent-strong); }
+
+.pref-hint { display: block; margin-top: 2px; color: var(--color-faint); font-size: 11.5px; font-style: normal; font-weight: 400; line-height: 1.4; }
+
+@media (max-width: 560px) {
+    .superset-block { padding: 12px 13px; }
+    /* Keep the tick on the row: dropping the third track pushed it onto a line of its
+       own and made every member taller than the field it belongs to. */
+    .ss-member-fields { grid-template-columns: 1fr 1fr auto; gap: 6px; }
+    .ss-entry-hint { flex: 1 1 100%; }
+    .ss-menu-tools .icon-button { width: 34px; height: 34px; }
+}
+
+/* A superset in the history drawer: same grouping as the editor, so "these were done
+   together" survives into the record of it. */
+.wd-superset {
+    display: grid;
+    gap: 8px;
+    padding: 10px 11px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+
+.wd-superset-head { display: flex; align-items: center; gap: 8px; }
+.wd-superset-rounds { font-size: 12px; color: var(--color-muted); }
+.wd-exercise.in-superset { border: 0; background: transparent; padding: 0; }
+.wd-exercise.in-superset h3 { display: flex; align-items: center; gap: 7px; }
+
 /* ---- Timed sets --------------------------------------------------------------------
    Static holds — planks, hangs, carries — are prescribed in seconds. A set measures ONE
    of the two, so `.set-fields` keeps the same three-column shape either way and only the

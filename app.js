@@ -11,6 +11,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
 import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
+import { SUPERSET_MIN_MEMBERS, SUPERSET_MAX_MEMBERS, SUPERSET_DEFAULT_ROUNDS, SUPERSET_DEFAULT_REST, positionLabel, workoutBlocks, roundCount, roundSets, isRoundComplete, currentRoundIndex, nextMemberInRound, missingSetCount, mergeProblem, roundSummary } from "./lib/superset.js";
 import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 import { gymClockState, nextGymClockMarks, formatClock, formatDurationLabel } from "./lib/gym-clock.js";
@@ -46,6 +47,9 @@ import {
         // Note fields the user has explicitly opened this session (they render collapsed
         // to a one-line button while empty).
         openNotes: new Set(),
+        // Finished superset rounds the athlete reopened to correct a number, keyed
+        // "groupId:roundIndex". Session-scoped: it is a viewing choice, not data.
+        supersetOpenRounds: {},
         profileUserId: null,
         editingWorkoutId: null,
         // Cursor into the caller's own history under the windowed payload; null once
@@ -1153,7 +1157,8 @@ import {
         defaultWorkoutType: "custom",
         defaultDuration: "90",    // minutes; "auto" = clock-based. Default 1.5 год
         defaultSetType: "warmup",
-        autoStartRest: "1"        // "1" = auto-start rest timer on set completion
+        autoStartRest: "1",       // "1" = auto-start rest timer on set completion
+        useSupersets: "0"         // "1" = offer merging 2–3 exercises into rounds
     };
 
     function getPref(key) {
@@ -3074,7 +3079,10 @@ import {
                 ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
                 ${noteField(`workout:${workoutItem.id}`, "Нотатки тренування", "Додати нотатку до тренування", workoutItem.notes, `data-action="update-workout-notes"`, readonly)}
             </section>
-            ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutItem.exercises.slice().sort((left, right) => left.order - right.order).map((item, exerciseIndex) => workoutExerciseEditor(workoutItem, item, readonly, exerciseIndex === 0)).join("")}</div>` : `${readonly ? "" : repeatSuggestionCard(workoutItem)}${emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}`}
+            ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutBlocks(workoutItem.exercises).map((block, blockIndex) => block.kind === "superset"
+                ? supersetBlockEditor(workoutItem, block, readonly)
+                : workoutExerciseEditor(workoutItem, block.exercise, readonly, blockIndex === 0)).join("")}</div>` : `${readonly ? "" : repeatSuggestionCard(workoutItem)}${emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}`}
+            ${readonly ? "" : supersetEntryRow(workoutItem)}
             ${cardioBlock(workoutItem, readonly)}
         `;
     }
@@ -3701,12 +3709,13 @@ import {
         const accentButtons = [["mint", "Mint", "#34d399"], ["blue", "Blue", "#3b82f6"], ["purple", "Purple", "#a78bfa"], ["amber", "Amber", "#f59e0b"], ["red", "Red", "#f43f5e"]].map(([value, label, color]) => seg("accent", value, label, `<span class="pref-dot" style="background:${color};"></span>`)).join("");
         const compactButtons = [["0", "Стандартні"], ["1", "Компактні"]].map(([value, label]) => seg("compactCards", value, label)).join("");
         const autoStartButtons = [["1", "Увімк."], ["0", "Вимк."]].map(([value, label]) => seg("autoStartRest", value, label)).join("");
+        const supersetButtons = [["1", "Так"], ["0", "Ні"]].map(([value, label]) => seg("useSupersets", value, label)).join("");
         const restOptions = [45, 60, 75, 90, 120, 150, 180].map((rest) => `<option value="${rest}" ${getPref("defaultRest") === String(rest) ? "selected" : ""}>${rest} сек</option>`).join("");
         const workoutTypeOptions = Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultWorkoutType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
         const setTypeOptions = Object.entries(setTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultSetType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
         const durationDefaultOptions = `<option value="auto" ${getPref("defaultDuration") === "auto" ? "selected" : ""}>Авто (за часом)</option>` + [15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${getPref("defaultDuration") === String(min) ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("");
         const appearanceCard = `<section class="card span-6"><h2>Вигляд</h2><div class="pref-row"><span class="pref-label">Тема</span><div class="segmented pref-seg">${themeButtons}</div></div><div class="pref-row"><span class="pref-label">Акцент</span><div class="segmented pref-seg">${accentButtons}</div></div><div class="pref-row"><span class="pref-label">Інтерфейс</span><div class="segmented pref-seg">${compactButtons}</div></div></section>`;
-        const workoutDefaultsCard = `<section class="card span-6"><h2>Тренування за замовчуванням</h2><div class="field-grid"><div class="field"><label>Відпочинок</label><gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select></div><div class="field"><label>Тип тренування</label><gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select></div></div><div class="field-grid" style="margin-top:12px;"><div class="field"><label>Тип підходу</label><gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select></div><div class="field"><label>Тривалість</label><gym-select data-action="set-pref-select" data-pref="defaultDuration">${durationDefaultOptions}</gym-select></div></div><div class="pref-row" style="margin-top:14px;"><span class="pref-label">Авто-старт таймера відпочинку</span><div class="segmented pref-seg">${autoStartButtons}</div></div></section>`;
+        const workoutDefaultsCard = `<section class="card span-6"><h2>Тренування за замовчуванням</h2><div class="field-grid"><div class="field"><label>Відпочинок</label><gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select></div><div class="field"><label>Тип тренування</label><gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select></div></div><div class="field-grid" style="margin-top:12px;"><div class="field"><label>Тип підходу</label><gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select></div><div class="field"><label>Тривалість</label><gym-select data-action="set-pref-select" data-pref="defaultDuration">${durationDefaultOptions}</gym-select></div></div><div class="pref-row" style="margin-top:14px;"><span class="pref-label">Авто-старт таймера відпочинку</span><div class="segmented pref-seg">${autoStartButtons}</div></div><div class="pref-row"><span class="pref-label">Використовую суперсети<em class="pref-hint">Показувати можливість обʼєднувати 2–3 вправи в послідовні раунди</em></span><div class="segmented pref-seg">${supersetButtons}</div></div></section>`;
         const exportCard = `<section class="card span-6"><h2>Експорт даних</h2><p class="card-caption">JSON-дамп усіх твоїх тренувань, замірів ваги та власних вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button></div></section>`;
         const catalogCard = `<section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button></div></section>`;
         const aboutCard = `<section class="card span-6"><h2>Про застосунок</h2><div class="list-row" style="margin-top:6px;"><div><div class="profile-name">GymOS</div><div class="profile-meta">Версія v${APP_VERSION}</div></div></div></section>`;
@@ -4679,6 +4688,28 @@ import {
             "react-exercise": () => reactToExercise(actionElement.dataset.exerciseId, actionElement.dataset.reaction),
             "open-user": () => goToUser(actionElement.dataset.userId),
             "add-set": () => addSet(actionElement.dataset.workoutExerciseId),
+            "open-superset-builder": () => openSupersetBuilder(actionElement.dataset.workoutId),
+            "superset-pick": () => toggleSupersetPick(actionElement.dataset.exerciseBlockId),
+            "superset-create": () => createSupersetFrom(supersetBuilder.workoutId, supersetBuilder.picked, {
+                rounds: supersetBuilder.rounds,
+                restSeconds: supersetBuilder.restSeconds
+            }),
+            "open-superset-menu": () => openSupersetMenu(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
+            "superset-add-round": () => supersetAddRound(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
+            "superset-remove-round": () => supersetRemoveRound(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
+            "superset-move-member": () => supersetMoveMember(actionElement.dataset.supersetId, actionElement.dataset.exerciseBlockId, actionElement.dataset.dir),
+            "superset-remove-member": () => supersetRemoveMember(actionElement.dataset.supersetId, actionElement.dataset.exerciseBlockId),
+            "superset-add-member": () => supersetAddMember(actionElement.dataset.supersetId),
+            "superset-split": () => supersetSplit(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
+            "superset-delete": () => supersetDelete(actionElement.dataset.supersetId),
+            "superset-open-round": () => {
+                state.supersetOpenRounds[`${actionElement.dataset.supersetId}:${actionElement.dataset.round}`] = true;
+                renderSection();
+            },
+            "superset-close-round": () => {
+                delete state.supersetOpenRounds[`${actionElement.dataset.supersetId}:${actionElement.dataset.round}`];
+                renderSection();
+            },
             "toggle-timed-block": () => toggleTimedBlock(actionElement.dataset.workoutExerciseId),
             "toggle-set": () => isWatchedTarget(actionElement)
                 ? editWatchedSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, { isCompleted: !watchedSet(actionElement)?.isCompleted })
@@ -4713,6 +4744,10 @@ import {
             "onboarding-finish": finishOnboarding,
             "onboarding-muscle": () => {
                 setOnboardingField("favoriteMuscleGroup", actionElement.dataset.value);
+                renderOnboardingBody();
+            },
+            "onboarding-supersets": () => {
+                setOnboardingField("useSupersets", actionElement.dataset.value === "true");
                 renderOnboardingBody();
             },
             "onboarding-privacy": () => {
@@ -4779,6 +4814,17 @@ import {
         // gym-date fires `change`, not `input`, so the birthday step is read here.
         if (actionElement.dataset.action === "onboarding-field") {
             setOnboardingField(actionElement.dataset.obField, actionElement.value);
+            return;
+        }
+
+        if (actionElement.dataset.action === "superset-builder-field") {
+            const field = actionElement.dataset.field;
+            supersetBuilder[field] = Number(actionElement.value) || supersetBuilder[field];
+            return;
+        }
+
+        if (actionElement.dataset.action === "superset-set-rest") {
+            await supersetSetRest(actionElement.dataset.supersetId, actionElement.value);
             return;
         }
 
@@ -4929,10 +4975,15 @@ import {
             // Onboarding paints its own next screen; a spinner on the button would be a
             // loading state for something that is already on screen.
             "open-onboarding",
+            "superset-pick",
+            "superset-open-round",
+            "superset-close-round",
+            "open-superset-menu",
             "onboarding-next",
             "onboarding-back",
             "onboarding-skip",
             "onboarding-muscle",
+            "onboarding-supersets",
             "onboarding-privacy",
             "open-workout",
             "open-cardio-modal",
@@ -5845,14 +5896,20 @@ import {
 
     function openPaywallModal(context = {}) {
         const isExercise = context.type === "exercise";
-        const reason = isExercise
-            ? "Ти вже додав власну вправу цього місяця."
-            : (context.overDay ? "Ти вже провів тренування сьогодні." : "Ти використав 2 безкоштовні тренування цього тижня.");
-        const limitsLine = isExercise
-            ? "На безкоштовному тарифі — <strong>1 власна вправа на місяць</strong>."
-            : "На безкоштовному тарифі — до <strong>1 тренування на день</strong> і <strong>2 на тиждень</strong>.";
-        const title = isExercise ? "Більше власних вправ із PRO" : "Більше тренувань із PRO";
+        const isSuperset = context.type === "superset";
+        const reason = isSuperset
+            ? "Суперсети — це PRO."
+            : isExercise
+                ? "Ти вже додав власну вправу цього місяця."
+                : (context.overDay ? "Ти вже провів тренування сьогодні." : "Ти використав 2 безкоштовні тренування цього тижня.");
+        const limitsLine = isSuperset
+            ? "Обʼєднуй <strong>2–3 вправи в раунди</strong> зі спільним відпочинком. Суперсети, які вже є у твоїх тренуваннях, залишаються — їх видно завжди."
+            : isExercise
+                ? "На безкоштовному тарифі — <strong>1 власна вправа на місяць</strong>."
+                : "На безкоштовному тарифі — до <strong>1 тренування на день</strong> і <strong>2 на тиждень</strong>.";
+        const title = isSuperset ? "Суперсети з PRO" : isExercise ? "Більше власних вправ із PRO" : "Більше тренувань із PRO";
         const perks = [
+            ["repeat-2", "Суперсети", "2–3 вправи в раунди зі спільним відпочинком"],
             ["dumbbell", "До 2 тренувань на день", "Free — 1 на день і 2 на тиждень"],
             ["list-plus", "До 30 власних вправ", "Free — лише 1 вправа на місяць"],
             ["bar-chart-3", "Розширена аналітика", "Глибша статистика прогресу та PR"],
@@ -5990,6 +6047,7 @@ import {
             finishedAt: null,
             notes: "",
             exercises: [],
+            supersetGroups: [],
             cardioSessions: [],
             createdAt: now.toISOString(),
             updatedAt: now.toISOString()
@@ -6144,6 +6202,11 @@ import {
             return;
         }
         const title = (inputValue("templateName") || "").trim() || "Мій шаблон";
+        // Templates store a flat list of exercises with target sets and reps — they carry
+        // no grouping. A superset therefore saves as its separate exercises, which loses
+        // the pairing but never a number. Said out loud rather than left to be discovered
+        // when the template is started.
+        const groupedCount = workoutBlocks(workoutItem.exercises).filter((block) => block.kind === "superset").length;
         const payload = {
             title,
             type: workoutItem.workoutType || "custom",
@@ -6166,6 +6229,12 @@ import {
                 await persist({ silent: true });
             }
             closeSheet();
+            if (groupedCount) {
+                toast(
+                    "Шаблон збережено",
+                    `${groupedCount} ${pluralUk(groupedCount, "суперсет", "суперсети", "суперсетів")} збережено як окремі вправи — шаблони поки не зберігають групування`
+                );
+            }
         } catch (error) {
             toast("Не вдалося зберегти", friendlyError(error), "error");
         }
@@ -6227,6 +6296,7 @@ import {
                 // (count + weight + reps) from the last time this exercise was done.
                 sets: suggestedSets(exerciseById(item.exerciseId))
             })),
+            supersetGroups: [],
             cardioSessions: [],
             createdAt: now.toISOString(),
             updatedAt: now.toISOString()
@@ -6591,12 +6661,22 @@ import {
         const completing = !set.isCompleted;
         set.isCompleted = completing;
         touchGymClock(editWorkout());
+        // Inside a superset the rest belongs to the ROUND, not to the set: A1 is followed
+        // by A2 immediately, and only the last exercise of the round earns a break. So the
+        // per-set timer is suppressed for members and started once, with the group's own
+        // rest, when the round closes.
+        const roundRest = completing ? supersetRoundRestFor(workoutExercise, setId) : null;
         if (completing && editWorkout()?.status === "active" && getPref("autoStartRest") === "1") {
-            startTimer(set.restSeconds || 90);
+            if (!workoutExercise.supersetGroupId) {
+                startTimer(set.restSeconds || 90);
+            } else if (roundRest !== null) {
+                startTimer(roundRest);
+            }
         }
         // Ticking the LAST set while earlier data-bearing ones aren't done → offer to
-        // mark them all (the common "forgot to tap each circle" case).
-        if (completing) {
+        // mark them all (the common "forgot to tap each circle" case). Never inside a
+        // superset: earlier rounds there are deliberately left open until their own turn.
+        if (completing && !workoutExercise.supersetGroupId) {
             const idx = workoutExercise.sets.findIndex((item) => item.id === setId);
             const earlierPending = workoutExercise.sets.slice(0, idx).filter((item) => !item.isCompleted && (Number(item.weight) > 0 || Number(item.repetitions) > 0));
             if (idx === workoutExercise.sets.length - 1 && earlierPending.length > 0) {
@@ -6929,7 +7009,12 @@ import {
             return emptyInline("Завантажуємо підходи", "Це тренування підвантажується з сервера.");
         }
         if ((workoutItem.exercises || []).length) {
-            return workoutItem.exercises.map(workoutDetailExercise).join("");
+            // Grouped the same way the editor groups it, so a superset reads as one thing
+            // in history too — the point of the card is that these were done together, and
+            // a flat list of exercises loses exactly that.
+            return workoutBlocks(workoutItem.exercises).map((block) => block.kind === "superset"
+                ? `<div class="wd-superset"><div class="wd-superset-head"><span class="ss-badge"><i data-lucide="repeat-2"></i>Суперсет</span><span class="wd-superset-rounds">${roundCount(block.members)} ${pluralUk(roundCount(block.members), "раунд", "раунди", "раундів")}</span></div>${block.members.map((member, index) => workoutDetailExercise(member, positionLabel(index))).join("")}</div>`
+                : workoutDetailExercise(block.exercise)).join("");
         }
         // Only say "not available" when the server actually refused. A hydrated workout
         // with no exercises really is an empty or cardio-only session, whoever owns it.
@@ -6987,7 +7072,7 @@ import {
     // Compact, scannable exercise block for the workout-detail drawer: a small
     // thumbnail + name/summary, then a clean numbered set list (index · type ·
     // weight × reps) instead of a wall of chips.
-    function workoutDetailExercise(workoutExercise) {
+    function workoutDetailExercise(workoutExercise, position = "") {
         const exercise = exerciseById(workoutExercise.exerciseId);
         const media = exerciseMedia(exercise);
         const thumb = media
@@ -6995,7 +7080,7 @@ import {
             : `<div class="wd-thumb wd-thumb-fallback"><i data-lucide="dumbbell"></i></div>`;
         const orm = exerciseOneRepMax(workoutExercise);
         const setRows = workoutExercise.sets.map((set, index) => `<div class="wd-set${set.isCompleted ? "" : " pending"}"><span class="wd-set-idx">${index + 1}</span><span class="wd-set-type type-${set.type}">${setTypeLabel(set.type)}</span><span class="wd-set-val"><strong>${number(set.weight)}</strong> кг × <strong>${set.repetitions}</strong></span></div>`).join("");
-        return `<article class="wd-exercise"><div class="wd-exercise-head">${thumb}<div class="wd-exercise-meta"><h3>${escapeHtml(exercise.name)}</h3><span class="card-caption">${workoutExercise.sets.length} підходів · ${number(exerciseVolume(workoutExercise))} кг${orm ? ` · 1ПМ ${number(orm)} кг` : ""}</span></div></div><div class="wd-set-list">${setRows}</div></article>`;
+        return `<article class="wd-exercise${position ? " in-superset" : ""}"><div class="wd-exercise-head">${thumb}<div class="wd-exercise-meta"><h3>${position ? `<span class="ss-pos">${position}</span>` : ""}${escapeHtml(exercise.name)}</h3><span class="card-caption">${workoutExercise.sets.length} підходів · ${number(exerciseVolume(workoutExercise))} кг${orm ? ` · 1ПМ ${number(orm)} кг` : ""}</span></div></div><div class="wd-set-list">${setRows}</div></article>`;
     }
 
     function requestNotifications() {
@@ -9274,6 +9359,661 @@ import {
 
     function duration(workoutItem) {
         return kernelDuration(workoutItem, new Date());
+    }
+
+    /**
+     * Where a superset is created from.
+     *
+     * Deliberately NOT in the action bar: that row is already three buttons wide and has
+     * to stay one line on a 390px phone. And deliberately not an unlabelled icon on the
+     * exercise card, which already carries six. Under the list is where the athlete has
+     * just been adding exercises, which is exactly when pairing two of them occurs to
+     * them — so a single labelled button sits there and «+ Вправа» keeps working
+     * untouched for everybody who never uses supersets.
+     *
+     * Hidden entirely unless the account says it uses supersets. A free account still
+     * sees it, with a PRO mark, and meets the paywall only on the tap.
+     */
+    function supersetEntryRow(workoutItem) {
+        if (!supersetsEnabled()) {
+            return "";
+        }
+        const loose = workoutBlocks(workoutItem.exercises).filter((block) => block.kind === "exercise").length;
+        if (loose < SUPERSET_MIN_MEMBERS) {
+            return "";
+        }
+        const locked = !hasUnlimited();
+        return `<div class="ss-entry">
+            <button class="button button-secondary compact" type="button" data-action="open-superset-builder" data-workout-id="${workoutItem.id}">
+                <i data-lucide="repeat-2"></i><span>Створити суперсет</span>${locked ? `<span class="ss-pro">PRO</span>` : ""}
+            </button>
+            <span class="ss-entry-hint">2–3 вправи поспіль, відпочинок після раунду</span>
+        </div>`;
+    }
+
+    // ---- Creating a superset --------------------------------------------------------------
+
+    /** PRO-only, and the pref decides whether the action is offered at all. */
+    function supersetsEnabled() {
+        return getPref("useSupersets") === "1";
+    }
+
+    /**
+     * Gate the feature, showing the paywall only when somebody actually reaches for it.
+     *
+     * Discoverability without nagging: a free account still SEES the action with a PRO
+     * mark, and finds out what it costs at the moment it becomes relevant rather than
+     * during onboarding.
+     */
+    function requireSupersetPro() {
+        if (hasUnlimited()) {
+            return true;
+        }
+        openPaywallModal({ type: "superset" });
+        return false;
+    }
+
+    const supersetBuilder = { workoutId: null, picked: [], rounds: SUPERSET_DEFAULT_ROUNDS, restSeconds: SUPERSET_DEFAULT_REST };
+
+    /**
+     * Turn the chosen exercises into a group.
+     *
+     * Members are renumbered CONTIGUOUSLY from the first one's position, because that
+     * adjacency is what lets `order` place a block both in the workout and inside its
+     * group — the reason there is no separate position column.
+     */
+    async function createSupersetFrom(workoutId, exerciseBlockIds, options = {}) {
+        const workoutItem = editWorkout();
+        if (!workoutItem || !canManage(workoutItem) || !requireSupersetPro()) {
+            return;
+        }
+        const chosen = exerciseBlockIds
+            .map((blockId) => (workoutItem.exercises || []).find((item) => item.id === blockId))
+            .filter(Boolean);
+        const problem = mergeProblem(chosen);
+        if (problem) {
+            toast("Не вдалося обʼєднати", problem);
+            return;
+        }
+        const groupId = createId("superset");
+        const rounds = Math.max(1, Math.round(Number(options.rounds) || SUPERSET_DEFAULT_ROUNDS));
+        const rest = Math.max(0, Math.round(Number(options.restSeconds) || SUPERSET_DEFAULT_REST));
+        const anchorOrder = Math.min(...chosen.map((item) => Number(item.order) || 0));
+
+        // Everything at or below the group slides down by however many members there are,
+        // so they can sit shoulder to shoulder without colliding with anything.
+        const others = (workoutItem.exercises || []).filter((item) => !chosen.includes(item));
+        others.forEach((item) => {
+            if ((Number(item.order) || 0) >= anchorOrder) {
+                item.order = (Number(item.order) || 0) + chosen.length;
+            }
+        });
+        chosen.forEach((member, index) => {
+            member.supersetGroupId = groupId;
+            member.order = anchorOrder + index;
+            member.sets = member.sets || [];
+            // Level every member to the same number of rounds. Sets already logged are
+            // kept — merging must never cost somebody work they already did.
+            for (let missing = missingSetCount(member, rounds); missing > 0; missing -= 1) {
+                const previous = member.sets.at(-1);
+                member.sets.push(previous
+                    ? { ...previous, id: createId("set"), isCompleted: false }
+                    : createSet("working", 0, 10, 8, rest, false));
+            }
+        });
+        workoutItem.supersetGroups = [...(workoutItem.supersetGroups || []), { id: groupId, restSeconds: rest }];
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        closeOverlay();
+        renderSection();
+        toast("Суперсет створено", `${chosen.length} ${pluralUk(chosen.length, "вправа", "вправи", "вправ")} · ${rounds} ${pluralUk(rounds, "раунд", "раунди", "раундів")}`);
+    }
+
+    /**
+     * The builder: pick 2–3 exercises already in the workout, set rounds and rest.
+     *
+     * Built from what is ALREADY in the session rather than from the catalogue, because
+     * that is the moment a superset is actually decided — you put the exercises down and
+     * then choose to pair them. It also means there is no second exercise-picking flow to
+     * learn, and «+ Вправа» keeps working exactly as it did.
+     */
+    function openSupersetBuilder(workoutId) {
+        const workoutItem = editWorkout();
+        if (!workoutItem || !canManage(workoutItem) || !requireSupersetPro()) {
+            return;
+        }
+        const loose = workoutBlocks(workoutItem.exercises)
+            .filter((block) => block.kind === "exercise")
+            .map((block) => block.exercise);
+        if (loose.length < SUPERSET_MIN_MEMBERS) {
+            toast("Потрібні дві вправи", "Додай ще одну вправу, щоб зібрати суперсет.");
+            return;
+        }
+        supersetBuilder.workoutId = workoutItem.id;
+        supersetBuilder.picked = [];
+        supersetBuilder.rounds = SUPERSET_DEFAULT_ROUNDS;
+        supersetBuilder.restSeconds = SUPERSET_DEFAULT_REST;
+        openModal(supersetBuilderMarkup(workoutItem, loose));
+    }
+
+    function supersetBuilderMarkup(workoutItem, loose) {
+        const rows = loose.map((exercise) => {
+            const meta = exerciseById(exercise.exerciseId);
+            const at = supersetBuilder.picked.indexOf(exercise.id);
+            const chosen = at !== -1;
+            return `<button class="ss-pick${chosen ? " active" : ""}" type="button" role="checkbox" aria-checked="${chosen}" data-action="superset-pick" data-exercise-block-id="${exercise.id}">
+                <span class="ss-pick-mark">${chosen ? positionLabel(at) : ""}</span>
+                <span class="ss-pick-name">${escapeHtml(meta?.name || "Вправа")}</span>
+                <span class="ss-pick-muscle">${escapeHtml(meta?.primaryMuscleGroup || "")}</span>
+            </button>`;
+        }).join("");
+        const problem = mergeProblem(supersetBuilder.picked
+            .map((id) => (workoutItem.exercises || []).find((item) => item.id === id))
+            .filter(Boolean));
+        const restOptions = [60, 90, 120, 150, 180, 240].map((value) =>
+            `<option value="${value}" ${supersetBuilder.restSeconds === value ? "selected" : ""}>${formatRest(value)}</option>`).join("");
+        const roundOptions = [2, 3, 4, 5, 6].map((value) =>
+            `<option value="${value}" ${supersetBuilder.rounds === value ? "selected" : ""}>${value}</option>`).join("");
+        return `<div class="modal-header"><div><h2>Новий суперсет</h2><p class="card-caption">Обери 2–3 вправи — вони виконуються поспіль, відпочинок після раунду.</p></div><button class="icon-button" type="button" data-action="close-overlay" aria-label="Закрити"><i data-lucide="x"></i></button></div>
+            <div class="ss-picks" id="supersetPicks">${rows}</div>
+            <div class="field-grid two" style="margin-top:14px;">
+                <div class="field"><label for="supersetRounds">Раундів</label><gym-select id="supersetRounds" data-action="superset-builder-field" data-field="rounds">${roundOptions}</gym-select></div>
+                <div class="field"><label for="supersetRest">Відпочинок після раунду</label><gym-select id="supersetRest" data-action="superset-builder-field" data-field="restSeconds">${restOptions}</gym-select></div>
+            </div>
+            ${problem && supersetBuilder.picked.length ? `<p class="ob-error" role="alert"><i data-lucide="alert-circle"></i>${escapeHtml(problem)}</p>` : ""}
+            <div class="form-actions" style="justify-content:flex-end;margin-top:16px;">
+                <button class="button button-secondary" type="button" data-action="close-overlay">Скасувати</button>
+                <button class="button button-primary" type="button" data-action="superset-create" ${problem ? "disabled" : ""}><i data-lucide="repeat-2"></i>Створити суперсет</button>
+            </div>`;
+    }
+
+    function toggleSupersetPick(exerciseBlockId) {
+        const at = supersetBuilder.picked.indexOf(exerciseBlockId);
+        if (at === -1) {
+            if (supersetBuilder.picked.length >= SUPERSET_MAX_MEMBERS) {
+                toast("Максимум три", `У суперсеті не більше ${SUPERSET_MAX_MEMBERS} вправ.`);
+                return;
+            }
+            supersetBuilder.picked.push(exerciseBlockId);
+        } else {
+            supersetBuilder.picked.splice(at, 1);
+        }
+        refreshSupersetBuilder();
+    }
+
+    function refreshSupersetBuilder() {
+        const workoutItem = editWorkout();
+        const layer = element("modalLayer");
+        if (!workoutItem || !layer || !supersetBuilder.workoutId) {
+            return;
+        }
+        const loose = workoutBlocks(workoutItem.exercises)
+            .filter((block) => block.kind === "exercise")
+            .map((block) => block.exercise);
+        layer.innerHTML = supersetBuilderMarkup(workoutItem, loose);
+        iconsIn(layer);
+    }
+
+    // ---- Superset actions ----------------------------------------------------------------
+
+    function supersetBlockOf(workoutItem, groupId) {
+        return workoutBlocks(workoutItem.exercises).find((block) => block.kind === "superset" && block.groupId === groupId) || null;
+    }
+
+    /**
+     * Add one round to every member at once.
+     *
+     * A round only exists when every member has that set — a group where A1 has four sets
+     * and A2 has three is not "three and a half rounds", it is a broken round nobody can
+     * finish. Each new set copies the member's own previous one, which is what the athlete
+     * almost always wants and what the ordinary «+» already does.
+     */
+    async function supersetAddRound(workoutId, groupId) {
+        const workoutItem = editWorkout();
+        if (!workoutItem || !canManage(workoutItem)) {
+            return;
+        }
+        const block = supersetBlockOf(workoutItem, groupId);
+        if (!block) {
+            return;
+        }
+        const target = roundCount(block.members) + 1;
+        block.members.forEach((member) => {
+            member.sets = member.sets || [];
+            for (let index = missingSetCount(member, target); index > 0; index -= 1) {
+                const previous = member.sets.at(-1);
+                member.sets.push(previous
+                    ? { ...previous, id: createId("set"), isCompleted: false }
+                    : createSet(getPref("defaultSetType"), 0, 8, 8, Number(getPref("defaultRest")) || 90, false));
+            }
+        });
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        renderSection();
+    }
+
+    async function supersetRemoveRound(workoutId, groupId) {
+        const workoutItem = editWorkout();
+        if (!workoutItem || !canManage(workoutItem)) {
+            return;
+        }
+        const block = supersetBlockOf(workoutItem, groupId);
+        const rounds = block ? roundCount(block.members) : 0;
+        if (!block || rounds <= 1) {
+            return;
+        }
+        const removed = roundSets(block.members, rounds - 1).filter(Boolean);
+        const done = removed.filter((set) => set.isCompleted).length;
+        const confirmed = await confirmDialog(`Раунд ${rounds}`, {
+            title: "Прибрати останній раунд?",
+            detail: done ? `${done} ${pluralUk(done, "підхід", "підходи", "підходів")} у ньому вже виконано` : "Підходи в ньому не виконані",
+            confirmLabel: "Прибрати"
+        });
+        if (!confirmed) {
+            return;
+        }
+        block.members.forEach((member) => {
+            if ((member.sets || []).length >= rounds) {
+                member.sets = member.sets.slice(0, rounds - 1);
+            }
+        });
+        touchGymClock(workoutItem);
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        renderSection();
+    }
+
+    /**
+     * Break the group up, keeping every set exactly where it is.
+     *
+     * Splitting is the SAFE way out of a superset and has to read as clearly different
+     * from deleting one: the exercises stay in the workout, in the same order, with the
+     * same results. Only the grouping goes.
+     */
+    async function supersetSplit(workoutId, groupId) {
+        const workoutItem = editWorkout();
+        if (!workoutItem || !canManage(workoutItem)) {
+            return;
+        }
+        const block = supersetBlockOf(workoutItem, groupId);
+        if (!block) {
+            return;
+        }
+        const confirmed = await confirmDialog(`${block.members.length} ${pluralUk(block.members.length, "вправа", "вправи", "вправ")}`, {
+            title: "Розділити на окремі вправи?",
+            detail: "Вправи, підходи й результати залишаться — зникне лише групування в раунди.",
+            confirmLabel: "Розділити",
+            danger: false
+        });
+        if (!confirmed) {
+            return;
+        }
+        applySupersetSplit(workoutItem, groupId);
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        renderSection();
+        toast("Суперсет розділено", "Вправи лишились на місці");
+    }
+
+    /** The mutation behind splitting — shared with the paths that dissolve a group. */
+    function applySupersetSplit(workoutItem, groupId) {
+        (workoutItem.exercises || []).forEach((exercise) => {
+            if (exercise.supersetGroupId === groupId) {
+                exercise.supersetGroupId = null;
+            }
+        });
+        workoutItem.supersetGroups = (workoutItem.supersetGroups || []).filter((group) => group.id !== groupId);
+    }
+
+    /**
+     * A group of one is not a group.
+     *
+     * Called after any removal. Dissolving rather than refusing the removal is what keeps
+     * "remove this exercise" from having a surprising second meaning.
+     */
+    function dissolveLoneSuperset(workoutItem, groupId) {
+        const block = supersetBlockOf(workoutItem, groupId);
+        if (!block || block.members.length >= SUPERSET_MIN_MEMBERS) {
+            return false;
+        }
+        applySupersetSplit(workoutItem, groupId);
+        return true;
+    }
+
+    /**
+     * The rest a superset member earns for closing a round, or null if the round is not
+     * finished yet.
+     *
+     * Rest belongs to the round: A1 is followed straight away by A2, and only when the
+     * last unfinished member of that round is ticked does anybody actually stop. Returning
+     * null for every other tick is what keeps a timer from firing between A1 and A2.
+     */
+    function supersetRoundRestFor(workoutExercise, setId) {
+        const groupId = workoutExercise.supersetGroupId;
+        const workoutItem = editWorkout();
+        if (!groupId || !workoutItem) {
+            return null;
+        }
+        const block = supersetBlockOf(workoutItem, groupId);
+        if (!block) {
+            return null;
+        }
+        const roundIndex = (workoutExercise.sets || []).findIndex((item) => item.id === setId);
+        if (roundIndex === -1 || !isRoundComplete(block.members, roundIndex)) {
+            return null;
+        }
+        return supersetRestSeconds(workoutItem, groupId);
+    }
+
+    // ---- Superset management menu ---------------------------------------------------------
+    //
+    // One sheet for everything the group can do, so the card itself keeps a single icon
+    // instead of the six an exercise card already carries. The three destructive actions
+    // are worded and coloured apart on purpose: removing ONE exercise, SPLITTING the group,
+    // and DELETING the whole thing are routinely confused, and only one of them loses work.
+
+    function openSupersetMenu(workoutId, groupId) {
+        const workoutItem = editWorkout();
+        const block = workoutItem ? supersetBlockOf(workoutItem, groupId) : null;
+        if (!workoutItem || !block || !canManage(workoutItem)) {
+            return;
+        }
+        const rounds = roundCount(block.members);
+        const rest = supersetRestSeconds(workoutItem, groupId);
+        const canAdd = block.members.length < SUPERSET_MAX_MEMBERS;
+        const memberRows = block.members.map((member, index) => {
+            const meta = exerciseById(member.exerciseId);
+            const first = index === 0;
+            const last = index === block.members.length - 1;
+            return `<div class="ss-menu-member">
+                <span class="ss-pos">${positionLabel(index)}</span>
+                <span class="ss-menu-name">${escapeHtml(meta?.name || "Вправа")}</span>
+                <span class="ss-menu-tools">
+                    <button class="icon-button" type="button" title="Вище" aria-label="Пересунути ${positionLabel(index)} вище" data-action="superset-move-member" data-superset-id="${escapeHtml(groupId)}" data-exercise-block-id="${member.id}" data-dir="-1" ${first ? "disabled" : ""}><i data-lucide="arrow-up"></i></button>
+                    <button class="icon-button" type="button" title="Нижче" aria-label="Пересунути ${positionLabel(index)} нижче" data-action="superset-move-member" data-superset-id="${escapeHtml(groupId)}" data-exercise-block-id="${member.id}" data-dir="1" ${last ? "disabled" : ""}><i data-lucide="arrow-down"></i></button>
+                    <button class="icon-button" type="button" title="Замінити вправу" aria-label="Замінити ${positionLabel(index)}" data-action="replace-exercise" data-workout-exercise-id="${member.id}"><i data-lucide="repeat"></i></button>
+                    <button class="icon-button danger" type="button" title="Прибрати з суперсету" aria-label="Прибрати ${positionLabel(index)} з суперсету" data-action="superset-remove-member" data-superset-id="${escapeHtml(groupId)}" data-exercise-block-id="${member.id}"><i data-lucide="user-minus"></i></button>
+                </span>
+            </div>`;
+        }).join("");
+        const restOptions = [60, 90, 120, 150, 180, 240].map((value) =>
+            `<option value="${value}" ${rest === value ? "selected" : ""}>${formatRest(value)}</option>`).join("");
+        openSheet(`<div class="modal-header"><div><h2>Суперсет</h2><p class="card-caption">${block.members.length} ${pluralUk(block.members.length, "вправа", "вправи", "вправ")} · ${rounds} ${pluralUk(rounds, "раунд", "раунди", "раундів")}</p></div><button class="icon-button" type="button" data-action="close-sheet" aria-label="Закрити"><i data-lucide="x"></i></button></div>
+            <div class="ss-menu-members">${memberRows}</div>
+            ${canAdd ? `<button class="button button-secondary compact ss-menu-add" type="button" data-action="superset-add-member" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i>Додати третю вправу</button>` : ""}
+            <div class="field-grid two" style="margin-top:14px;">
+                <div class="field"><label for="supersetMenuRest">Відпочинок після раунду</label><gym-select id="supersetMenuRest" data-action="superset-set-rest" data-superset-id="${escapeHtml(groupId)}">${restOptions}</gym-select></div>
+                <div class="field"><label>Раунди</label><div class="ss-menu-rounds"><button class="icon-button" type="button" aria-label="Прибрати раунд" data-action="superset-remove-round" data-superset-id="${escapeHtml(groupId)}" ${rounds <= 1 ? "disabled" : ""}><i data-lucide="minus"></i></button><strong>${rounds}</strong><button class="icon-button" type="button" aria-label="Додати раунд" data-action="superset-add-round" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i></button></div></div>
+            </div>
+            <div class="ss-menu-danger">
+                <button class="button button-secondary" type="button" data-action="superset-split" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="split"></i><span><strong>Розділити на окремі вправи</strong><em>Вправи й результати залишаються</em></span></button>
+                <button class="button button-danger" type="button" data-action="superset-delete" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="trash-2"></i><span><strong>Видалити весь суперсет</strong><em>Разом з усіма підходами</em></span></button>
+            </div>`);
+    }
+
+    /** Reorder A1/A2/A3 by swapping `order` with the neighbour, group-internally. */
+    async function supersetMoveMember(groupId, exerciseBlockId, direction) {
+        const workoutItem = editWorkout();
+        const block = workoutItem ? supersetBlockOf(workoutItem, groupId) : null;
+        if (!block || !canManage(workoutItem)) {
+            return;
+        }
+        const at = block.members.findIndex((member) => member.id === exerciseBlockId);
+        const to = at + Number(direction);
+        if (at === -1 || to < 0 || to >= block.members.length) {
+            return;
+        }
+        const moving = block.members[at];
+        const other = block.members[to];
+        const movingOrder = moving.order;
+        moving.order = other.order;
+        other.order = movingOrder;
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        renderSection();
+        openSupersetMenu(workoutItem.id, groupId);
+    }
+
+    /**
+     * Take one exercise out of the group.
+     *
+     * It stays in the workout with all of its sets — this is the "I paired the wrong two"
+     * action, not a delete. If that leaves a single member the group dissolves, because a
+     * superset of one is not a superset.
+     */
+    async function supersetRemoveMember(groupId, exerciseBlockId) {
+        const workoutItem = editWorkout();
+        const block = workoutItem ? supersetBlockOf(workoutItem, groupId) : null;
+        const member = block ? block.members.find((item) => item.id === exerciseBlockId) : null;
+        if (!member || !canManage(workoutItem)) {
+            return;
+        }
+        const name = exerciseById(member.exerciseId)?.name || "Вправа";
+        const confirmed = await confirmDialog(`«${name}»`, {
+            title: "Прибрати з суперсету?",
+            detail: "Вправа залишиться у тренуванні з усіма підходами — вийде лише з групи.",
+            confirmLabel: "Прибрати",
+            danger: false
+        });
+        if (!confirmed) {
+            return;
+        }
+        member.supersetGroupId = null;
+        const dissolved = dissolveLoneSuperset(workoutItem, groupId);
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        closeSheet();
+        renderSection();
+        if (dissolved) {
+            toast("Суперсет розпався", "Лишилась одна вправа — вона стала звичайною");
+        }
+    }
+
+    /** Add a third exercise by picking one already in the workout. */
+    async function supersetAddMember(groupId) {
+        const workoutItem = editWorkout();
+        const block = workoutItem ? supersetBlockOf(workoutItem, groupId) : null;
+        if (!block || !canManage(workoutItem) || !requireSupersetPro()) {
+            return;
+        }
+        const loose = workoutBlocks(workoutItem.exercises)
+            .filter((item) => item.kind === "exercise")
+            .map((item) => item.exercise);
+        if (!loose.length) {
+            toast("Немає що додати", "Спершу додай вправу до тренування.");
+            return;
+        }
+        const choice = await choiceDialog("Яку вправу додати третьою?", {
+            title: "Третя вправа",
+            closable: true,
+            choices: loose.slice(0, 8).map((exercise) => ({
+                label: exerciseById(exercise.exerciseId)?.name || "Вправа",
+                value: exercise.id
+            }))
+        });
+        if (!choice) {
+            return;
+        }
+        const joining = loose.find((exercise) => exercise.id === choice);
+        if (!joining) {
+            return;
+        }
+        const rounds = roundCount(block.members);
+        const lastOrder = Math.max(...block.members.map((member) => Number(member.order) || 0));
+        (workoutItem.exercises || []).forEach((item) => {
+            if (item !== joining && (Number(item.order) || 0) > lastOrder) {
+                item.order = (Number(item.order) || 0) + 1;
+            }
+        });
+        joining.supersetGroupId = groupId;
+        joining.order = lastOrder + 1;
+        joining.sets = joining.sets || [];
+        for (let missing = missingSetCount(joining, rounds); missing > 0; missing -= 1) {
+            const previous = joining.sets.at(-1);
+            joining.sets.push(previous
+                ? { ...previous, id: createId("set"), isCompleted: false }
+                : createSet("working", 0, 10, 8, supersetRestSeconds(workoutItem, groupId), false));
+        }
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        renderSection();
+        toast("Вправу додано", `${exerciseById(joining.exerciseId)?.name || "Вправа"} · ${positionLabel(block.members.length)}`);
+    }
+
+    async function supersetSetRest(groupId, seconds) {
+        const workoutItem = editWorkout();
+        const group = workoutItem ? supersetGroupOf(workoutItem, groupId) : null;
+        if (!group || !canManage(workoutItem) || !requireSupersetPro()) {
+            return;
+        }
+        group.restSeconds = Math.max(0, Math.round(Number(seconds) || SUPERSET_DEFAULT_REST));
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        renderSection();
+    }
+
+    /**
+     * Delete the group AND its exercises.
+     *
+     * The only one of the three that loses work, so it says exactly how much.
+     */
+    async function supersetDelete(groupId) {
+        const workoutItem = editWorkout();
+        const block = workoutItem ? supersetBlockOf(workoutItem, groupId) : null;
+        if (!block || !canManage(workoutItem)) {
+            return;
+        }
+        const setCount = block.members.reduce((sum, member) => sum + (member.sets || []).length, 0);
+        const doneCount = block.members.reduce((sum, member) => sum + (member.sets || []).filter((set) => set.isCompleted).length, 0);
+        const confirmed = await confirmDialog(`${block.members.length} ${pluralUk(block.members.length, "вправа", "вправи", "вправ")}`, {
+            title: "Видалити весь суперсет?",
+            detail: `Зникнуть ${setCount} ${pluralUk(setCount, "підхід", "підходи", "підходів")}${doneCount ? `, з них ${doneCount} виконано` : ""}. Щоб залишити вправи, обери «Розділити».`,
+            confirmLabel: "Видалити"
+        });
+        if (!confirmed) {
+            return;
+        }
+        const removedIds = new Set(block.members.map((member) => member.id));
+        workoutItem.exercises = (workoutItem.exercises || []).filter((item) => !removedIds.has(item.id));
+        workoutItem.supersetGroups = (workoutItem.supersetGroups || []).filter((group) => group.id !== groupId);
+        touchGymClock(workoutItem);
+        workoutItem.updatedAt = new Date().toISOString();
+        await persistWorkout(workoutItem);
+        closeSheet();
+        renderSection();
+        toast("Суперсет видалено", `${block.members.length} ${pluralUk(block.members.length, "вправа", "вправи", "вправ")} · ${setCount} ${pluralUk(setCount, "підхід", "підходи", "підходів")}`);
+    }
+
+    // ---- Superset block ------------------------------------------------------------------
+    //
+    // ONE card for the whole group, not two or three stacked exercise cards. What a person
+    // does in the gym is a ROUND — A1, then A2, then A3, then rest — so the card is a list
+    // of rounds rather than a list of exercises: the current round is open, finished ones
+    // collapse to a single line you can reopen, and the rest belongs to the round rather
+    // than to any one set inside it.
+
+    function supersetGroupOf(workoutItem, groupId) {
+        return (workoutItem.supersetGroups || []).find((group) => group.id === groupId) || null;
+    }
+
+    function supersetRestSeconds(workoutItem, groupId) {
+        const group = supersetGroupOf(workoutItem, groupId);
+        return Math.max(0, Math.round(Number(group?.restSeconds ?? SUPERSET_DEFAULT_REST)));
+    }
+
+    function formatRest(seconds) {
+        const total = Math.max(0, Math.round(Number(seconds) || 0));
+        return total < 60 ? `${total} с` : `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+    }
+
+    function supersetBlockEditor(workoutItem, block, readonly) {
+        const { groupId, members } = block;
+        const rounds = roundCount(members);
+        const current = currentRoundIndex(members);
+        const finished = rounds > 0 && current >= rounds;
+        const names = members.map((member) => exerciseById(member.exerciseId)?.name || "Вправа");
+        const rest = supersetRestSeconds(workoutItem, groupId);
+        const progress = rounds
+            ? `<span class="ss-progress" aria-hidden="true">${Array.from({ length: rounds }, (_, index) =>
+                `<i class="${index < current ? "done" : index === current ? "on" : ""}"></i>`).join("")}</span>`
+            : "";
+        const heading = finished
+            ? "Суперсет завершено"
+            : rounds ? `Раунд ${Math.min(current + 1, rounds)} з ${rounds}` : "Раундів ще немає";
+        return `<article class="superset-block${finished ? " is-done" : ""}" data-superset-id="${escapeHtml(groupId)}">
+            <div class="ss-head">
+                <div class="ss-head-text">
+                    <div class="ss-title-line"><span class="ss-badge"><i data-lucide="repeat-2"></i>Суперсет</span><span class="ss-count">${members.length} ${pluralUk(members.length, "вправа", "вправи", "вправ")}</span></div>
+                    <p class="ss-names">${escapeHtml(names.join(" · "))}</p>
+                    <div class="ss-status">${progress}<span>${escapeHtml(heading)}</span></div>
+                </div>
+                ${readonly ? "" : `<button class="icon-button" type="button" title="Керування суперсетом" aria-label="Керування суперсетом" data-action="open-superset-menu" data-superset-id="${escapeHtml(groupId)}" data-workout-id="${workoutItem.id}"><i data-lucide="more-vertical"></i></button>`}
+            </div>
+            <div class="ss-rounds">${Array.from({ length: rounds }, (_, index) =>
+                supersetRoundRow(workoutItem, block, index, current, readonly, rest)).join("")}</div>
+            ${readonly ? "" : `<div class="ss-foot"><button class="button button-secondary compact" type="button" data-action="superset-add-round" data-superset-id="${escapeHtml(groupId)}" data-workout-id="${workoutItem.id}"><i data-lucide="plus"></i>Раунд</button><span class="ss-rest-note"><i data-lucide="timer"></i>Відпочинок ${formatRest(rest)}</span></div>`}
+        </article>`;
+    }
+
+    /**
+     * One round.
+     *
+     * Open when it is the round being done, or when the athlete deliberately reopened a
+     * finished one — a completed round has to stay editable, because the commonest reason
+     * to look at it is that a number went in wrong.
+     */
+    function supersetRoundRow(workoutItem, block, roundIndex, currentIndex, readonly, rest) {
+        const { groupId, members } = block;
+        const sets = roundSets(members, roundIndex);
+        const done = isRoundComplete(members, roundIndex);
+        const reopened = Boolean(state.supersetOpenRounds[`${groupId}:${roundIndex}`]);
+        const open = reopened || (!done && roundIndex === currentIndex);
+        const summary = sets.map((set) => roundSummary(set)).join(" · ");
+        if (!open) {
+            return `<button class="ss-round is-collapsed${done ? " is-done" : ""}" type="button" data-action="superset-open-round" data-superset-id="${escapeHtml(groupId)}" data-round="${roundIndex}">
+                <span class="ss-round-no">${done ? `<i data-lucide="check"></i>` : roundIndex + 1}</span>
+                <span class="ss-round-summary">${escapeHtml(summary)}</span>
+                <i data-lucide="chevron-down" class="ss-round-caret"></i>
+            </button>`;
+        }
+        const rows = members.map((member, memberIndex) => supersetMemberRow(member, memberIndex, roundIndex, readonly)).join("");
+        return `<div class="ss-round is-open${done ? " is-done" : ""}">
+            <div class="ss-round-head">
+                <span class="ss-round-no">${roundIndex + 1}</span>
+                <span class="ss-round-label">Раунд ${roundIndex + 1}</span>
+                ${readonly ? "" : `<button class="ss-round-collapse" type="button" data-action="superset-close-round" data-superset-id="${escapeHtml(groupId)}" data-round="${roundIndex}" aria-label="Згорнути раунд"><i data-lucide="chevron-up"></i></button>`}
+            </div>
+            ${rows}
+            ${readonly ? "" : `<div class="ss-round-rest"><i data-lucide="timer"></i>Відпочинок після раунду · ${formatRest(rest)}</div>`}
+        </div>`;
+    }
+
+    function supersetMemberRow(member, memberIndex, roundIndex, readonly) {
+        const set = (member.sets || [])[roundIndex];
+        const exercise = exerciseById(member.exerciseId);
+        if (!set) {
+            return `<div class="ss-member is-missing"><span class="ss-pos">${positionLabel(memberIndex)}</span><span class="ss-member-name">${escapeHtml(exercise?.name || "Вправа")}</span><span class="card-caption">немає підходу</span></div>`;
+        }
+        const timed = isTimedSet(set);
+        const bodyweight = isBodyweightExercise(exercise);
+        const target = `data-workout-exercise-id="${member.id}" data-set-id="${set.id}"`;
+        const lock = readonly ? "disabled" : "";
+        // Two rows, not three: who it is, then the numbers WITH the tick. A round of three
+        // exercises has to fit a phone without scrolling between its own members, and the
+        // stacked label-above-input field the ordinary card uses costs 66px per number.
+        return `<div class="ss-member${set.isCompleted ? " is-done" : ""}">
+            <div class="ss-member-head">
+                <span class="ss-pos">${positionLabel(memberIndex)}</span>
+                <span class="ss-member-name">${escapeHtml(exercise?.name || "Вправа")}</span>
+            </div>
+            <div class="ss-member-fields">
+                <label class="set-field" title="${weightFieldLabel({ timed, bodyweight })}"><span class="set-field-label">кг</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" aria-label="${escapeHtml(weightFieldLabel({ timed, bodyweight }))}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
+                ${timed
+                    ? `<label class="set-field" title="Час, секунд"><span class="set-field-label">с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" aria-label="Час, секунд" data-action="set-field" ${target} data-field="durationSeconds" ${lock}></label>`
+                    : `<label class="set-field" title="Повтори"><span class="set-field-label">повт</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" aria-label="Повтори" data-action="set-field" ${target} data-field="repetitions" ${lock}></label>`}
+                <button class="icon-button set-done ${set.isCompleted ? "is-done" : ""}" type="button" title="${set.isCompleted ? "Виконано" : "Позначити виконаним"}" aria-label="${escapeHtml(`${positionLabel(memberIndex)} ${exercise?.name || "Вправа"}`)} — ${set.isCompleted ? "виконано" : "позначити виконаним"}" data-action="toggle-set" ${target} ${lock}><i data-lucide="${set.isCompleted ? "check-circle-2" : "circle"}"></i></button>
+            </div>
+        </div>`;
     }
 
     function formatDurationLabel(minutes) {
@@ -11958,6 +12698,9 @@ import {
                 id: exercise.id || undefined,
                 exerciseId: exercise.exerciseId,
                 order: exercise.order || index + 1,
+                // undefined, not null, so a client that never touched supersets sends a
+                // payload byte-identical to the one it sent before the feature existed.
+                supersetGroupId: exercise.supersetGroupId || undefined,
                 notes: exercise.notes || "",
                 sets: (exercise.sets || []).map((set) => ({
                     id: set.id || undefined,
@@ -11971,6 +12714,15 @@ import {
                     notes: set.notes || ""
                 }))
             })),
+            // Only the rest lives on a group — a round is the Nth set of each member, so
+            // the rounds themselves are already inside `exercises`. Omitted entirely when
+            // there are none, so nothing changes for a workout that has no supersets.
+            supersetGroups: (workoutItem.supersetGroups || []).length
+                ? workoutItem.supersetGroups.map((group) => ({
+                    id: group.id,
+                    restSeconds: Math.max(0, Math.round(Number(group.restSeconds) || SUPERSET_DEFAULT_REST))
+                }))
+                : undefined,
             cardioSessions: (workoutItem.cardioSessions || []).map((session) => ({
                 type: session.type || "treadmill",
                 durationMinutes: Number(session.durationMinutes) || 0,
@@ -13229,6 +13981,11 @@ import {
             height: user.height || "",
             bodyweight: user.bodyweight || "",
             favoriteMuscleGroup: user.favoriteMuscleGroup || "",
+            // Not a step of its own: onboarding already asks five questions, and a sixth
+            // buys one preference at the cost of everybody who abandons on it. It rides
+            // along with «what do you like to train», which is the other question about
+            // how somebody trains.
+            useSupersets: getPref("useSupersets") === "1",
             hideWorkoutDetails: accessState.privacyChoiceAt ? accessState.hideWorkoutDetails : null
         };
         // Pick up where a discarded page left off, rather than asking the same five
@@ -13347,8 +14104,13 @@ import {
         if (step === "focus") {
             // The catalogue's own muscle grid — silhouettes, not a dropdown of words.
             const card = (value) => `<button type="button" class="muscle-card${draft.favoriteMuscleGroup === value ? " active" : ""}" data-action="onboarding-muscle" data-value="${escapeHtml(value)}"><span class="muscle-card-ic">${muscleIcon(value)}</span><span class="muscle-card-label">${escapeHtml(muscleLabel(value))}</span></button>`;
+            const superset = (value, label) => `<button type="button" class="ob-mini${draft.useSupersets === value ? " active" : ""}" data-action="onboarding-supersets" data-value="${value}">${escapeHtml(label)}</button>`;
             return `${onboardingHead("target", "Що любиш тренувати?", "Підсвітимо твій фокус у профілі й рейтингах.")}
-                <div class="muscle-grid ob-grid">${orderedMuscleGroups().map(card).join("")}</div>${error}`;
+                <div class="muscle-grid ob-grid">${orderedMuscleGroups().map(card).join("")}</div>
+                <div class="ob-aside">
+                    <div class="ob-aside-text"><strong>Виконуєте вправи суперсетами?</strong><span>2–3 вправи поспіль із відпочинком після завершення раунду</span></div>
+                    <div class="ob-mini-row">${superset(true, "Так")}${superset(false, "Ні")}</div>
+                </div>${error}`;
         }
 
         if (step === "privacy") {
@@ -13466,6 +14228,10 @@ import {
         if (draft.favoriteMuscleGroup) {
             payload.favoriteMuscleGroup = draft.favoriteMuscleGroup;
         }
+        // A preference, not a profile field — setPref mirrors it to the account, so the
+        // answer follows the person to every device. No paywall here on purpose: saying
+        // "yes" costs nothing, and the tier is met when the feature is actually reached.
+        setPref("useSupersets", draft.useSupersets ? "1" : "0");
         const apiMode = storage.mode === "api" && storage.apiClient.hasBaseUrl();
         try {
             if (Object.keys(payload).length) {
