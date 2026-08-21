@@ -11210,7 +11210,11 @@ import {
             // Include the portaled dropdown panels (.gselect-panel / .gdate-panel are
             // appended to <body>, OUTSIDE .modal-layer) so their own list can scroll on
             // touch while a modal is open — otherwise the guard would block them.
-            const overlay = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer, .gselect-panel, .gdate-panel, .focus-layer") : null;
+            // EVERY overlay that holds the lock has to be listed here, or its own content
+            // cannot be scrolled on a touch screen — the guard blocks the gesture as if it
+            // were the page behind. .ob-layer was missing, which froze the onboarding
+            // muscle grid on any phone short enough to need scrolling.
+            const overlay = event.target && event.target.closest ? event.target.closest(".modal-layer, .drawer-layer, .gselect-panel, .gdate-panel, .focus-layer, .ob-layer") : null;
             if (!overlay) {
                 event.preventDefault(); // outside any overlay → never let the page behind scroll
                 return;
@@ -13155,6 +13159,10 @@ import {
 
     function closeOnboarding() {
         onboardingState.open = false;
+        // The date panel is portaled to <body>, so it does not go away with the layer
+        // that owns its field — it would be left floating over the app with nothing
+        // behind it.
+        document.querySelectorAll(".gdate-panel, .gselect-panel").forEach((panel) => panel.remove());
         const layer = element("onboardingLayer");
         if (layer) {
             layer.classList.remove("visible");

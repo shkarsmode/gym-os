@@ -163,7 +163,7 @@ class GymDate extends HTMLElement {
         panel.setAttribute("aria-label", "Вибір дати");
         document.body.appendChild(panel);
         this.panel = panel;
-        registerOpenPanel(this, panel, () => this.close());
+        registerOpenPanel(this, panel, () => this.close(), () => this.position());
         this.renderCalendar();
         this.position();
         revealOnNextFrame(panel);

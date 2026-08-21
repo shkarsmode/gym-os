@@ -116,7 +116,7 @@ class GymSelect extends HTMLElement {
         ).join("");
         document.body.appendChild(panel);
         this.panel = panel;
-        registerOpenPanel(this, panel, () => this.close());
+        registerOpenPanel(this, panel, () => this.close(), () => this.position());
         this.position();
         refreshIcons();
         revealOnNextFrame(panel);
