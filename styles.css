@@ -5822,13 +5822,13 @@ ul {
 .ss-pick-muscle { flex: 0 0 auto; color: var(--color-faint); font-size: 11.5px; }
 
 /* Management sheet */
-.ss-menu-members { display: grid; gap: 7px; margin-top: 14px; }
-.ss-menu-member { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-2); }
+.ss-menu-members { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; margin-top: 14px; }
+.ss-menu-member { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 9px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-2); }
 .ss-menu-name { flex: 1 1 auto; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ss-menu-tools { flex: 0 0 auto; display: flex; gap: 4px; }
+.ss-menu-tools { flex: 0 0 auto; display: flex; gap: 2px; }
+.ss-menu-tools .icon-button { width: 30px; height: 30px; }
+.ss-menu-tools .icon-button svg { width: 15px; height: 15px; }
 .ss-menu-add { margin-top: 10px; }
-.ss-menu-rounds { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-2); }
-.ss-menu-rounds strong { font-size: 16px; font-variant-numeric: tabular-nums; }
 
 /* The three destructive actions read differently on purpose: only one loses work. */
 .ss-menu-danger { display: grid; gap: 8px; margin-top: 16px; }
@@ -9364,9 +9364,72 @@ html.compact-ui .chip {
 }
 
 .focus-set-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
     font-family: var(--font-display);
     font-size: 15px;
     font-weight: 700;
+}
+
+.focus-set-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* --- A superset has to fit on one screen -------------------------------------------------
+   The strip above the card already names the group, the round and every member, so the
+   card repeated all three and the screen scrolled. What is left here is only what the
+   strip does NOT say: the numbers being entered. Everything is tightened one notch and
+   the two prefill chips share a line instead of stacking. */
+
+.focus-set-card.in-superset {
+    gap: 11px;
+    padding: 14px;
+}
+
+.focus-set-card.in-superset .focus-hints {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.focus-set-card.in-superset .focus-hint {
+    gap: 6px;
+    padding: 9px 10px;
+}
+
+.focus-set-card.in-superset .focus-hint-value {
+    font-size: 15px;
+}
+
+/* The affordance is the whole chip; at half width the arrow is the first thing that can
+   go without losing anything the reader needs. */
+.focus-set-card.in-superset .focus-hint-use {
+    display: none;
+}
+
+.focus-set-card.in-superset .focus-hints-wrap {
+    gap: 6px;
+}
+
+.focus-set-card.in-superset .focus-type-field {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 10px;
+}
+
+.focus-set-card.in-superset .focus-type-field gym-select {
+    width: auto;
+    min-width: 150px;
+}
+
+.focus-set-card.in-superset .focus-cta {
+    padding: 13px 18px;
 }
 
 .focus-hints-wrap {
@@ -11390,10 +11453,129 @@ html.compact-ui .chip {
     font-weight: 600;
 }
 
-.rest-readout {
-    font-size: 12px;
-    color: var(--color-text-soft, #9aa5b5);
+
+
+/* --- Superset sheets: one row language ---------------------------------------------------
+   Both sheets used a two-column field grid, which put a short stepper next to a tall
+   preset block and left the two labels floating at different heights with a hole under
+   the short one. Rows solve it the way the settings screen already does: name on the
+   left, control on the right, one per line, full width. */
+
+.ss-group {
+    display: grid;
+    gap: 1px;
+    margin-top: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-border);
+    overflow: hidden;
+}
+
+.ss-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px 12px;
+    min-height: 52px;
+    padding: 10px 13px;
+    background: var(--color-surface-2, rgba(255, 255, 255, 0.03));
+}
+
+/* A control too wide to sit beside its label takes the line under it instead — while the
+   label itself stays on the same baseline as every other row in the group. */
+.ss-row-extra {
+    grid-column: 1 / -1;
+}
+
+.ss-row-label {
+    min-width: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.ss-row-control {
+    justify-self: end;
+}
+
+.ss-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-elevated, rgba(255, 255, 255, 0.05));
+}
+
+.ss-stepper strong {
+    min-width: 58px;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 800;
     font-variant-numeric: tabular-nums;
+}
+
+.ss-step {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 8px;
+    background: var(--color-surface-2, rgba(255, 255, 255, 0.05));
+    color: var(--color-text-soft, #9aa5b5);
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.ss-step:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+    color: var(--color-accent);
+}
+
+.ss-step:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.ss-step svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* Inside a row the presets are the wide half, so they get the whole line and wrap
+   evenly instead of being squeezed into a half-width three-column grid. */
+.ss-row .rest-picker {
+    align-items: stretch;
+}
+
+/* Seven chips in a four-column grid: the columns line up and no wrapped pair stretches
+   itself across a whole row. */
+.ss-row .rest-presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.ss-row .rest-preset {
+    min-width: 0;
+    padding: 0 4px;
+}
+
+.ss-row .ss-stepper {
+    align-self: center;
+}
+
+.ss-step-label {
+    display: block;
+    margin: 14px 0 -4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-faint);
 }
 
 /* The settings shortcut inside the superset entry hint reads as part of the sentence,
@@ -11420,9 +11602,9 @@ html.compact-ui .chip {
 .focus-superset {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
-    margin-bottom: 12px;
+    gap: 7px;
+    padding: 11px 12px;
+    margin-bottom: 10px;
     border-radius: 14px;
     border: 1px solid var(--color-border);
     background: var(--color-surface-2, rgba(255, 255, 255, 0.03));
@@ -11446,16 +11628,23 @@ html.compact-ui .chip {
 }
 
 .focus-ss-members {
-    display: flex;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 6px;
-    flex-wrap: wrap;
 }
 
 .focus-ss-member {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
     max-width: 100%;
+    overflow: hidden;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    transition: border-color 0.14s ease, background 0.14s ease, opacity 0.14s ease;
     padding: 5px 9px 5px 5px;
     border-radius: 999px;
     border: 1px solid var(--color-border);
@@ -11465,6 +11654,7 @@ html.compact-ui .chip {
 }
 
 .focus-ss-member-name {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -11481,11 +11671,17 @@ html.compact-ui .chip {
     opacity: 0.55;
 }
 
+.focus-ss-member:not(.current):hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+    opacity: 1;
+}
+
 .focus-ss-hint {
     margin: 0;
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--color-text-soft, #9aa5b5);
-    line-height: 1.45;
+    line-height: 1.35;
 }
 
 /* Editing the round rest from the rest screen itself — the "four minutes is not
@@ -11507,9 +11703,6 @@ html.compact-ui .chip {
     justify-content: center;
 }
 
-.focus-ss-restedit .rest-readout {
-    text-align: center;
-}
 
 .focus-rest-exercise .ss-badge {
     margin-right: 6px;

@@ -4791,6 +4791,7 @@ import {
                 restSeconds: supersetBuilder.restSeconds
             }),
             "open-superset-menu": () => openSupersetMenu(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
+            "focus-jump-member": () => focusJumpMember(actionElement.dataset.exerciseBlockId),
             "superset-set-rest": async () => {
                 const groupId = actionElement.dataset.supersetId;
                 const workoutItem = editWorkout();
@@ -4799,6 +4800,12 @@ import {
             },
             "superset-builder-rest": () => {
                 supersetBuilder.restSeconds = resolveRestValue(actionElement, supersetBuilder.restSeconds);
+                refreshSupersetBuilder();
+            },
+            "superset-builder-rounds": () => {
+                const delta = Math.round(Number(actionElement.dataset.roundsDelta) || 0);
+                supersetBuilder.rounds = Math.max(SUPERSET_BUILDER_MIN_ROUNDS,
+                    Math.min(SUPERSET_BUILDER_MAX_ROUNDS, supersetBuilder.rounds + delta));
                 refreshSupersetBuilder();
             },
             "superset-add-round": () => supersetAddRound(actionElement.dataset.workoutId, actionElement.dataset.supersetId),
@@ -4921,12 +4928,6 @@ import {
         // gym-date fires `change`, not `input`, so the birthday step is read here.
         if (actionElement.dataset.action === "onboarding-field") {
             setOnboardingField(actionElement.dataset.obField, actionElement.value);
-            return;
-        }
-
-        if (actionElement.dataset.action === "superset-builder-field") {
-            const field = actionElement.dataset.field;
-            supersetBuilder[field] = Number(actionElement.value) || supersetBuilder[field];
             return;
         }
 
@@ -5111,6 +5112,8 @@ import {
             // Rest is nudged repeatedly; a spinner on every tap would strobe.
             "superset-set-rest",
             "superset-builder-rest",
+            "superset-builder-rounds",
+            "focus-jump-member",
             "superset-add-round",
             "superset-remove-round",
             "onboarding-next",
@@ -9526,15 +9529,18 @@ import {
             return "";
         }
         const loose = workoutBlocks(workoutItem.exercises).filter((block) => block.kind === "exercise").length;
-        if (loose < SUPERSET_MIN_MEMBERS) {
-            return "";
-        }
+        // Offered even with nothing to pair yet. Hiding it until two exercises existed
+        // meant the feature was invisible at exactly the moment somebody is deciding how
+        // to build the session — the tap now explains what is missing instead.
+        const missing = Math.max(0, SUPERSET_MIN_MEMBERS - loose);
         const locked = !hasUnlimited();
         return `<div class="ss-entry">
             <button class="button button-secondary compact" type="button" data-action="open-superset-builder" data-workout-id="${workoutItem.id}">
                 <i data-lucide="repeat-2"></i><span>Створити суперсет</span>${locked ? `<span class="ss-pro">PRO</span>` : ""}
             </button>
-            <span class="ss-entry-hint">2–3 вправи поспіль, один відпочинок після раунду. Не користуєшся? Вимкни в <button class="ss-entry-link" type="button" data-action="navigate" data-section="settings">Налаштуваннях</button>.</span>
+            <span class="ss-entry-hint">${missing
+                ? `Додай ${missing === 1 ? "ще одну вправу" : "дві вправи"} — і зможеш обʼєднати їх в один блок.`
+                : "2–3 вправи поспіль, один відпочинок після раунду."} Не користуєшся? Вимкни в <button class="ss-entry-link" type="button" data-action="navigate" data-section="settings">Налаштуваннях</button>.</span>
         </div>`;
     }
 
@@ -9560,6 +9566,8 @@ import {
         return false;
     }
 
+    const SUPERSET_BUILDER_MIN_ROUNDS = 2;
+    const SUPERSET_BUILDER_MAX_ROUNDS = 12;
     const supersetBuilder = { workoutId: null, picked: [], rounds: SUPERSET_DEFAULT_ROUNDS, restSeconds: SUPERSET_DEFAULT_REST };
 
     /**
@@ -9626,14 +9634,22 @@ import {
      */
     function openSupersetBuilder(workoutId) {
         const workoutItem = editWorkout();
-        if (!workoutItem || !canManage(workoutItem) || !requireSupersetPro()) {
+        if (!workoutItem || !canManage(workoutItem)) {
             return;
         }
         const loose = workoutBlocks(workoutItem.exercises)
             .filter((block) => block.kind === "exercise")
             .map((block) => block.exercise);
+        // Asked BEFORE the paywall: offering to sell something that cannot be done yet
+        // for a reason that has nothing to do with the plan is the wrong answer.
         if (loose.length < SUPERSET_MIN_MEMBERS) {
-            toast("Потрібні дві вправи", "Додай ще одну вправу, щоб зібрати суперсет.");
+            const missing = SUPERSET_MIN_MEMBERS - loose.length;
+            toast("Ще нема чого обʼєднувати", missing === 1
+                ? "Додай ще одну вправу — у суперсеті їх щонайменше дві."
+                : "Додай дві вправи — саме їх суперсет і чергує.");
+            return;
+        }
+        if (!requireSupersetPro()) {
             return;
         }
         supersetBuilder.workoutId = workoutItem.id;
@@ -9657,14 +9673,21 @@ import {
         const problem = mergeProblem(supersetBuilder.picked
             .map((id) => (workoutItem.exercises || []).find((item) => item.id === id))
             .filter(Boolean));
-        const restPicker = restPickerMarkup(supersetBuilder.restSeconds, { action: "superset-builder-rest" });
-        const roundOptions = [2, 3, 4, 5, 6, 7, 8, 10].map((value) =>
-            `<option value="${value}" ${supersetBuilder.rounds === value ? "selected" : ""}>${value}</option>`).join("");
-        return `<div class="modal-header"><div><h2>Новий суперсет</h2><p class="card-caption">Обери 2–3 вправи — вони виконуються поспіль, відпочинок після раунду.</p></div><button class="icon-button" type="button" data-action="close-overlay" aria-label="Закрити"><i data-lucide="x"></i></button></div>
+        const restOpts = { action: "superset-builder-rest" };
+        const roundsStepper = stepperMarkup({
+            value: supersetBuilder.rounds, action: "superset-builder-rounds",
+            down: `data-rounds-delta="-1"`, up: `data-rounds-delta="1"`,
+            downLabel: "Менше раундів", upLabel: "Більше раундів",
+            downOff: supersetBuilder.rounds <= SUPERSET_BUILDER_MIN_ROUNDS,
+            upOff: supersetBuilder.rounds >= SUPERSET_BUILDER_MAX_ROUNDS
+        });
+        const picked = supersetBuilder.picked.length;
+        return `<div class="modal-header"><div><h2>Новий суперсет</h2><p class="card-caption">Обери 2–3 вправи — вони йдуть поспіль, відпочинок один, після раунду.</p></div><button class="icon-button" type="button" data-action="close-overlay" aria-label="Закрити"><i data-lucide="x"></i></button></div>
+            <span class="ss-step-label">${picked ? `Обрано ${picked} з ${SUPERSET_MAX_MEMBERS}` : "Обери вправи"}</span>
             <div class="ss-picks" id="supersetPicks">${rows}</div>
-            <div class="field-grid two" style="margin-top:14px;">
-                <div class="field"><label for="supersetRounds">Раундів</label><gym-select id="supersetRounds" data-action="superset-builder-field" data-field="rounds">${roundOptions}</gym-select></div>
-                <div class="field"><label>Відпочинок після раунду</label>${restPicker}</div>
+            <div class="ss-group">
+                ${ssRow("Раундів", roundsStepper)}
+                ${ssRow("Відпочинок після раунду", restStepperMarkup(supersetBuilder.restSeconds, restOpts), { extra: restPresetsMarkup(supersetBuilder.restSeconds, restOpts) })}
             </div>
             ${problem && supersetBuilder.picked.length ? `<p class="ob-error" role="alert"><i data-lucide="alert-circle"></i>${escapeHtml(problem)}</p>` : ""}
             <div class="form-actions" style="justify-content:flex-end;margin-top:16px;">
@@ -9906,20 +9929,17 @@ import {
                     <button class="icon-button" type="button" title="Вище" aria-label="Пересунути ${positionLabel(index)} вище" data-action="superset-move-member" data-superset-id="${escapeHtml(groupId)}" data-exercise-block-id="${member.id}" data-dir="-1" ${first ? "disabled" : ""}><i data-lucide="arrow-up"></i></button>
                     <button class="icon-button" type="button" title="Нижче" aria-label="Пересунути ${positionLabel(index)} нижче" data-action="superset-move-member" data-superset-id="${escapeHtml(groupId)}" data-exercise-block-id="${member.id}" data-dir="1" ${last ? "disabled" : ""}><i data-lucide="arrow-down"></i></button>
                     <button class="icon-button" type="button" title="Замінити вправу" aria-label="Замінити ${positionLabel(index)}" data-action="replace-exercise" data-workout-exercise-id="${member.id}"><i data-lucide="repeat"></i></button>
-                    <button class="icon-button danger" type="button" title="Прибрати з суперсету" aria-label="Прибрати ${positionLabel(index)} з суперсету" data-action="superset-remove-member" data-superset-id="${escapeHtml(groupId)}" data-exercise-block-id="${member.id}"><i data-lucide="user-minus"></i></button>
+                    <button class="icon-button danger" type="button" title="Прибрати з суперсету" aria-label="Прибрати ${positionLabel(index)} з суперсету" data-action="superset-remove-member" data-superset-id="${escapeHtml(groupId)}" data-exercise-block-id="${member.id}"><i data-lucide="unlink"></i></button>
                 </span>
             </div>`;
         }).join("");
-        const restPicker = restPickerMarkup(rest, {
-            action: "superset-set-rest",
-            extraAttrs: `data-superset-id="${escapeHtml(groupId)}"`
-        });
+        const restOpts = { action: "superset-set-rest", extraAttrs: `data-superset-id="${escapeHtml(groupId)}"` };
         openSheet(`<div class="modal-header"><div><h2>Суперсет</h2><p class="card-caption">${block.members.length} ${pluralUk(block.members.length, "вправа", "вправи", "вправ")} · ${rounds} ${pluralUk(rounds, "раунд", "раунди", "раундів")}</p></div><button class="icon-button" type="button" data-action="close-sheet" aria-label="Закрити"><i data-lucide="x"></i></button></div>
             <div class="ss-menu-members">${memberRows}</div>
             ${canAdd ? `<button class="button button-secondary compact ss-menu-add" type="button" data-action="superset-add-member" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i>Додати третю вправу</button>` : ""}
-            <div class="field-grid two" style="margin-top:14px;">
-                <div class="field"><label>Відпочинок після раунду</label>${restPicker}</div>
-                <div class="field"><label>Раунди</label><div class="ss-menu-rounds"><button class="icon-button" type="button" aria-label="Прибрати раунд" data-action="superset-remove-round" data-superset-id="${escapeHtml(groupId)}" ${rounds <= 1 ? "disabled" : ""}><i data-lucide="minus"></i></button><strong>${rounds}</strong><button class="icon-button" type="button" aria-label="Додати раунд" data-action="superset-add-round" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i></button></div></div>
+            <div class="ss-group">
+                ${ssRow("Раунди", `<div class="ss-stepper"><button class="ss-step" type="button" aria-label="Прибрати раунд" data-action="superset-remove-round" data-superset-id="${escapeHtml(groupId)}" ${rounds <= 1 ? "disabled" : ""}><i data-lucide="minus"></i></button><strong>${rounds}</strong><button class="ss-step" type="button" aria-label="Додати раунд" data-action="superset-add-round" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="plus"></i></button></div>`)}
+                ${ssRow("Відпочинок після раунду", restStepperMarkup(rest, restOpts), { extra: restPresetsMarkup(rest, restOpts) })}
             </div>
             <div class="ss-menu-danger">
                 <button class="button button-secondary" type="button" data-action="superset-split" data-superset-id="${escapeHtml(groupId)}"><i data-lucide="split"></i><span><strong>Розділити на окремі вправи</strong><em>Вправи й результати залишаються</em></span></button>
@@ -10113,22 +10133,54 @@ import {
      * in a superset the athlete tunes most, so it takes any value: ±15 s steps, a direct
      * numeric field, and presets for the values people actually reach for.
      */
-    const REST_PRESETS = [30, 60, 90, 120, 180, 300];
+    const REST_PRESETS = [30, 45, 60, 90, 120, 180, 300];
 
-    function restPickerMarkup(seconds, { action, extraAttrs = "", idAttr = "" }) {
-        const value = Math.max(0, Math.round(Number(seconds) || 0));
-        const presets = REST_PRESETS.map((preset) =>
-            `<button class="rest-preset${preset === value ? " active" : ""}" type="button" data-action="${action}" ${extraAttrs} data-rest="${preset}">${formatRest(preset)}</button>`).join("");
-        return `<div class="rest-picker">
-            <div class="focus-stepper focus-stepper-rest">
-                <button class="focus-step" type="button" aria-label="Менше на 15 секунд" data-action="${action}" ${extraAttrs} data-rest-delta="-15"><i data-lucide="minus"></i></button>
-                <input type="number" inputmode="numeric" step="5" min="0" max="3600" value="${value}" aria-label="Відпочинок у секундах" data-action="${action}" ${extraAttrs} ${idAttr}>
-                <span class="focus-rest-unit">с</span>
-                <button class="focus-step" type="button" aria-label="Більше на 15 секунд" data-action="${action}" ${extraAttrs} data-rest-delta="15"><i data-lucide="plus"></i></button>
-            </div>
-            <div class="rest-presets">${presets}</div>
-            <span class="rest-readout">${formatRest(value)}</span>
+    /**
+     * The value is stated ONCE.
+     *
+     * This used to be a seconds input, a preset grid AND a mm:ss readout — three controls
+     * saying the same number in two different units, which is why the sheet read as a
+     * pile. Now: the value itself in mm:ss with ±15 s on either side, and presets under
+     * it. Every value is still reachable; none of them is spelled twice.
+     */
+    function stepperMarkup({ value, action, extraAttrs = "", down, up, downLabel, upLabel, downOff = false, upOff = false }) {
+        return `<div class="ss-stepper">
+            <button class="ss-step" type="button" aria-label="${downLabel}" data-action="${action}" ${extraAttrs} ${down} ${downOff ? "disabled" : ""}><i data-lucide="minus"></i></button>
+            <strong>${value}</strong>
+            <button class="ss-step" type="button" aria-label="${upLabel}" data-action="${action}" ${extraAttrs} ${up} ${upOff ? "disabled" : ""}><i data-lucide="plus"></i></button>
         </div>`;
+    }
+
+    function restStepperMarkup(seconds, { action, extraAttrs = "" }) {
+        const value = Math.max(0, Math.round(Number(seconds) || 0));
+        return stepperMarkup({
+            value: formatRest(value), action, extraAttrs,
+            down: `data-rest-delta="-15"`, up: `data-rest-delta="15"`,
+            downLabel: "Менше на 15 секунд", upLabel: "Більше на 15 секунд",
+            downOff: value <= 0
+        });
+    }
+
+    function restPresetsMarkup(seconds, { action, extraAttrs = "" }) {
+        const value = Math.max(0, Math.round(Number(seconds) || 0));
+        return `<div class="rest-presets">${REST_PRESETS.map((preset) =>
+            `<button class="rest-preset${preset === value ? " active" : ""}" type="button" data-action="${action}" ${extraAttrs} data-rest="${preset}">${formatRest(preset)}</button>`).join("")}</div>`;
+    }
+
+    /** Stacked form, for the rest screen where the picker is the only thing on the line. */
+    function restPickerMarkup(seconds, options) {
+        return `<div class="rest-picker">${restStepperMarkup(seconds, options)}${restPresetsMarkup(seconds, options)}</div>`;
+    }
+
+    /**
+     * One sheet row: what it is on the left, the control that changes it on the right.
+     *
+     * `extra` takes the whole line underneath — for a control (the rest presets) too wide
+     * to sit beside its label but which must not push the label out of alignment with the
+     * rows above it.
+     */
+    function ssRow(label, control, { extra = "" } = {}) {
+        return `<div class="ss-row"><span class="ss-row-label">${label}</span><div class="ss-row-control">${control}</div>${extra ? `<div class="ss-row-extra">${extra}</div>` : ""}</div>`;
     }
 
     /** Resolve what a rest control was asked to do: a preset, a step, or a typed value. */
@@ -10844,9 +10896,12 @@ import {
         const { names, memberIndex, roundIndex, rounds, groupId, rest } = superset;
         const dots = Array.from({ length: rounds }, (_, index) =>
             `<i class="${index < roundIndex ? "done" : index === roundIndex ? "on" : ""}"></i>`).join("");
-        const chips = names.map((name, index) => `<span class="focus-ss-member${index === memberIndex ? " current" : ""}${index < memberIndex ? " done" : ""}">
+        // Tappable, because the one thing you need mid-round that nothing else offered is
+        // "go back to A1, I typed the wrong weight". Without it the only way back was to
+        // leave focus mode.
+        const chips = names.map((name, index) => `<button class="focus-ss-member${index === memberIndex ? " current" : ""}${index < memberIndex ? " done" : ""}" type="button" data-action="focus-jump-member" data-exercise-block-id="${escapeHtml(superset.members[index].id)}" aria-current="${index === memberIndex}">
             <span class="ss-pos">${positionLabel(index)}</span><span class="focus-ss-member-name">${escapeHtml(name)}</span>
-        </span>`).join("");
+        </button>`).join("");
         return `<div class="focus-superset" data-superset-id="${escapeHtml(groupId)}">
             <div class="focus-ss-top">
                 <span class="ss-badge"><i data-lucide="repeat-2"></i>Суперсет</span>
@@ -10854,8 +10909,30 @@ import {
                 <span class="ss-progress" aria-hidden="true">${dots}</span>
             </div>
             <div class="focus-ss-members">${chips}</div>
-            <p class="focus-ss-hint">Виконуй поспіль без відпочинку. Пауза ${formatRest(rest)} — після ${positionLabel(names.length - 1)}.</p>
+            <p class="focus-ss-hint">Поспіль, без пауз · відпочинок ${formatRest(rest)} після ${positionLabel(names.length - 1)}</p>
         </div>`;
+    }
+
+    /**
+     * Move to another member of the CURRENT round.
+     *
+     * Deliberately stays on the same round rather than that member's next open set: the
+     * reason to go back to A1 mid-round is to correct what was just entered there.
+     */
+    function focusJumpMember(exerciseBlockId) {
+        const context = focusContext();
+        if (!context || !context.superset || !state.focus) {
+            return;
+        }
+        const member = context.superset.members.find((item) => item.id === exerciseBlockId);
+        if (!member) {
+            return;
+        }
+        const set = (member.sets || [])[context.superset.roundIndex];
+        state.focus.exerciseId = member.id;
+        state.focus.setId = set ? set.id : null;
+        state.focus.view = "set";
+        renderFocus();
     }
 
     /** Inside a round the button promises what happens next, not just "done". */
@@ -10902,11 +10979,19 @@ import {
             ? `<div class="focus-hints-wrap"><span class="focus-hints-caption"><i data-lucide="wand-2"></i>Натисни, щоб підставити значення</span><div class="focus-hints">${lastSet ? focusHintChip("history", "Минулого разу", lastSet) : ""}${previousSet ? focusHintChip("corner-left-up", "Попередній підхід", previousSet) : ""}</div></div>`
             : "";
         const nextExercise = list[index + 1] || null;
-        return `${superset ? focusSupersetStrip(superset) : ""}${exerciseNav}${superset ? "" : dots}
-        <div class="focus-set-card">
+        /*
+         * A superset drops the exercise nav and the round label from the card.
+         *
+         * Both were already on the strip directly above — the screen said "Раунд 2 з 5"
+         * twice and named the exercise twice, and the ‹ › arrows walked OUT of the group
+         * mid-round, which is not a thing anyone wants to do by accident. The card keeps
+         * one heading: which position you are on and what it is.
+         */
+        return `${superset ? focusSupersetStrip(superset) : `${exerciseNav}${dots}`}
+        <div class="focus-set-card${superset ? " in-superset" : ""}">
             <div class="focus-set-heading">
                 <span class="focus-set-label">${superset
-                    ? `${positionLabel(superset.memberIndex)} · раунд ${Math.min(superset.roundIndex + 1, superset.rounds)} з ${superset.rounds}${timed ? " · на час" : ""}`
+                    ? `<span class="ss-pos">${positionLabel(superset.memberIndex)}</span><span class="focus-set-name">${escapeHtml(meta.name)}</span>${timed ? `<span class="chip">на час</span>` : ""}`
                     : `Підхід ${setIndex + 1} з ${sets.length}${timed ? " · на час" : ""}`}</span>
                 ${set.isCompleted ? `<span class="status-badge completed">Виконано</span>` : ""}
             </div>
@@ -10933,19 +11018,15 @@ import {
                     </div>
                 </div>
             </div>
-            <div class="focus-rest-field">
-                <span class="focus-field-label">${superset ? "Відпочинок після раунду" : "Відпочинок"}</span>
-                ${superset
-                    // One rest for the whole group, edited here so the athlete never has to
-                    // leave focus mode to change it mid-workout.
-                    ? restPickerMarkup(superset.rest, { action: "superset-set-rest", extraAttrs: `data-superset-id="${escapeHtml(superset.groupId)}"` })
-                    : `<div class="focus-stepper focus-stepper-rest">
+            ${superset ? "" : `<div class="focus-rest-field">
+                <span class="focus-field-label">Відпочинок</span>
+                ${`<div class="focus-stepper focus-stepper-rest">
                     <button class="focus-step" type="button" data-action="focus-step" data-field="restSeconds" data-delta="-15" title="−15 с"><i data-lucide="minus"></i></button>
                     <input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds">
                     <span class="focus-rest-unit">с</span>
                     <button class="focus-step" type="button" data-action="focus-step" data-field="restSeconds" data-delta="15" title="+15 с"><i data-lucide="plus"></i></button>
                 </div>`}
-            </div>
+            </div>`}
             ${set.isCompleted
                 ? `<button class="button button-secondary focus-cta" type="button" data-action="focus-uncomplete-set"><i data-lucide="rotate-ccw"></i>Зняти позначку «виконано»</button>`
                 : `<button class="button button-primary focus-cta" type="button" data-action="focus-complete-set"><i data-lucide="check"></i>${supersetCtaLabel(superset)}</button>`}
