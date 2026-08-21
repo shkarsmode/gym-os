@@ -6548,7 +6548,10 @@ import {
         workoutItem.exercises = workoutItem.exercises.filter((item) => item.id !== workoutExerciseId);
         touchGymClock(workoutItem);
         workoutItem.updatedAt = new Date().toISOString();
-        await persistWorkout(workoutItem);
+        // Removing the LAST exercise empties the workout, and the server refuses that
+        // unless the emptying is declared. It is declared here because a person just
+        // asked for it.
+        await persistWorkout(workoutItem, { confirmEmpty: true });
         renderSection();
 
         // Saved straight away and restored the same way. Set ids are stable now, so
@@ -9898,7 +9901,7 @@ import {
         workoutItem.supersetGroups = (workoutItem.supersetGroups || []).filter((group) => group.id !== groupId);
         touchGymClock(workoutItem);
         workoutItem.updatedAt = new Date().toISOString();
-        await persistWorkout(workoutItem);
+        await persistWorkout(workoutItem, { confirmEmpty: true });
         closeSheet();
         renderSection();
         toast("Суперсет видалено", `${block.members.length} ${pluralUk(block.members.length, "вправа", "вправи", "вправ")} · ${setCount} ${pluralUk(setCount, "підхід", "підходи", "підходів")}`);
@@ -12205,6 +12208,9 @@ import {
             }
             return "Немає прав для цієї дії.";
         }
+        if (error?.payload?.code === "WOULD_ERASE_EXERCISES") {
+            return "Не вдалося зберегти порожнє тренування. Спробуй ще раз або онови сторінку.";
+        }
         if (status === 413) {
             return "Дані завеликі для одного запиту. Спробуй імпорт маленькими пачками.";
         }
@@ -12647,7 +12653,7 @@ import {
         }
     }
 
-    function workoutPayload(workoutItem) {
+    function workoutPayload(workoutItem, options = {}) {
         // POST /workouts/:id/save is a destructive full replace: the backend deletes
         // every set, exercise and cardio session of the workout and recreates them from
         // this payload. Both `exercises` and `cardioSessions` below fall back to [], so
@@ -12688,6 +12694,10 @@ import {
             // because this endpoint replaces the whole tree. undefined (not null) so the
             // key is dropped for a workout that has never been saved.
             baseUpdatedAt: workoutItem.serverVersion || undefined,
+            // Only ever sent for a save the user actually asked for, and only when the
+            // list really is empty — so the server's guard keeps working for everything
+            // else. undefined drops the key entirely.
+            confirmEmpty: options.confirmEmpty && !(workoutItem.exercises || []).length ? true : undefined,
             exercises: (workoutItem.exercises || []).map((exercise, index) => ({
                 // Send the ids this client already mints. The server keeps them, so a set
                 // survives a save with the same identity — which is what makes it
@@ -12747,7 +12757,7 @@ import {
     function getWorkoutSaver(workoutId) {
         let saver = workoutSavers.get(workoutId);
         if (!saver) {
-            saver = { running: false, dirty: false, retries: 0, timer: null, lastError: null };
+            saver = { running: false, dirty: false, retries: 0, timer: null, lastError: null, confirmEmpty: false };
             workoutSavers.set(workoutId, saver);
         }
         return saver;
@@ -12889,9 +12899,14 @@ import {
         }
     }
 
-    function requestWorkoutSave(workoutItem, debounceMs = 0) {
+    function requestWorkoutSave(workoutItem, debounceMs = 0, options = {}) {
         if (!workoutItem) {
             return;
+        }
+        if (options.confirmEmpty) {
+            // Sticky until a save lands: the emptying save may be debounced, retried, or
+            // superseded by another, and the intent has to survive all three.
+            getWorkoutSaver(workoutItem.id).confirmEmpty = true;
         }
         state.database.updatedAt = new Date().toISOString();
 
@@ -12934,7 +12949,7 @@ import {
         let ok = false;
         try {
             workoutItem.updatedAt = new Date().toISOString();
-            const ack = await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem));
+            const ack = await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem, { confirmEmpty: saver.confirmEmpty }));
             // The revision this save produced becomes the base of the next one. Without
             // adopting it, the second save of a session would announce a version the
             // server had already moved past and be refused as stale.
@@ -12945,6 +12960,7 @@ import {
             ok = true;
             saver.retries = 0;
             saver.conflictRetries = 0;
+            saver.confirmEmpty = false;
         } catch (error) {
             saver.lastError = error;
             console.error(error);
@@ -13137,8 +13153,17 @@ import {
         }, 1000);
     }
 
-    function persistWorkout(workoutItem) {
-        requestWorkoutSave(workoutItem, 0);
+    /**
+     * @param {{confirmEmpty?: boolean}} options
+     *
+     * `confirmEmpty` is how a DELIBERATE emptying is told apart from a client bug. The
+     * server refuses to replace a workout that has exercises with an empty list, which
+     * is exactly right — it is the last line of defence against a summary-shaped row
+     * being saved over a real session. So removing the final exercise has to say so,
+     * rather than the guard being switched off for every save.
+     */
+    function persistWorkout(workoutItem, options = {}) {
+        requestWorkoutSave(workoutItem, 0, options);
         return Promise.resolve();
     }
 
