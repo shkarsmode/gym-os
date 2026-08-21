@@ -5486,6 +5486,104 @@ ul {
     .ob-card { transition: none; }
 }
 
+/* ==== Settings ======================================================================
+   One row shape for the whole screen: a name (with an optional line of explanation) on
+   the left, its control on the right. It replaced eight cards of five different shapes,
+   three of which existed to hold a single button. Grouped rows are what settings look
+   like everywhere else for a reason — they can be scanned down one column of names. */
+.settings-page { align-items: start; }
+
+.settings-group {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    overflow: hidden;
+}
+
+.settings-group-head { padding: 15px 16px 11px; }
+.settings-group-head h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-muted); }
+.settings-group-head .card-caption { margin-top: 5px; }
+
+.settings-list { display: flex; flex-direction: column; }
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 54px;
+    padding: 11px 16px;
+    border-top: 1px solid var(--color-border);
+}
+
+.settings-row-text { flex: 1 1 auto; min-width: 0; }
+.settings-row-text strong { display: block; font-size: 14px; font-weight: 500; }
+.settings-row-text span { display: block; margin-top: 3px; color: var(--color-muted); font-size: 12px; line-height: 1.45; }
+.settings-row-control { flex: 0 0 auto; display: flex; justify-content: flex-end; min-width: 0; }
+.settings-row-control gym-select { min-width: 158px; }
+.settings-value { color: var(--color-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* Anything too wide to sit beside its label — the five accent swatches, and every
+   control on a narrow phone — drops onto its own line instead of squeezing the name. */
+.settings-row.is-stacked { flex-direction: column; align-items: stretch; gap: 10px; }
+.settings-row.is-stacked .settings-row-control { justify-content: stretch; }
+.settings-row.is-stacked .segmented { width: 100%; }
+
+.settings-row.is-danger .settings-row-text strong { color: var(--color-danger); }
+.settings-group-extra { padding: 0 16px 14px; }
+.settings-group-extra:empty { display: none; }
+
+/* A real switch for the notification categories: a bare checkbox in a settings list is
+   the one control people misread as "not a control". */
+.settings-switch { position: relative; display: inline-flex; flex: 0 0 auto; cursor: pointer; }
+.settings-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+
+.settings-switch span {
+    display: block;
+    width: 44px;
+    height: 26px;
+    border-radius: var(--radius-pill);
+    background: var(--color-elevated);
+    box-shadow: inset 0 0 0 1px var(--color-border-strong);
+    transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.settings-switch span::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-muted);
+    transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), background 0.18s ease;
+}
+
+.settings-switch input:checked + span { background: color-mix(in srgb, var(--color-accent) 30%, transparent); box-shadow: inset 0 0 0 1px var(--color-accent-border); }
+.settings-switch input:checked + span::after { transform: translateX(18px); background: var(--color-accent); }
+.settings-switch input:focus-visible + span { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.settings-switch input:disabled + span { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 720px) {
+    /* Deliberately NOT stacking everything. A select or a button sits perfectly well
+       beside its label at 375px, and stacking them made every row ~100px tall and the
+       page twice as long — the opposite of what a settings screen is for. Only controls
+       that genuinely need the width drop to their own line. */
+    .settings-row { gap: 10px; padding: 10px 14px; }
+    .settings-row-text strong { font-size: 13.5px; }
+    .settings-row-control gym-select { min-width: 132px; }
+}
+
+@media (max-width: 560px) {
+    /* A segmented control is the one that cannot share: three or five options beside a
+       label leaves each of them a few pixels. */
+    .settings-row:has(.segmented) { flex-direction: column; align-items: stretch; gap: 9px; }
+    .settings-row:has(.segmented) .settings-row-control { justify-content: stretch; }
+    .settings-row .segmented { width: 100%; }
+}
+
 /* ==== Supersets ======================================================================
    ONE card for the whole group. What happens in the gym is a ROUND — A1, then A2, then
    A3, then rest — so the card is a list of rounds, not a stack of exercise cards: the

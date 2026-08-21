@@ -1158,7 +1158,7 @@ import {
         defaultDuration: "90",    // minutes; "auto" = clock-based. Default 1.5 год
         defaultSetType: "warmup",
         autoStartRest: "1",       // "1" = auto-start rest timer on set completion
-        useSupersets: "0"         // "1" = offer merging 2–3 exercises into rounds
+        useSupersets: "1"         // "1" = offer merging 2–3 exercises into rounds
     };
 
     function getPref(key) {
@@ -2153,9 +2153,16 @@ import {
             pendingExerciseScrollId = null;
             requestAnimationFrame(() => {
                 const target = document.querySelector(`[data-workout-exercise-id="${targetId}"]`);
-                if (target) {
-                    target.scrollIntoView({ behavior: "smooth", block: "center" });
+                if (!target) {
+                    return;
                 }
+                // Its TOP, under the sticky chrome — not its centre. Centring a tall card
+                // scrolls past the heading to the first set, so you land on numbers with
+                // no idea which exercise they belong to. The name is the point of
+                // scrolling there at all.
+                const offset = topbarHeight() + 12;
+                const top = window.scrollY + target.getBoundingClientRect().top - offset;
+                window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
             });
         }
     }
@@ -3703,6 +3710,43 @@ import {
         }
     }
 
+    // ---- Settings UI kit -------------------------------------------------------------
+    //
+    // One row shape for the whole screen: a label (with an optional line of explanation)
+    // on the left, its control on the right. Before this the page was eight cards of five
+    // different shapes — three of which existed to hold a single button — and nothing
+    // lined up with anything. Grouped rows are what a settings screen is everywhere else,
+    // and the reason is that they can be SCANNED: the eye runs down one column of names.
+
+    /**
+     * @param {{hint?: string, stacked?: boolean, danger?: boolean}} options
+     *
+     * `stacked` drops the control onto its own line. Needed for anything wide — the five
+     * accent swatches cannot share a row with their label on a phone without either
+     * squashing the label to nothing or scrolling sideways.
+     */
+    function settingsRow(label, control, options = {}) {
+        const classes = ["settings-row"];
+        if (options.stacked) {
+            classes.push("is-stacked");
+        }
+        if (options.danger) {
+            classes.push("is-danger");
+        }
+        return `<div class="${classes.join(" ")}">
+            <div class="settings-row-text"><strong>${escapeHtml(label)}</strong>${options.hint ? `<span>${escapeHtml(options.hint)}</span>` : ""}</div>
+            <div class="settings-row-control">${control}</div>
+        </div>`;
+    }
+
+    function settingsGroup(title, rows, options = {}) {
+        return `<section class="settings-group${options.wide ? " span-12" : " span-6"}">
+            <header class="settings-group-head"><h2>${escapeHtml(title)}</h2>${options.caption ? `<p class="card-caption">${escapeHtml(options.caption)}</p>` : ""}</header>
+            <div class="settings-list">${rows.filter(Boolean).join("")}</div>
+            ${options.footer || ""}
+        </section>`;
+    }
+
     function settings() {
         const seg = (pref, value, label, extra = "") => `<button class="segment-button ${getPref(pref) === value ? "active" : ""}" type="button" data-action="set-pref" data-pref="${pref}" data-value="${value}">${extra}${escapeHtml(label)}</button>`;
         const themeButtons = [["system", "System"], ["dark", "Dark"], ["blackout", "Blackout"]].map(([value, label]) => seg("theme", value, label)).join("");
@@ -3714,13 +3758,34 @@ import {
         const workoutTypeOptions = Object.entries(workoutTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultWorkoutType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
         const setTypeOptions = Object.entries(setTypeLabels).map(([value, label]) => `<option value="${value}" ${getPref("defaultSetType") === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
         const durationDefaultOptions = `<option value="auto" ${getPref("defaultDuration") === "auto" ? "selected" : ""}>Авто (за часом)</option>` + [15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${getPref("defaultDuration") === String(min) ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("");
-        const appearanceCard = `<section class="card span-6"><h2>Вигляд</h2><div class="pref-row"><span class="pref-label">Тема</span><div class="segmented pref-seg">${themeButtons}</div></div><div class="pref-row"><span class="pref-label">Акцент</span><div class="segmented pref-seg">${accentButtons}</div></div><div class="pref-row"><span class="pref-label">Інтерфейс</span><div class="segmented pref-seg">${compactButtons}</div></div></section>`;
-        const workoutDefaultsCard = `<section class="card span-6"><h2>Тренування за замовчуванням</h2><div class="field-grid"><div class="field"><label>Відпочинок</label><gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select></div><div class="field"><label>Тип тренування</label><gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select></div></div><div class="field-grid" style="margin-top:12px;"><div class="field"><label>Тип підходу</label><gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select></div><div class="field"><label>Тривалість</label><gym-select data-action="set-pref-select" data-pref="defaultDuration">${durationDefaultOptions}</gym-select></div></div><div class="pref-row" style="margin-top:14px;"><span class="pref-label">Авто-старт таймера відпочинку</span><div class="segmented pref-seg">${autoStartButtons}</div></div><div class="pref-row"><span class="pref-label">Використовую суперсети<em class="pref-hint">Показувати можливість обʼєднувати 2–3 вправи в послідовні раунди</em></span><div class="segmented pref-seg">${supersetButtons}</div></div></section>`;
-        const exportCard = `<section class="card span-6"><h2>Експорт даних</h2><p class="card-caption">JSON-дамп усіх твоїх тренувань, замірів ваги та власних вправ.</p><div class="action-row"><button class="button button-primary" type="button" data-action="export-data"><i data-lucide="download"></i>Експорт JSON</button></div></section>`;
-        const catalogCard = `<section class="card span-6"><h2>Довідники</h2><p class="card-caption">Власні вправи зберігаються з власником.</p><div class="action-row"><button class="button button-primary" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати власну вправу</button></div></section>`;
-        const aboutCard = `<section class="card span-6"><h2>Про застосунок</h2><div class="list-row" style="margin-top:6px;"><div><div class="profile-name">GymOS</div><div class="profile-meta">Версія v${APP_VERSION}</div></div></div></section>`;
-        const logoutCard = `<section class="card span-12 settings-logout"><button class="button button-secondary" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти з акаунта</button></section>`;
-        content(`<div class="grid dashboard-grid">${appearanceCard}${workoutDefaultsCard}${privacySettingsCard()}${pushSettingsSection()}${exportCard}${catalogCard}${aboutCard}${logoutCard}</div>`);
+        const appearanceGroup = settingsGroup("Вигляд", [
+            settingsRow("Тема", `<div class="segmented pref-seg">${themeButtons}</div>`),
+            settingsRow("Акцент", `<div class="segmented pref-seg">${accentButtons}</div>`, { stacked: true }),
+            settingsRow("Щільність карток", `<div class="segmented pref-seg">${compactButtons}</div>`, { hint: "Компактні вміщують більше" })
+        ]);
+
+        const workoutGroup = settingsGroup("Тренування за замовчуванням", [
+            settingsRow("Відпочинок між підходами", `<gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select>`),
+            settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
+            settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
+            settingsRow("Тривалість", `<gym-select data-action="set-pref-select" data-pref="defaultDuration">${durationDefaultOptions}</gym-select>`),
+            settingsRow("Авто-старт таймера", `<div class="segmented pref-seg">${autoStartButtons}</div>`, { hint: "Щойно позначив підхід" }),
+            settingsRow("Використовую суперсети", `<div class="segmented pref-seg">${supersetButtons}</div>`, { hint: "Обʼєднувати 2–3 вправи в раунди" })
+        ]);
+
+        // The three one-button cards were a card each for a single line. As rows they are
+        // three lines of one group, and the page stops looking like scattered leftovers.
+        const dataGroup = settingsGroup("Дані", [
+            settingsRow("Експорт JSON", `<button class="button button-secondary compact" type="button" data-action="export-data"><i data-lucide="download"></i>Завантажити</button>`, { hint: "Тренування, заміри, власні вправи" }),
+            settingsRow("Власна вправа", `<button class="button button-secondary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Додати</button>`, { hint: "Зберігається за тобою" })
+        ]);
+
+        const accountGroup = settingsGroup("Акаунт", [
+            settingsRow("Версія", `<span class="settings-value">v${APP_VERSION}</span>`, { hint: "GymOS" }),
+            settingsRow("Вийти з акаунта", `<button class="button button-danger compact" type="button" data-action="logout"><i data-lucide="log-out"></i>Вийти</button>`, { danger: true })
+        ]);
+
+        content(`<div class="grid dashboard-grid settings-page">${appearanceGroup}${workoutGroup}${privacySettingsCard()}${pushSettingsSection()}${dataGroup}${accountGroup}</div>`);
     }
 
     function changelog() {
@@ -8024,12 +8089,14 @@ import {
     function pushSettingsSection() {
         const enabled = getPref("pushEnabled") === "1";
         const prefs = readPushPrefs();
-        return `<section class="card span-12"><div class="card-header"><div><h2>Сповіщення</h2><p class="card-caption">Що надсилати на цей пристрій. Пуші приходять, навіть коли застосунок закритий.</p></div><button class="button ${enabled ? "button-secondary" : "button-primary"} compact" type="button" data-action="${enabled ? "disable-push" : "enable-push"}"><i data-lucide="${enabled ? "bell-off" : "bell"}"></i>${enabled ? "Вимкнути пуші" : "Увімкнути пуші"}</button></div>
-            <div class="push-list ${enabled ? "" : "is-off"}">${PUSH_CATEGORIES.map((category) => {
-                const on = prefs[category.key] === undefined ? category.defaultOn : prefs[category.key] === true;
-                return `<label class="push-row"><span>${escapeHtml(category.label)}</span><input type="checkbox" data-action="push-toggle" data-key="${category.key}" ${on ? "checked" : ""} ${enabled ? "" : "disabled"}></label>`;
-            }).join("")}</div>
-            ${enabled ? "" : `<p class="input-hint" style="margin-top:10px;"><i data-lucide="info"></i>Увімкни пуші, щоб керувати категоріями.</p>`}</section>`;
+        const rows = PUSH_CATEGORIES.map((category) => {
+            const on = prefs[category.key] === undefined ? category.defaultOn : prefs[category.key] === true;
+            return settingsRow(category.label, `<label class="settings-switch"><input type="checkbox" data-action="push-toggle" data-key="${category.key}" ${on ? "checked" : ""} ${enabled ? "" : "disabled"} aria-label="${escapeHtml(category.label)}"><span></span></label>`);
+        });
+        const master = settingsRow("Пуш-сповіщення", `<button class="button ${enabled ? "button-secondary" : "button-primary"} compact" type="button" data-action="${enabled ? "disable-push" : "enable-push"}"><i data-lucide="${enabled ? "bell-off" : "bell"}"></i>${enabled ? "Вимкнути" : "Увімкнути"}</button>`, {
+            hint: enabled ? "Приходять, навіть коли застосунок закритий" : "Увімкни, щоб керувати категоріями"
+        });
+        return settingsGroup("Сповіщення", [master, ...(enabled ? rows : [])], { wide: true });
     }
 
     // ---- Achievement bridge ----------------------------------------------
@@ -13826,14 +13893,14 @@ import {
         `).join("");
         const pending = (accessState.incoming || []).length;
         const subscribers = (accessState.subscribers || []).length;
-        return `<section class="card span-6">
-            <h2>Приватність тренувань</h2>
-            <p class="card-caption">Коли приховано, інші бачать твій профіль, рівень і те, що ти тренувався — але не бачать вправ, підходів, ваг, нотаток і рекордів.</p>
-            <div class="pref-row"><span class="pref-label">Деталі тренувань</span><div class="segmented pref-seg">${buttons}</div></div>
-            ${pending ? `<div class="access-alert"><i data-lucide="user-plus"></i><span>${pending} ${pending === 1 ? "запит очікує" : "запити очікують"} на відповідь</span></div>` : ""}
-            ${(accessState.incoming || []).map(accessRequestRow).join("")}
-            ${subscribers ? `<h3 class="access-subhead">Мають доступ (${subscribers})</h3>${(accessState.subscribers || []).map(subscriberRow).join("")}` : ""}
-        </section>`;
+        const extras = `${pending ? `<div class="access-alert"><i data-lucide="user-plus"></i><span>${pending} ${pending === 1 ? "запит очікує" : "запити очікують"} на відповідь</span></div>` : ""}`
+            + `${(accessState.incoming || []).map(accessRequestRow).join("")}`
+            + `${subscribers ? `<h3 class="access-subhead">Мають доступ (${subscribers})</h3>${(accessState.subscribers || []).map(subscriberRow).join("")}` : ""}`;
+        return settingsGroup("Приватність тренувань", [
+            settingsRow("Деталі тренувань", `<div class="segmented pref-seg">${buttons}</div>`, {
+                hint: "Коли приховано — видно профіль, рівень і сам факт тренування, але не вправи, підходи, ваги, нотатки й рекорди"
+            })
+        ], { footer: extras ? `<div class="settings-group-extra">${extras}</div>` : "" });
     }
 
     function accessRequestRow(row) {
