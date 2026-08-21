@@ -9,7 +9,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 // evaluateAchievements is no longer called here — the kernel owns that. ACHIEVEMENTS
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
-import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
+import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
 import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
 import { gymClockState, nextGymClockMarks, formatClock, suggestedDurationMinutes, formatDurationLabel } from "./lib/gym-clock.js";
@@ -3192,7 +3192,7 @@ import {
         // at once, because mixing seconds and reps inside one exercise is almost always
         // a mistake rather than an intent.
         const blockTimed = (workoutExercise.sets || []).some(isTimedSet);
-        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
+        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise))).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
     }
 
     // Small "+N кг" / "−N кг" tag showing the weight change from the previous set.
@@ -3239,7 +3239,7 @@ import {
         if (rowIndex >= 0 && rowIndex + 1 < rows.length) { relabel(rows[rowIndex + 1], weightValue(row)); }
     }
 
-    function setRow(workoutExerciseId, set, readonly, index, showSetHint, prevWeight) {
+    function setRow(workoutExerciseId, set, readonly, index, showSetHint, prevWeight, bodyweight = false) {
         const target = `data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}"`;
         const lock = readonly ? "disabled" : "";
         // Coach-mark on the very first set of the first exercise (until that set is
@@ -3262,7 +3262,7 @@ import {
                 </div>
             </div>
             <div class="set-fields${timed ? " is-timed" : ""}">
-                <label class="set-field"><span class="set-field-label">Вага, кг${weightDeltaBadge(prevWeight, set.weight)}</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
+                <label class="set-field" title="${timed || bodyweight ? "Вага понад власну — 0, якщо без обтяження" : "Робоча вага"}"><span class="set-field-label">${weightFieldLabel({ timed, bodyweight })}${weightDeltaBadge(prevWeight, set.weight)}</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
                 ${timed
                     ? `<label class="set-field"><span class="set-field-label">Час, с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="set-field" ${target} data-field="durationSeconds" ${lock}></label>`
                     : `<label class="set-field"><span class="set-field-label">Повтори</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions" ${lock}></label>`}
@@ -9810,7 +9810,7 @@ import {
             </label>
             <div class="focus-fields">
                 <div class="focus-field">
-                    <span class="focus-field-label">Вага, кг${weightDeltaBadge(previousSet ? previousSet.weight : null, set.weight)}</span>
+                    <span class="focus-field-label">${weightFieldLabel({ timed, bodyweight: isBodyweightExercise(meta) })}${weightDeltaBadge(previousSet ? previousSet.weight : null, set.weight)}</span>
                     <div class="focus-stepper">
                         <button class="focus-step" type="button" data-action="focus-step" data-field="weight" data-delta="-2.5" title="−2.5 кг"><i data-lucide="minus"></i></button>
                         <input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight">
@@ -11464,7 +11464,15 @@ import {
                     clearInterval(ticker);
                 }
             }, 250);
-            toastElement.querySelector(".toast-action").addEventListener("click", (event) => {
+            const actionButton = toastElement.querySelector(".toast-action");
+            // A press that starts on the button belongs to the button. Without this the
+            // toast's own pointerdown runs first, calls setPointerCapture on the TOAST,
+            // and the browser then dispatches the resulting click to the capturing
+            // element instead of the button — so «Повернути» looked pressable and did
+            // nothing at all. (A synthetic .click() in a test skips the pointer sequence
+            // entirely, which is why this passed everywhere except under a real finger.)
+            actionButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+            actionButton.addEventListener("click", (event) => {
                 event.stopPropagation();
                 // Acted on: the thing the countdown was waiting for must never happen.
                 expired = true;
@@ -11553,6 +11561,10 @@ import {
 
         toastElement.addEventListener("pointerdown", (event) => {
             if (leaving || activePointer !== null) {
+                return;
+            }
+            // Belt and braces for the same thing: never start a drag from the action.
+            if (action && event.target?.closest?.(".toast-action")) {
                 return;
             }
             activePointer = event.pointerId;
