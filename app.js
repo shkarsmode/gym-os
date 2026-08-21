@@ -13391,38 +13391,6 @@ import {
         }
     }
 
-    // ---- The one-time prompt for people who were here before this shipped ---------------
-
-    async function maybeAskAboutPrivacy() {
-        if (!accessState.loaded || accessState.privacyChoiceAt || storage.mode !== "api") {
-            return;
-        }
-        // Asked once per account. Answering either way records the choice — otherwise a
-        // member who keeps the default has nothing stored and the prompt returns on every
-        // single open.
-        const choice = await choiceDialog(
-            "Зараз твої тренування відкриті: команда бачить вправи, підходи й ваги. Так було завжди. Якщо хочеш, деталі можна приховати — інші бачитимуть профіль, рівень і те, що ти тренувався, але не саме тренування. Відкрити доступ окремим людям можна будь-коли.",
-            {
-                title: "Хто бачить твої тренування?",
-                choices: [
-                    { label: "Залишити відкритими", variant: "secondary" },
-                    { label: "Приховати деталі", variant: "primary" }
-                ]
-            }
-        );
-        if (choice === 1) {
-            await setPrivacy(true);
-            return;
-        }
-        // Keeping the default still counts as having been asked.
-        accessState.privacyChoiceAt = new Date().toISOString();
-        try {
-            await storage.apiClient.acknowledgePrivacy();
-        } catch (error) {
-            // Worst case it asks once more.
-        }
-    }
-
     /**
      * Forget detail this device is no longer entitled to.
      *
