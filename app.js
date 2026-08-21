@@ -10,7 +10,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
-import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
+import { effectiveWorkoutStatus, hasRecordedWork, workoutNeedsDetail } from "./lib/workout-status.js";
 import { SUPERSET_MIN_MEMBERS, SUPERSET_MAX_MEMBERS, SUPERSET_DEFAULT_ROUNDS, SUPERSET_DEFAULT_REST, positionLabel, workoutBlocks, roundCount, roundSets, isRoundComplete, currentRoundIndex, nextMemberInRound, missingSetCount, mergeProblem, roundSummary } from "./lib/superset.js";
 import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
@@ -7136,7 +7136,9 @@ import {
         // aggregate chips are populated but `exercises` is absent ENTIRELY, which is how a
         // summary is told apart from a genuinely empty session (that one has []). Without
         // this the drawer claimed "Вправ ще немає" for a workout whose own chip said 6.
-        const needsDetail = !Array.isArray(workoutItem.exercises) && !workoutItem.detailUnavailable;
+        // A workout already known to be private is NOT missing its detail — asking again
+        // returns the same refusal, and the repaint that follows asks again after that.
+        const needsDetail = workoutNeedsDetail(workoutItem);
         openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutStatusOf(workoutItem))} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${partnerInviteCta(workoutItem, readonly)}<button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" data-workout-detail="${workoutItem.id}" style="margin-top:14px;">${workoutDetailBody(workoutItem, needsDetail)}</div>`, { fullscreen: true });
         if (needsDetail) {
             hydrateWorkoutDetail(workoutId);
@@ -7179,6 +7181,7 @@ import {
         }
         let full = null;
         let privateOwnerId = null;
+        let changed = true;
         try {
             full = await storage.apiClient.fetchWorkout(workoutId);
         } catch (error) {
@@ -7201,14 +7204,19 @@ import {
             workoutItem.serverVersion = serverVersionOf(full) || workoutItem.serverVersion || null;
             workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
         } else if (privateOwnerId) {
+            // Already knew? Then the repaint below would paint the identical screen and
+            // start this all over again. Second guard on the same loop as `needsDetail`,
+            // because re-entry here is what makes the drawer unclosable.
+            changed = workoutItem.privateOwnerId !== privateOwnerId;
             workoutItem.privateOwnerId = privateOwnerId;
             delete workoutItem.detailUnavailable;
         } else {
+            changed = !workoutItem.detailUnavailable;
             workoutItem.detailUnavailable = true;
         }
         // Repaint only if the user is still looking at this workout: the fetch can outlive
         // the drawer, and openWorkout on a stale id would yank them back into it.
-        if (stillOpen()) {
+        if (changed && stillOpen()) {
             openWorkout(workoutId);
         }
     }
