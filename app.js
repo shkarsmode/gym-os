@@ -6721,25 +6721,41 @@ import {
         // The sweep completes whatever is left — those sets are being done RIGHT NOW, so
         // the clock's end moves with them. Only when something actually changes, though:
         // a session where every set was already ticked keeps the real last tick.
-        let sweptAny = false;
+        const pendingSets = [];
         workoutItem.exercises.forEach((exercise) => {
             (exercise.sets || []).forEach((set) => {
                 if (!set.isCompleted) {
-                    set.isCompleted = true;
-                    sweptAny = true;
+                    pendingSets.push(set);
                 }
             });
         });
+        // NOTHING is mutated until the athlete has confirmed. The sweep used to run
+        // first, so closing the duration dialog with the X left every set marked done
+        // AND finished the session anyway — an X that performed the action it looked
+        // like it was cancelling.
+        //
         // Never invent a START, though: a session closed from the calendar days later was
         // never timed, and a fabricated anchor would show a meaningless 0:00 clock.
-        if (sweptAny && workoutItem.firstSetAt) {
-            workoutItem.lastSetAt = new Date().toISOString();
-        }
+        const prospectiveLastSetAt = pendingSets.length && workoutItem.firstSetAt
+            ? new Date().toISOString()
+            : workoutItem.lastSetAt;
         // The clock knows how long this actually took; offer it as the duration rather
         // than writing it silently. It is a suggestion because the timer can be wrong in
         // exactly the way the user described — a session left open overnight, or finished
         // the next morning — so the athlete gets the last word.
-        await offerClockDuration(workoutItem);
+        const clockAnswer = await offerClockDuration({ ...workoutItem, lastSetAt: prospectiveLastSetAt });
+        if (clockAnswer.cancelled) {
+            return;
+        }
+        pendingSets.forEach((set) => {
+            set.isCompleted = true;
+        });
+        if (pendingSets.length && workoutItem.firstSetAt) {
+            workoutItem.lastSetAt = prospectiveLastSetAt;
+        }
+        if (clockAnswer.durationMinutes !== null) {
+            workoutItem.durationOverride = clockAnswer.durationMinutes;
+        }
         workoutItem.status = "completed";
         workoutItem.finishedAt = new Date().toISOString();
         workoutItem.updatedAt = new Date().toISOString();
@@ -6754,14 +6770,21 @@ import {
     // Rounded to something a person would say out loud (see suggestedDurationMinutes).
     // Skipped when there is no clock, when the span is implausible, and when the workout
     // already carries exactly this duration — a dialog that changes nothing is noise.
+    /**
+     * @returns {{cancelled: boolean, durationMinutes: number|null}}
+     *
+     * `cancelled` means the athlete backed out of FINISHING, not just out of changing the
+     * duration — the X and the backdrop are the only ways to say "I did not mean to press
+     * this", and there is nowhere else in the flow to say it.
+     */
     async function offerClockDuration(workoutItem) {
         const clock = gymClockState(workoutItem);
         if (!clock || clock.overflow) {
-            return;
+            return { cancelled: false, durationMinutes: null };
         }
         const suggestion = suggestedDurationMinutes(clock.ms);
         if (!suggestion || Number(workoutItem.durationOverride) === suggestion) {
-            return;
+            return { cancelled: false, durationMinutes: null };
         }
         const label = formatDurationLabel(suggestion);
         const choice = await choiceDialog(`Секундомір показав ${formatClock(clock.ms)} — від першого підходу до останнього. Записати тривалість як ${label}?`, {
@@ -6772,9 +6795,11 @@ import {
                 { label: "Не змінювати", value: "skip" }
             ]
         });
-        if (choice === "apply") {
-            workoutItem.durationOverride = suggestion;
+        // null is the X or the backdrop; "skip" is the explicit «Не змінювати».
+        if (choice === null || choice === undefined) {
+            return { cancelled: true, durationMinutes: null };
         }
+        return { cancelled: false, durationMinutes: choice === "apply" ? suggestion : null };
     }
 
     async function saveCardio(workoutId, cardioId = null) {

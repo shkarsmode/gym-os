@@ -3223,17 +3223,33 @@ tr:last-child td {
 }
 
 @media (max-width: 480px) {
-    /* The button drops under the text rather than squeezing the message to two words. */
+    /* Stays on ONE row. Wrapping put the button on a line of its own, which turned a
+       notice into a quarter of the screen — and the countdown on it is the reason the
+       toast is there at all, so it has to sit next to the text, not under it. The title
+       wraps instead; that costs a line, not a whole row. */
     .toast.has-action {
-        flex-wrap: wrap;
+        gap: 10px;
+        padding: 11px 12px;
+    }
+
+    .toast.has-action .toast-icon {
+        width: 30px;
+        height: 30px;
     }
 
     .toast.has-action .toast-body {
-        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    .toast.has-action .toast-message {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .toast-action {
-        margin-left: auto;
+        padding: 7px 8px 7px 7px;
+        font-size: 12px;
     }
 }
 
