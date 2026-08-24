@@ -11,6 +11,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
 import { effectiveWorkoutStatus, hasRecordedWork, workoutNeedsDetail } from "./lib/workout-status.js";
+import { plateHint, usesBarbell, DEFAULT_BAR_KG } from "./lib/plates.js";
 import { SUPERSET_MIN_MEMBERS, SUPERSET_MAX_MEMBERS, SUPERSET_DEFAULT_ROUNDS, SUPERSET_DEFAULT_REST, positionLabel, workoutBlocks, roundCount, roundSets, isRoundComplete, currentRoundIndex, nextMemberInRound, missingSetCount, mergeProblem, roundSummary } from "./lib/superset.js";
 import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
@@ -1158,7 +1159,9 @@ import {
         defaultDuration: "90",    // minutes; "auto" = clock-based. Default 1.5 год
         defaultSetType: "warmup",
         autoStartRest: "1",       // "1" = auto-start rest timer on set completion
-        useSupersets: "1"         // "1" = offer merging 2–3 exercises into rounds
+        useSupersets: "1",        // "1" = offer merging 2–3 exercises into rounds
+        barWeight: "20",          // kg; drives the plate hint. 15 = women's bar, 10 = training bar
+        keepAwake: "1"            // "1" = hold a screen wake lock while a workout is active
     };
 
     function getPref(key) {
@@ -2064,6 +2067,59 @@ import {
         return true;
     }
 
+    // ---- Keep the screen on while training ------------------------------------------------
+    //
+    // Between sets the phone locks itself, and the next set starts with a passcode and
+    // chalky hands. A wake lock while a workout is ACTIVE (or focus mode is open) removes
+    // that entirely.
+    //
+    // Deliberately narrow: it follows the session, not the app. Nothing is held on the
+    // calendar, in the feed, or after «Завершити» — a lock that outlives its reason is a
+    // battery complaint nobody will connect back to this feature.
+    let screenWakeLock = null;
+    let wakeLockWanted = false;
+
+    function wantsScreenAwake() {
+        if (getPref("keepAwake") !== "1") {
+            return false;
+        }
+        if (state.focus) {
+            return true;
+        }
+        const workoutItem = editWorkout();
+        return Boolean(workoutItem && workoutItem.status === "active" && canManage(workoutItem));
+    }
+
+    async function syncScreenWakeLock() {
+        wakeLockWanted = wantsScreenAwake();
+        if (!("wakeLock" in navigator)) {
+            return; // iOS < 16.4, Firefox. Nothing to fall back to that is worth the battery.
+        }
+        if (!wakeLockWanted) {
+            const held = screenWakeLock;
+            screenWakeLock = null;
+            if (held) {
+                await held.release().catch(() => undefined);
+            }
+            return;
+        }
+        if (screenWakeLock) {
+            return;
+        }
+        try {
+            screenWakeLock = await navigator.wakeLock.request("screen");
+            // The OS drops the lock whenever the tab is hidden, and does NOT restore it on
+            // return — without this the screen stays on for exactly one trip to another app.
+            screenWakeLock.addEventListener("release", () => {
+                screenWakeLock = null;
+            });
+        } catch (error) {
+            // Denied (low battery, a policy, an inactive document). Not worth telling
+            // anybody about: the workout is unaffected.
+            screenWakeLock = null;
+        }
+    }
+
     function renderSection() {
         destroyCharts();
         if ((state.section === "admin" || state.section === "moderation" || state.section === "aistats") && !isAdmin()) {
@@ -2130,6 +2186,7 @@ import {
         updateTopbarOffset();
         requestAnimationFrame(updateTopbarOffset);
         updateLastResultsFocus();
+        syncScreenWakeLock();
         // A re-render replaces the cards, so the remembered context key is stale.
         const topbarEl = document.querySelector(".topbar");
         if (topbarEl) {
@@ -3209,11 +3266,27 @@ import {
         // at once, because mixing seconds and reps inside one exercise is almost always
         // a mistake rather than an intent.
         const blockTimed = (workoutExercise.sets || []).some(isTimedSet);
-        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise))).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
+        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise), exercise.equipment)).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
     }
 
     // Small "+N кг" / "−N кг" tag showing the weight change from the previous set.
     // Shown right of the "Вага, кг" label on the 2nd+ set (editor + focus mode).
+    /**
+     * "What do I hang on the bar?" — the one sum everybody does standing at a rack.
+     *
+     * Shown ONLY for barbell exercises, which is what makes it fit: on a dumbbell or a
+     * machine row nothing is added at all, so the set list does not grow a line per set
+     * for most exercises. Written straight into the markup rather than behind a tap,
+     * because a weight field is for typing — there is no spare tap on it.
+     */
+    function plateHintLine(equipment, weight) {
+        if (!usesBarbell(equipment)) {
+            return "";
+        }
+        const hint = plateHint(weight, { barKg: Number(getPref("barWeight")) || DEFAULT_BAR_KG });
+        return hint ? `<span class="plate-hint" data-plate-hint>${escapeHtml(hint)}</span>` : "";
+    }
+
     function weightDeltaBadge(prevWeight, currentWeight) {
         if (prevWeight === null || prevWeight === undefined) {
             return "";
@@ -3256,7 +3329,7 @@ import {
         if (rowIndex >= 0 && rowIndex + 1 < rows.length) { relabel(rows[rowIndex + 1], weightValue(row)); }
     }
 
-    function setRow(workoutExerciseId, set, readonly, index, showSetHint, prevWeight, bodyweight = false) {
+    function setRow(workoutExerciseId, set, readonly, index, showSetHint, prevWeight, bodyweight = false, equipment = "") {
         const target = `data-workout-exercise-id="${workoutExerciseId}" data-set-id="${set.id}"`;
         const lock = readonly ? "disabled" : "";
         // Coach-mark on the very first set of the first exercise (until that set is
@@ -3279,7 +3352,7 @@ import {
                 </div>
             </div>
             <div class="set-fields${timed ? " is-timed" : ""}">
-                <label class="set-field" title="${timed || bodyweight ? "Вага понад власну — 0, якщо без обтяження" : "Робоча вага"}"><span class="set-field-label">${weightFieldLabel({ timed, bodyweight })}${weightDeltaBadge(prevWeight, set.weight)}</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}></label>
+                <label class="set-field" title="${timed || bodyweight ? "Вага понад власну — 0, якщо без обтяження" : "Робоча вага"}"><span class="set-field-label">${weightFieldLabel({ timed, bodyweight })}${weightDeltaBadge(prevWeight, set.weight)}</span><input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight" ${lock}>${plateHintLine(equipment, set.weight)}</label>
                 ${timed
                     ? `<label class="set-field"><span class="set-field-label">Час, с</span><input type="number" inputmode="numeric" step="5" min="0" value="${set.durationSeconds}" data-action="set-field" ${target} data-field="durationSeconds" ${lock}></label>`
                     : `<label class="set-field"><span class="set-field-label">Повтори</span><input type="number" inputmode="numeric" step="1" min="0" value="${set.repetitions}" data-action="set-field" ${target} data-field="repetitions" ${lock}></label>`}
@@ -3792,6 +3865,8 @@ import {
             settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
             settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
             settingsRow("Тривалість", `<gym-select data-action="set-pref-select" data-pref="defaultDuration">${durationDefaultOptions}</gym-select>`),
+            settingsRow("Вага грифа", `<gym-select data-action="set-pref-select" data-pref="barWeight">${[20, 15, 10, 7.5].map((kg) => `<option value="${kg}" ${String(getPref("barWeight")) === String(kg) ? "selected" : ""}>${kg} кг</option>`).join("")}</gym-select>`, { hint: "Звідси рахується підказка, що вішати на штангу" }),
+            settingsRow("Екран не гасне", settingsSwitch("keepAwake", "Тримати екран увімкненим під час тренування"), { hint: "Поки тренування активне. Після «Завершити» відпускається" }),
             settingsRow("Авто-старт таймера", settingsSwitch("autoStartRest", "Авто-старт таймера відпочинку"), { hint: "Щойно позначив підхід" }),
             settingsRow("Суперсети", settingsSwitch("useSupersets", "Використовую суперсети"), { hint: "Обʼєднувати 2–3 вправи в раунди" })
         ]);
@@ -11028,6 +11103,7 @@ import {
                         <input type="number" inputmode="decimal" step="0.5" min="0" value="${set.weight}" data-action="set-field" ${target} data-field="weight">
                         <button class="focus-step" type="button" data-action="focus-step" data-field="weight" data-delta="2.5" title="+2.5 кг"><i data-lucide="plus"></i></button>
                     </div>
+                    ${plateHintLine(meta.equipment, set.weight)}
                 </div>
                 <div class="focus-field">
                     <span class="focus-field-label">${timed ? "Час, с" : "Повтори"}</span>
@@ -15664,6 +15740,9 @@ import {
             startLiveStream();
             loadPresence(true);
             replayMissedCheers();
+            // The OS released the lock when the tab went away and will not give it back on
+            // its own, so coming back has to ask again.
+            syncScreenWakeLock();
         }
     });
     window.addEventListener("pagehide", () => {
