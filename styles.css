@@ -2974,6 +2974,69 @@ tr:last-child td {
     z-index: 160;
 }
 
+
+/* --- A modal whose body is a filtered list ------------------------------------------------
+   The box is centred and its height followed its content, so every keystroke in the search
+   resized it and it visibly jumped up and down under the cursor you were typing with — the
+   picker went from 60 cards to 2 to none in three characters. A list modal therefore keeps
+   a FIXED height and scrolls its results internally: the header, the search field and the
+   filters never move, whatever the search matches.
+
+   Placed BEFORE the .modal-fullscreen media query on purpose, so that on a phone the
+   full-bleed height:100% still wins and the same flex layout simply fills the screen. */
+.modal-layer.modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    /* The inner scroller owns the overflow now; the modal itself must not scroll or the
+       header would slide away with the results. */
+    overflow: hidden;
+}
+
+@media (min-width: 921px) {
+    .modal-layer.modal-list {
+        height: min(88vh, 840px);
+    }
+}
+
+/* Everything above the results is fixed furniture. */
+.modal-layer.modal-list > * {
+    flex: 0 0 auto;
+}
+
+/* SPECIFICITY, and it bit once already: the blanket rule above is (0,2,0) and a bare
+   `.modal-list-body` is (0,1,0), so the wrapper was pinned to `flex: 0 0 auto` and grew to
+   its full content height — nine thousand pixels of it — while the modal clipped the rest.
+   Scoping these two selectors under `.modal-list` puts them at (0,3,0) so they win. */
+
+/* A wrapper between the modal and the list (the exercise picker has one for its search
+   and filter row) has to pass the available height through rather than absorb it. */
+.modal-layer.modal-list .modal-list-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1 1 auto;
+    /* Without min-height:0 a flex item refuses to shrink below its content, so the list
+       would push the modal open again and nothing would scroll. Same trap as a grid item
+       defaulting to min-width:auto. */
+    min-height: 0;
+}
+
+.modal-layer.modal-list .modal-list-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Room for the scrollbar so cards do not sit under it. */
+    padding-right: 2px;
+}
+
+/* An empty result set should look deliberate in a tall box, not abandoned in the corner. */
+.modal-layer.modal-list .modal-list-scroll > .empty-inline {
+    align-self: center;
+    margin: auto 0;
+}
+
 /* Content-heavy modals go full-screen on phones (edge-to-edge, no border/radius).
    Toggled via the .modal-fullscreen class in openModal/openSheet; desktop ignores it. */
 @media (max-width: 920px) {
