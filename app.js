@@ -5393,12 +5393,14 @@ import {
             }
             const cardRect = card.getBoundingClientRect();
             const chips = pill.querySelectorAll("[data-set-index]");
+            const allRows = card.querySelectorAll(".set-row");
             if (cardRect.bottom < 0 || cardRect.top > window.innerHeight) {
                 // Off screen: clear it, so scrolling back does not flash a stale chip.
                 chips.forEach((chip) => chip.classList.remove("is-current"));
+                allRows.forEach((row) => row.classList.remove("is-reading"));
                 continue;
             }
-            const rows = card.querySelectorAll(".set-row");
+            const rows = allRows;
             if (!rows.length || !chips.length) {
                 continue;
             }
@@ -5414,6 +5416,10 @@ import {
                 }
             });
             chips.forEach((chip, index) => chip.classList.toggle("is-current", index === best));
+            // Mark the ROW as well, so the pairing is visible at both ends: the chip up in
+            // the sticky strip and the number down in the row are lit together, and you can
+            // read "this set was 80x3 last time" without counting positions between them.
+            rows.forEach((row, index) => row.classList.toggle("is-reading", index === best));
         }
     }
 

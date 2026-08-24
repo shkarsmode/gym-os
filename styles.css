@@ -1998,6 +1998,27 @@ body.is-impersonating .last-results {
     color: #06140f;
 }
 
+/* The set you are currently reading, paired with its chip in «Минулого разу».
+   A RING rather than a fill: the badge of a completed set is already filled with the
+   accent, so changing the fill would make "done" and "you are here" look the same. A ring
+   sits outside the shape and reads on both. */
+.set-row.is-reading .set-index {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+.set-row.completed.is-reading .set-index {
+    color: #06140f;
+}
+
+/* Movement is what draws the eye to a pairing; a static border has to be hunted for. */
+@media (prefers-reduced-motion: no-preference) {
+    .set-index {
+        transition: border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
+    }
+}
+
 .set-type-select {
     flex: 1 1 auto;
     min-width: 0;
