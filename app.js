@@ -10,7 +10,7 @@ import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_T
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
 import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
-import { effectiveWorkoutStatus, hasRecordedWork } from "./lib/workout-status.js";
+import { effectiveWorkoutStatus, hasRecordedWork, workoutNeedsDetail } from "./lib/workout-status.js";
 import { SUPERSET_MIN_MEMBERS, SUPERSET_MAX_MEMBERS, SUPERSET_DEFAULT_ROUNDS, SUPERSET_DEFAULT_REST, positionLabel, workoutBlocks, roundCount, roundSets, isRoundComplete, currentRoundIndex, nextMemberInRound, missingSetCount, mergeProblem, roundSummary } from "./lib/superset.js";
 import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
@@ -2723,13 +2723,13 @@ import {
     function aiOpenCatalogPicker(exIndex) {
         aiState.pickerExIndex = Number(exIndex);
         state.filters.exerciseSearch = "";
-        openModal(aiCatalogPickerContent(), { fullscreen: true });
+        openModal(aiCatalogPickerContent(), { fullscreen: true, list: true });
     }
 
     function aiCatalogPickerContent() {
         return `<div class="modal-header"><div><h2>Обери вправу</h2><p class="card-caption">Заміни нерозпізнану вправу вправою з каталогу.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>
             <div class="ai-catalog-search"><i data-lucide="search"></i><input type="search" placeholder="Пошук вправи…" data-action="ai-catalog-search" autocomplete="off"></div>
-            <div id="aiCatalogGrid" class="ai-catalog-grid">${aiCatalogCards()}</div>`;
+            <div id="aiCatalogGrid" class="ai-catalog-grid modal-list-scroll">${aiCatalogCards()}</div>`;
     }
 
     function aiCatalogCards() {
@@ -5614,14 +5614,14 @@ import {
     }
 
     function openAddExerciseModal() {
-        openModal(pickerListContent(), { fullscreen: true });
+        openModal(pickerListContent(), { fullscreen: true, list: true });
     }
 
     function pickerListContent() {
         const replacing = !!state.replaceExerciseTarget;
         const heading = replacing ? "Замінити вправу" : "Додати вправу";
         const caption = replacing ? "Обери, на яку вправу замінити — пошук + фільтри." : "Пошук за назвою + фільтри за групою м'язів і обладнанням.";
-        return `<div class="modal-header"><div><h2>${heading}</h2><p class="card-caption">${caption}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody">${pickerBody()}</div>`;
+        return `<div class="modal-header"><div><h2>${heading}</h2><p class="card-caption">${caption}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div id="exercisePickerBody" class="modal-list-body">${pickerBody()}</div>`;
     }
 
     // Muscle-group filter priority order (the rest fall back alphabetically).
@@ -5665,7 +5665,7 @@ import {
                 <button type="button" class="picker-muscle-trigger" data-action="open-muscle-grid"><span class="picker-muscle-ic">${muscleIcon(muscle)}</span><span class="picker-muscle-label">${escapeHtml(muscleLabel(muscle))}</span><i data-lucide="chevron-down" class="gselect-caret"></i></button>
                 <gym-select data-action="picker-filter-select" data-key="pickerEquipment">${equipmentOptions}</gym-select>
             </div>
-            <div class="exercise-picker-grid" id="exercisePickerGrid">${exercisePickerCards()}</div>`;
+            <div class="exercise-picker-grid modal-list-scroll" id="exercisePickerGrid">${exercisePickerCards()}</div>`;
     }
 
     function setPickerFilter(key, value) {
@@ -5695,7 +5695,10 @@ import {
             if (!search) {
                 return true;
             }
-            return [exercise.name, exercise.aliases.join(" "), exercise.primaryMuscleGroup, exercise.secondaryMuscleGroups.join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search);
+            // Guarded: one row missing `aliases` threw here, and the throw happens INSIDE the
+            // input handler — so it did not break a single card, it silently switched the
+            // whole search off while the field carried on accepting text.
+            return [exercise.name, (exercise.aliases || []).join(" "), exercise.primaryMuscleGroup, (exercise.secondaryMuscleGroups || []).join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search);
         });
     }
 
@@ -7136,7 +7139,9 @@ import {
         // aggregate chips are populated but `exercises` is absent ENTIRELY, which is how a
         // summary is told apart from a genuinely empty session (that one has []). Without
         // this the drawer claimed "Вправ ще немає" for a workout whose own chip said 6.
-        const needsDetail = !Array.isArray(workoutItem.exercises) && !workoutItem.detailUnavailable;
+        // A workout already known to be private is NOT missing its detail — asking again
+        // returns the same refusal, and the repaint that follows asks again after that.
+        const needsDetail = workoutNeedsDetail(workoutItem);
         openDrawer(`<div class="drawer-header"><div><h2>${escapeHtml(workoutLabel(workoutItem))}</h2><p class="card-caption"><button class="link-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button> · ${formatDate(workoutItem.date)} · ${statusLabel(workoutStatusOf(workoutItem))} · ${workoutTypeLabel(workoutItem.workoutType)}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div>${readonly ? `<div class="readonly-layer">Лише перегляд: це тренування іншого користувача.</div>` : ""}<section class="panel">${workoutStatStrip([{ icon: "dumbbell", value: workoutExerciseCount(workoutItem), label: "вправ" }, { icon: "list-checks", value: totalSets, label: "підходів" }, { icon: "boxes", value: `${number(workoutVolumeOf(workoutItem))} кг` }, { icon: "heart-pulse", value: `${cardioMinutes} хв`, label: "кардіо" }, { icon: "timer", value: `${durationOf(workoutItem)} хв` }])}${workoutItem.notes ? `<p class="card-caption" style="margin-top:12px;">${escapeHtml(workoutItem.notes)}</p>` : ""}<div class="action-row wrap" style="margin-top:14px;">${partnerInviteCta(workoutItem, readonly)}<button class="button ${readonly ? "button-primary" : "button-secondary"} compact" type="button" data-action="copy-workout-start" data-workout-id="${workoutItem.id}"><i data-lucide="copy-plus"></i>Копіювати й почати</button>${readonly ? "" : `<button class="button button-primary compact" type="button" data-action="edit-workout" data-workout-id="${workoutItem.id}"><i data-lucide="pen-line"></i>Керувати</button>${workoutItem.status === "active" ? `<button class="button button-secondary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i>Завершити</button>` : `<button class="button button-secondary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i>Відновити</button>`}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити</button>`}</div></section><div class="wd-exercise-list" data-workout-detail="${workoutItem.id}" style="margin-top:14px;">${workoutDetailBody(workoutItem, needsDetail)}</div>`, { fullscreen: true });
         if (needsDetail) {
             hydrateWorkoutDetail(workoutId);
@@ -7179,6 +7184,7 @@ import {
         }
         let full = null;
         let privateOwnerId = null;
+        let changed = true;
         try {
             full = await storage.apiClient.fetchWorkout(workoutId);
         } catch (error) {
@@ -7201,14 +7207,19 @@ import {
             workoutItem.serverVersion = serverVersionOf(full) || workoutItem.serverVersion || null;
             workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
         } else if (privateOwnerId) {
+            // Already knew? Then the repaint below would paint the identical screen and
+            // start this all over again. Second guard on the same loop as `needsDetail`,
+            // because re-entry here is what makes the drawer unclosable.
+            changed = workoutItem.privateOwnerId !== privateOwnerId;
             workoutItem.privateOwnerId = privateOwnerId;
             delete workoutItem.detailUnavailable;
         } else {
+            changed = !workoutItem.detailUnavailable;
             workoutItem.detailUnavailable = true;
         }
         // Repaint only if the user is still looking at this workout: the fetch can outlive
         // the drawer, and openWorkout on a stale id would yank them back into it.
-        if (stillOpen()) {
+        if (changed && stillOpen()) {
             openWorkout(workoutId);
         }
     }
@@ -9461,7 +9472,10 @@ import {
             if (!search) {
                 return true;
             }
-            return [exercise.name, exercise.aliases.join(" "), exercise.primaryMuscleGroup, exercise.secondaryMuscleGroups.join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search);
+            // Guarded: one row missing `aliases` threw here, and the throw happens INSIDE the
+            // input handler — so it did not break a single card, it silently switched the
+            // whole search off while the field carried on accepting text.
+            return [exercise.name, (exercise.aliases || []).join(" "), exercise.primaryMuscleGroup, (exercise.secondaryMuscleGroups || []).join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search);
         });
         return sortExercisesByReaction(items);
     }
@@ -11968,6 +11982,11 @@ import {
         const modal = element("modalLayer");
         modal.innerHTML = html;
         modal.classList.toggle("modal-fullscreen", !!opts.fullscreen);
+        // A modal whose body is a FILTERED LIST keeps a fixed height. Without this the box
+        // is as tall as its results, so typing in the search resized it on every keystroke
+        // — and because it is vertically centred, it jumped up and down under the cursor
+        // while you were still typing into it.
+        modal.classList.toggle("modal-list", !!opts.list);
         iconsIn(modal);
         lockBackgroundScroll();
         revealOverlay(modal);
