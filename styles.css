@@ -1528,6 +1528,13 @@ select option {
 /* ---------- Workout editor ---------- */
 .workout-stack {
     display: grid;
+    /* minmax(0, …) rather than the default `auto`, which is min-content: ONE nowrap line
+       deep inside a card (a superset's «name · name» header, min-content 393px) pushed
+       this track to 469px on a 360px phone. Everything in the column then stretched with
+       it — including the sticky action bar, which is why «Завершити» ended up off the
+       right edge of the screen with no way to scroll to it. Clamping the TRACK stops any
+       single long string from resizing the whole workout screen. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
 }
 
@@ -1589,6 +1596,7 @@ select option {
 /* Drag-to-reorder list: same spacing as the surrounding .workout-stack grid. */
 .workout-exercise-list {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
 }
 
@@ -5731,7 +5739,7 @@ ul {
 .superset-block.is-done { border-color: var(--color-border); }
 .superset-block.is-done::before { background: var(--color-border-strong); }
 
-.ss-head { display: flex; align-items: flex-start; gap: 10px; }
+.ss-head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 .ss-head-text { flex: 1 1 auto; min-width: 0; }
 .ss-title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
@@ -5750,14 +5758,14 @@ ul {
 
 .ss-badge svg { width: 13px; height: 13px; }
 .ss-count { font-size: 12px; color: var(--color-muted); }
-.ss-names { margin: 6px 0 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-names { min-width: 0; margin: 6px 0 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-status { display: flex; align-items: center; gap: 8px; margin-top: 5px; font-size: 12px; color: var(--color-muted); }
 .ss-progress { display: inline-flex; gap: 3px; }
 .ss-progress i { width: 14px; height: 3px; border-radius: var(--radius-pill); background: var(--color-border); }
 .ss-progress i.done { background: color-mix(in srgb, var(--color-accent) 55%, transparent); }
 .ss-progress i.on { background: var(--color-accent); }
 
-.ss-rounds { display: grid; gap: 6px; }
+.ss-rounds { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 
 .ss-round {
     border: 1px solid var(--color-border);
@@ -5807,7 +5815,7 @@ ul {
 
 /* A member inside a round: who, then the two numbers, then the tick. Compact enough that
    a three-exercise round still fits a phone screen without scrolling between them. */
-.ss-member { display: grid; gap: 5px; padding: 7px 0; border-top: 1px solid var(--color-border); }
+.ss-member { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 7px 0; border-top: 1px solid var(--color-border); }
 .ss-member:first-of-type { border-top: 0; padding-top: 0; }
 .ss-member.is-done { opacity: 0.66; }
 .ss-member-head { display: flex; align-items: center; gap: 8px; }
