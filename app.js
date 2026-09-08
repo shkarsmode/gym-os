@@ -2071,40 +2071,53 @@ import {
     }
 
     /**
-     * Keep the field being edited out from under the sticky header.
+     * The page goes back to where it was when the keyboard goes away.
      *
-     * Tapping a set input opens the on-screen keyboard, which shrinks the visual viewport;
-     * the browser then scrolls the input into view, measuring against the top of the
-     * viewport because it has no idea three sticky layers are parked there. Closing the
-     * keyboard grows the viewport back but leaves the scroll position alone — so the field
-     * you were just typing in ends up behind the header, and the screen looks like it
-     * jumped somewhere on its own.
+     * THIS REPLACES THREE ATTEMPTS AT THE OTHER IDEA, and the difference is worth stating:
+     * those all tried to work out where the field OUGHT to be — below the topbar, below the
+     * action bar, below the «Минулого разу» strip — and to scroll it there. Every version
+     * was wrong in a different way, because the answer depends on things that are not
+     * knowable in advance: iOS scrolls the page past its own top edge and takes the sticky
+     * layers off screen with it, so their heights are the wrong thing to reserve; and the
+     * browser is already animating its own scroll, so a second one lands mid-flight.
      *
-     * Only ever scrolls when the field is ACTUALLY obscured, so this cannot fight the
-     * browser's own scrolling or fire on every keystroke.
+     * There is nothing to work out. The position the reader wants is the one they were
+     * already looking at before the keyboard covered half the screen. So remember it, and
+     * put it back — the whole correction becomes one number and no geometry at all.
      *
-     * SMOOTHLY, and this is the whole point of the second attempt: an instant jump the
-     * moment the keyboard finishes closing reads as the page snapping, which is what it
-     * was supposed to prevent. Sliding back is the same correction made legible.
+     * Captured on POINTERDOWN rather than on focus: the browser scrolls as part of
+     * focusing, so by the time a focus event arrives the position to remember is already
+     * gone.
      */
-    let lastEditedField = null;
+    let keyboardHomeScrollY = null;
+    let keyboardIsUp = false;
 
-    function revealEditedField(target) {
-        const field = target || lastEditedField;
-        if (!field || !field.isConnected || !document.body.contains(field)) {
+    function rememberScrollBeforeKeyboard(event) {
+        const target = event.target;
+        const field = target && target.closest
+            ? target.closest(".set-field, .workout-exercise textarea")
+            : null;
+        // Only the FIRST field of a session sets home. Moving between inputs while the
+        // keyboard stays up must not re-anchor to a position the keyboard already shifted.
+        if (field && !keyboardIsUp) {
+            keyboardHomeScrollY = window.scrollY;
+        }
+    }
+
+    function restoreScrollAfterKeyboard() {
+        const home = keyboardHomeScrollY;
+        keyboardHomeScrollY = null;
+        if (home === null) {
             return;
         }
-        const offset = stickyTopOffset(field) + 8;
-        const rect = field.getBoundingClientRect();
-        const bottom = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-        if (rect.top >= offset && rect.bottom <= bottom) {
-            return; // already fully visible — leave the page alone
+        const delta = Math.abs(window.scrollY - home);
+        // Nothing moved, or the reader has since scrolled somewhere else entirely and
+        // dragging them back would be the rude version of helpful.
+        if (delta < 4 || delta > 2000) {
+            return;
         }
         const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        window.scrollTo({
-            top: window.scrollY + rect.top - offset,
-            behavior: reduced ? "instant" : "smooth"
-        });
+        window.scrollTo({ top: home, behavior: reduced ? "instant" : "smooth" });
     }
 
     // Returns true when it handled the scroll, so the caller knows not to fall back.
@@ -4125,39 +4138,31 @@ import {
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
-        document.addEventListener("focusin", (event) => {
-            // `.set-field` is shared by the ordinary set row AND by a superset member, so
-            // one selector covers both; the textarea is the per-exercise note.
-            const field = event.target.closest && event.target.closest(".set-field, .workout-exercise textarea");
-            if (!field) {
-                return;
-            }
-            // Only REMEMBERED, never scrolled to. `scroll-margin-top` already makes the
-            // browser's own focus scroll land below the sticky header, and it animates
-            // smoothly; a second scroll from here landed mid-animation and yanked the page
-            // back — the UI slid up gently and then snapped. The browser is doing this
-            // correctly now, so the job is to stay out of its way.
-            lastEditedField = field;
-        });
+        // Capture phase, and pointerdown rather than focus: this has to run before the
+        // browser starts scrolling the input into view.
+        document.addEventListener("pointerdown", rememberScrollBeforeKeyboard, true);
         if (window.visualViewport) {
             let lastViewportHeight = window.visualViewport.height;
-            let revealTimer = null;
+            let restoreTimer = null;
             window.visualViewport.addEventListener("resize", () => {
                 const height = window.visualViewport.height;
+                const shrank = height < lastViewportHeight - 40;
                 const grew = height > lastViewportHeight + 40;
                 lastViewportHeight = height;
-                // Only on the way BACK — the keyboard closing is the moment the field can
-                // be left stranded under the header. On the way in the browser is already
-                // scrolling and must not be argued with.
+                if (shrank) {
+                    keyboardIsUp = true;
+                    return;
+                }
                 if (!grew) {
                     return;
                 }
-                // DEBOUNCED: a keyboard dismissal fires `resize` repeatedly as it slides
-                // away. Acting on the first one would start a smooth scroll and then start
+                keyboardIsUp = false;
+                // DEBOUNCED: a keyboard dismissal reports `resize` several times as it
+                // slides away. Acting on the first would start a scroll and then start
                 // another over the top of it, which stutters — worse than the jump it
-                // replaces. Only the last event, once the viewport has settled, scrolls.
-                window.clearTimeout(revealTimer);
-                revealTimer = window.setTimeout(() => revealEditedField(), 140);
+                // replaces. Only the last event, once the viewport has settled, moves.
+                window.clearTimeout(restoreTimer);
+                restoreTimer = window.setTimeout(restoreScrollAfterKeyboard, 140);
             });
         }
         window.addEventListener("hashchange", handleRoute);
