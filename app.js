@@ -2070,55 +2070,21 @@ import {
         return null;
     }
 
-    /**
-     * The page goes back to where it was when the keyboard goes away.
+    /*
+     * NOTHING HERE HANDLES THE ON-SCREEN KEYBOARD, ON PURPOSE.
      *
-     * THIS REPLACES THREE ATTEMPTS AT THE OTHER IDEA, and the difference is worth stating:
-     * those all tried to work out where the field OUGHT to be — below the topbar, below the
-     * action bar, below the «Минулого разу» strip — and to scroll it there. Every version
-     * was wrong in a different way, because the answer depends on things that are not
-     * knowable in advance: iOS scrolls the page past its own top edge and takes the sticky
-     * layers off screen with it, so their heights are the wrong thing to reserve; and the
-     * browser is already animating its own scroll, so a second one lands mid-flight.
+     * Four versions of that lived here and every one was worse than nothing: reserving the
+     * sticky layers' height in scroll-margin (iOS takes those layers off screen when the
+     * keyboard opens, so the reservation only overscrolled); scrolling the field into view
+     * after focus (landed mid-way through the browser's own animation and snapped);
+     * smoothing that; and finally restoring the pre-keyboard scroll position (a scroll back
+     * is still a scroll the reader did not ask for).
      *
-     * There is nothing to work out. The position the reader wants is the one they were
-     * already looking at before the keyboard covered half the screen. So remember it, and
-     * put it back — the whole correction becomes one number and no geometry at all.
-     *
-     * Captured on POINTERDOWN rather than on focus: the browser scrolls as part of
-     * focusing, so by the time a focus event arrives the position to remember is already
-     * gone.
+     * The browser already raises and lowers the page with the keyboard, smoothly, the way
+     * every other app does. The correct amount of help is none. If this looks broken again,
+     * the fix is somewhere else — a sticky offset, a viewport meta — not another scroll
+     * from here.
      */
-    let keyboardHomeScrollY = null;
-    let keyboardIsUp = false;
-
-    function rememberScrollBeforeKeyboard(event) {
-        const target = event.target;
-        const field = target && target.closest
-            ? target.closest(".set-field, .workout-exercise textarea")
-            : null;
-        // Only the FIRST field of a session sets home. Moving between inputs while the
-        // keyboard stays up must not re-anchor to a position the keyboard already shifted.
-        if (field && !keyboardIsUp) {
-            keyboardHomeScrollY = window.scrollY;
-        }
-    }
-
-    function restoreScrollAfterKeyboard() {
-        const home = keyboardHomeScrollY;
-        keyboardHomeScrollY = null;
-        if (home === null) {
-            return;
-        }
-        const delta = Math.abs(window.scrollY - home);
-        // Nothing moved, or the reader has since scrolled somewhere else entirely and
-        // dragging them back would be the rude version of helpful.
-        if (delta < 4 || delta > 2000) {
-            return;
-        }
-        const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        window.scrollTo({ top: home, behavior: reduced ? "instant" : "smooth" });
-    }
 
     // Returns true when it handled the scroll, so the caller knows not to fall back.
     function restoreScrollAnchor(anchor) {
@@ -4138,33 +4104,6 @@ import {
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
-        // Capture phase, and pointerdown rather than focus: this has to run before the
-        // browser starts scrolling the input into view.
-        document.addEventListener("pointerdown", rememberScrollBeforeKeyboard, true);
-        if (window.visualViewport) {
-            let lastViewportHeight = window.visualViewport.height;
-            let restoreTimer = null;
-            window.visualViewport.addEventListener("resize", () => {
-                const height = window.visualViewport.height;
-                const shrank = height < lastViewportHeight - 40;
-                const grew = height > lastViewportHeight + 40;
-                lastViewportHeight = height;
-                if (shrank) {
-                    keyboardIsUp = true;
-                    return;
-                }
-                if (!grew) {
-                    return;
-                }
-                keyboardIsUp = false;
-                // DEBOUNCED: a keyboard dismissal reports `resize` several times as it
-                // slides away. Acting on the first would start a scroll and then start
-                // another over the top of it, which stutters — worse than the jump it
-                // replaces. Only the last event, once the viewport has settled, moves.
-                window.clearTimeout(restoreTimer);
-                restoreTimer = window.setTimeout(restoreScrollAfterKeyboard, 140);
-            });
-        }
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
         // Capture phase: blur does not bubble.
