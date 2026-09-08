@@ -1804,16 +1804,39 @@ body.is-reordering .we-drag-handle {
    session's numbers stay in front of you — and stops at the card's set list, never
    travelling into the notes below or over a neighbouring exercise. Opaque
    background + z-index because the set rows scroll underneath it. */
+/* Hidden while a set field is focused, and until the reader next scrolls.
+   
+   This strip is the bottom of the sticky stack, which puts it directly over the sets. The
+   keyboard lifts the view to show the input; when focus leaves, the strip is sitting on
+   the very input that was just being edited. Scrolling the page to compensate was tried
+   four different ways and every one felt like the app moving on its own.
+   
+   So the strip gets out of the way instead. OPACITY ONLY — it stays in the layout and
+   nothing shifts, which is the whole reason this does not read as a jump. It comes back on
+   the next scroll, because that is the moment the reader is looking somewhere else
+   anyway. */
 .last-results {
     position: sticky;
     top: calc(var(--topbar-h, 64px) + var(--wab-h, 0px) + 2px);
     z-index: 4;
+    transition: opacity 0.18s ease;
     margin: 12px 0 4px;
     padding: 10px 12px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     background: var(--color-elevated);
     box-shadow: 0 6px 14px -10px rgba(0, 0, 0, 0.8);
+}
+
+body.is-editing-set .last-results {
+    opacity: 0;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .last-results {
+        transition: none;
+    }
 }
 
 /* The sticky range: the pill may travel only alongside the sets of its own

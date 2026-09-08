@@ -4104,6 +4104,51 @@ import {
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
+        /*
+         * The «Минулого разу» strip steps aside while a set field is being edited.
+         *
+         * Not because of typing — because of what happens when focus LEAVES. The keyboard
+         * lifts the view to reveal the input, and when it goes the strip is sticky right
+         * on top of that input. Moving the page to fix it never felt right, so the strip
+         * moves instead — and only its opacity, so the layout never shifts.
+         *
+         * It returns on the next scroll rather than on blur, since blur is the exact
+         * moment it would land on the input. The delay guards against the scroll the
+         * closing keyboard itself produces.
+         */
+        let editingField = false;
+        let scrollYAtBlur = 0;
+        const isSetField = (node) => Boolean(node && node.closest
+            && node.closest(".set-field, .workout-exercise textarea"));
+        document.addEventListener("focusin", (event) => {
+            if (isSetField(event.target)) {
+                editingField = true;
+                document.body.classList.add("is-editing-set");
+            }
+        });
+        document.addEventListener("focusout", (event) => {
+            if (isSetField(event.target)) {
+                editingField = false;
+                scrollYAtBlur = window.scrollY;
+            }
+        });
+        window.addEventListener("scroll", () => {
+            if (!document.body.classList.contains("is-editing-set")) {
+                return;
+            }
+            // Tracked in a flag rather than read from document.activeElement: focus state
+            // is not reliably readable in every context, and getting it wrong here means
+            // the strip reappears mid-edit — the exact thing being prevented.
+            //
+            // Restored when the page has ACTUALLY MOVED since the blur, not merely when a
+            // scroll event arrived. Closing the keyboard fires scroll events of its own
+            // without the reader doing anything, and treating those as "they have looked
+            // away" put the strip straight back on the input. Distance is the honest
+            // signal, and it does not depend on timing that varies by device.
+            if (!editingField && Math.abs(window.scrollY - scrollYAtBlur) > 24) {
+                document.body.classList.remove("is-editing-set");
+            }
+        }, { passive: true });
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
         // Capture phase: blur does not bubble.
