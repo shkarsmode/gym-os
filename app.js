@@ -2030,8 +2030,33 @@ import {
     // change height on a tick happen INSIDE a card: the coach-mark above set 1 disappears
     // the moment that set is done, and the card collapses once all of its sets are. An
     // anchor on the card would hold the card still while its contents slid underneath.
+    /**
+     * How much of the top of the screen is covered by sticky chrome right now.
+     *
+     * Three layers stack there on the workout screen — the topbar, the action bar and the
+     * «Минулого разу» strip — and every one of them is `position: sticky`, so anything
+     * measured against the viewport top is measured against the wrong line.
+     */
+    function stickyTopOffset(node) {
+        let offset = topbarHeight();
+        const bar = document.querySelector(".workout-actionbar");
+        if (bar) {
+            offset += bar.offsetHeight;
+        }
+        const card = node && node.closest ? node.closest(".workout-exercise") : null;
+        const strip = (card || document).querySelector(".last-results");
+        if (strip) {
+            offset += strip.offsetHeight;
+        }
+        return offset;
+    }
+
     function captureScrollAnchor() {
-        const cutoff = topbarHeight();
+        // Was topbarHeight() alone, which counts only the FIRST of three sticky layers —
+        // so a row hidden behind the action bar and the «Минулого разу» strip still looked
+        // like the topmost visible one, and every re-render faithfully restored it to
+        // where it was: out of sight.
+        const cutoff = stickyTopOffset(null);
         const nodes = document.querySelectorAll("[data-set-id], .workout-exercise[data-workout-exercise-id]");
         for (const node of nodes) {
             const rect = node.getBoundingClientRect();
@@ -2043,6 +2068,35 @@ import {
             }
         }
         return null;
+    }
+
+    /**
+     * Keep the field being edited out from under the sticky header.
+     *
+     * Tapping a set input opens the on-screen keyboard, which shrinks the visual viewport;
+     * the browser then scrolls the input into view, measuring against the top of the
+     * viewport because it has no idea three sticky layers are parked there. Closing the
+     * keyboard grows the viewport back but leaves the scroll position alone — so the field
+     * you were just typing in ends up behind the header, and the screen looks like it
+     * jumped somewhere on its own.
+     *
+     * Only ever scrolls when the field is ACTUALLY obscured, so this cannot fight the
+     * browser's own scrolling or fire on every keystroke.
+     */
+    let lastEditedField = null;
+
+    function revealEditedField(target) {
+        const field = target || lastEditedField;
+        if (!field || !field.isConnected || !document.body.contains(field)) {
+            return;
+        }
+        const offset = stickyTopOffset(field) + 8;
+        const rect = field.getBoundingClientRect();
+        const bottom = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        if (rect.top >= offset && rect.bottom <= bottom) {
+            return; // already fully visible — leave the page alone
+        }
+        window.scrollTo({ top: window.scrollY + rect.top - offset, behavior: "instant" });
     }
 
     // Returns true when it handled the scroll, so the caller knows not to fall back.
@@ -4063,6 +4117,32 @@ import {
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
+        document.addEventListener("focusin", (event) => {
+            // `.set-field` is shared by the ordinary set row AND by a superset member, so
+            // one selector covers both; the textarea is the per-exercise note.
+            const field = event.target.closest && event.target.closest(".set-field, .workout-exercise textarea");
+            if (!field) {
+                return;
+            }
+            lastEditedField = field;
+            // After the keyboard has finished animating in — before that the viewport is
+            // still the old size and any measurement is of a layout about to change.
+            window.setTimeout(() => revealEditedField(field), 320);
+        });
+        if (window.visualViewport) {
+            let lastViewportHeight = window.visualViewport.height;
+            window.visualViewport.addEventListener("resize", () => {
+                const height = window.visualViewport.height;
+                const grew = height > lastViewportHeight + 40;
+                lastViewportHeight = height;
+                // Only on the way BACK — the keyboard closing is the moment the field can
+                // be left stranded under the header. On the way in the browser is already
+                // scrolling and must not be argued with.
+                if (grew) {
+                    window.setTimeout(() => revealEditedField(), 60);
+                }
+            });
+        }
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
         // Capture phase: blur does not bubble.
@@ -5631,6 +5711,12 @@ import {
         // Measured, not hardcoded: on a narrow phone the bar wraps to two rows.
         const actionBar = document.querySelector(".workout-actionbar");
         document.documentElement.style.setProperty("--wab-h", actionBar ? `${actionBar.offsetHeight}px` : "0px");
+        // Third and last sticky layer. Published so `scroll-margin-top` can keep a focused
+        // field clear of ALL of them: the browser scrolls an input into view when the
+        // keyboard opens and knows nothing about position:sticky, so without this the
+        // field you are typing into ends up underneath the header.
+        const strip = document.querySelector(".last-results");
+        document.documentElement.style.setProperty("--lr-h", strip ? `${strip.offsetHeight}px` : "0px");
     }
 
     function openQuickAction() {

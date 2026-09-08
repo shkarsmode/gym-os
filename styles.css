@@ -1593,6 +1593,17 @@ select option {
     scroll-margin-top: calc(var(--topbar-h, 64px) + 60px);
 }
 
+/* When the keyboard opens, the browser scrolls the focused input into view against the
+   TOP OF THE VIEWPORT — it has no concept of position:sticky, so the field lands under
+   the topbar, the action bar and the «Минулого разу» strip. Every one of those heights is
+   published by updateTopbarOffset(), so the browser's own scrolling can be told where the
+   readable area actually starts. */
+.set-field,
+.workout-exercise textarea {
+    scroll-margin-top: calc(var(--topbar-h, 64px) + var(--wab-h, 0px) + var(--lr-h, 0px) + 10px);
+    scroll-margin-bottom: 16px;
+}
+
 /* Drag-to-reorder list: same spacing as the surrounding .workout-stack grid. */
 .workout-exercise-list {
     display: grid;
