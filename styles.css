@@ -1849,6 +1849,12 @@ body.is-editing-set .last-results {
     position: static;
 }
 
+/* The half-second of the handoff back to sticky. `position` is not animatable, so the
+   strip is hidden for the one frame in which it moves, and fades in where it lands. */
+body.strip-restoring .last-results {
+    opacity: 0;
+}
+
 /* The action bar has no gap to fill — it lives at the top of the page, so unsticking it
    simply lets it scroll away with everything else, which is what it should do while the
    keyboard has the screen. */

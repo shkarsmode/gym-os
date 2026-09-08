@@ -4145,9 +4145,27 @@ import {
             // without the reader doing anything, and treating those as "they have looked
             // away" put the strip straight back on the input. Distance is the honest
             // signal, and it does not depend on timing that varies by device.
-            if (!editingField && Math.abs(window.scrollY - scrollYAtBlur) > 24) {
-                document.body.classList.remove("is-editing-set");
+            if (editingField || Math.abs(window.scrollY - scrollYAtBlur) <= 24) {
+                return;
             }
+            if (document.body.classList.contains("strip-restoring")) {
+                return; // a handoff is already running
+            }
+            /*
+             * Going back to sticky in two phases, because `position` cannot be animated.
+             *
+             * The strip is sitting in its own slot in the flow; becoming sticky again moves
+             * it to the top of the card in a single frame, which is the snap that was
+             * reported. So it fades out where it stands, changes position while nobody can
+             * see it, and fades back in stuck.
+             */
+            document.body.classList.add("strip-restoring");
+            window.setTimeout(() => {
+                document.body.classList.remove("is-editing-set");
+                // A separate tick, so the browser paints the element at its new position
+                // still transparent before the fade-in starts.
+                window.setTimeout(() => document.body.classList.remove("strip-restoring"), 30);
+            }, 180);
         }, { passive: true });
         window.addEventListener("hashchange", handleRoute);
         window.addEventListener("gymos:update-ready", showUpdateBanner);
