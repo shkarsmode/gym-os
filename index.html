@@ -2,12 +2,15 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <!-- interactive-widget=resizes-content: when the on-screen keyboard opens, resize the
-         LAYOUT viewport rather than only shrinking the visual one. That is what keeps the
-         page rising and falling with the keyboard the way a native form does, and keeps
-         position:sticky measuring against something that is actually on screen. Browsers
-         that do not know the key ignore it. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+    <!-- NO interactive-widget key here, deliberately.
+
+         `resizes-content` shrinks the LAYOUT viewport when the keyboard opens, which
+         re-anchors every fixed element to the new, smaller bottom: the mobile navigation
+         bar surfaced in the middle of the page just above the keyboard, and the sticky
+         topbar was squeezed up into the status bar. That behaviour suits a chat compose
+         box; it is wrong for an app whose chrome should stay where it is and simply be
+         covered. The default (`resizes-visual`) does exactly that. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>GymOS — Gym Progress OS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
