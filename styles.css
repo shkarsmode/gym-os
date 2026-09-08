@@ -1835,7 +1835,23 @@ body.is-reordering .we-drag-handle {
 
    Opacity only, no transform: this bar is rebuilt by renderSection() on every set toggle,
    and anything that animates position would replay that animation on each tap. */
-body.is-editing-set .last-results,
+/* The strip stops being STUCK rather than disappearing.
+   
+   Fading it out left a hole: the space it occupies in the flow is reserved whether it is
+   painted or not, so an invisible strip is a blank gap between the exercise buttons and
+   the first set. Dropping it back into that gap is better in every way — it is exactly
+   where it belongs, it is readable while you type, and it cannot cover anything because
+   in normal flow it has its own room.
+   
+   `position` cannot be transitioned, so the return to sticky is done by fading: the strip
+   goes out, comes back stuck. */
+body.is-editing-set .last-results {
+    position: static;
+}
+
+/* The action bar has no gap to fill — it lives at the top of the page, so unsticking it
+   simply lets it scroll away with everything else, which is what it should do while the
+   keyboard has the screen. */
 body.is-editing-set .workout-actionbar {
     opacity: 0;
     pointer-events: none;
