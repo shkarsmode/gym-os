@@ -4124,10 +4124,12 @@ import {
             if (!field) {
                 return;
             }
+            // Only REMEMBERED, never scrolled to. `scroll-margin-top` already makes the
+            // browser's own focus scroll land below the sticky header, and it animates
+            // smoothly; a second scroll from here landed mid-animation and yanked the page
+            // back — the UI slid up gently and then snapped. The browser is doing this
+            // correctly now, so the job is to stay out of its way.
             lastEditedField = field;
-            // After the keyboard has finished animating in — before that the viewport is
-            // still the old size and any measurement is of a layout about to change.
-            window.setTimeout(() => revealEditedField(field), 320);
         });
         if (window.visualViewport) {
             let lastViewportHeight = window.visualViewport.height;
