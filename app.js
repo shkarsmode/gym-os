@@ -2082,6 +2082,10 @@ import {
      *
      * Only ever scrolls when the field is ACTUALLY obscured, so this cannot fight the
      * browser's own scrolling or fire on every keystroke.
+     *
+     * SMOOTHLY, and this is the whole point of the second attempt: an instant jump the
+     * moment the keyboard finishes closing reads as the page snapping, which is what it
+     * was supposed to prevent. Sliding back is the same correction made legible.
      */
     let lastEditedField = null;
 
@@ -2096,7 +2100,11 @@ import {
         if (rect.top >= offset && rect.bottom <= bottom) {
             return; // already fully visible — leave the page alone
         }
-        window.scrollTo({ top: window.scrollY + rect.top - offset, behavior: "instant" });
+        const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        window.scrollTo({
+            top: window.scrollY + rect.top - offset,
+            behavior: reduced ? "instant" : "smooth"
+        });
     }
 
     // Returns true when it handled the scroll, so the caller knows not to fall back.
@@ -4133,6 +4141,7 @@ import {
         });
         if (window.visualViewport) {
             let lastViewportHeight = window.visualViewport.height;
+            let revealTimer = null;
             window.visualViewport.addEventListener("resize", () => {
                 const height = window.visualViewport.height;
                 const grew = height > lastViewportHeight + 40;
@@ -4140,9 +4149,15 @@ import {
                 // Only on the way BACK — the keyboard closing is the moment the field can
                 // be left stranded under the header. On the way in the browser is already
                 // scrolling and must not be argued with.
-                if (grew) {
-                    window.setTimeout(() => revealEditedField(), 60);
+                if (!grew) {
+                    return;
                 }
+                // DEBOUNCED: a keyboard dismissal fires `resize` repeatedly as it slides
+                // away. Acting on the first one would start a smooth scroll and then start
+                // another over the top of it, which stutters — worse than the jump it
+                // replaces. Only the last event, once the viewport has settled, scrolls.
+                window.clearTimeout(revealTimer);
+                revealTimer = window.setTimeout(() => revealEditedField(), 140);
             });
         }
         window.addEventListener("hashchange", handleRoute);
