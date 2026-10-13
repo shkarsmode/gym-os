@@ -14,7 +14,12 @@ import { effectiveWorkoutStatus, hasRecordedWork, workoutNeedsDetail } from "./l
 import { SUPERSET_MIN_MEMBERS, SUPERSET_MAX_MEMBERS, SUPERSET_DEFAULT_ROUNDS, SUPERSET_DEFAULT_REST, positionLabel, workoutBlocks, roundCount, roundSets, isRoundComplete, currentRoundIndex, nextMemberInRound, missingSetCount, mergeProblem, roundSummary } from "./lib/superset.js";
 import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
-import { gymClockState, nextGymClockMarks, formatClock, formatDurationLabel } from "./lib/gym-clock.js";
+import { gymClockState, nextGymClockMarks, formatClock, formatDurationLabel, timeOfDay } from "./lib/gym-clock.js";
+import {
+    FIELD_LIMITS, sessionSetLabels, nextSessionSet, sessionProgress, pairedLast, loadDelta, fieldStep, stepValue,
+    keypadPress, draftNumber, numberDraft, digitsFromDuration, durationFromDigits, durationDigitsPress, durationDigitsLabel,
+    percentChange, sessionLengthLabel
+} from "./lib/session.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
@@ -25,7 +30,7 @@ import {
     duration as kernelDuration, autoDuration as kernelAutoDuration,
     recordsFor as kernelRecordsFor, userStats as kernelUserStats, teamStats as kernelTeamStats,
     userAchievements as kernelUserAchievements, xpEvents as kernelXpEvents,
-    userXp as kernelUserXp, userLevel as kernelUserLevel
+    userXp as kernelUserXp, userLevel as kernelUserLevel, dayDiff as kernelDayDiff
 } from "./lib/scoring.js";
 
 (() => {
@@ -1159,7 +1164,8 @@ import {
         defaultSetType: "warmup",
         autoStartRest: "1",       // "1" = auto-start rest timer on set completion
         useSupersets: "1",        // "1" = offer merging 2–3 exercises into rounds
-        keepAwake: "1"            // "1" = hold a screen wake lock while a workout is active
+        keepAwake: "1",           // "1" = hold a screen wake lock while a workout is active
+        newUi: "auto"             // new workout screen (beta): "1" on, "0" off, "auto" = admins only
     };
 
     function getPref(key) {
@@ -2039,6 +2045,12 @@ import {
      */
     function stickyTopOffset(node) {
         let offset = topbarHeight();
+        // The session screen's own header is the sticky layer there (on a phone the topbar
+        // is hidden altogether).
+        const sessionHead = document.querySelector(".ux2-head");
+        if (sessionHead) {
+            offset = Math.max(offset, sessionHead.getBoundingClientRect().bottom);
+        }
         const bar = document.querySelector(".workout-actionbar");
         if (bar) {
             offset += bar.offsetHeight;
@@ -2164,6 +2176,13 @@ import {
         if ((state.section === "admin" || state.section === "moderation" || state.section === "aistats") && !isAdmin()) {
             state.section = defaultSection();
         }
+        // workout() puts it back when it draws the session; every other screen must not
+        // inherit the session's full-screen chrome.
+        document.body.classList.remove("ux2-in-session");
+        document.documentElement.classList.toggle("ux2", ux2Enabled());
+        if (state.section !== "workout") {
+            ux2ReturnSection = state.section;
+        }
         renderShell();
         // Detail routes ("post", "user") are reachable but are not nav entries, so they
         // have no sectionItems row — without this they would inherit "Панель".
@@ -2233,6 +2252,18 @@ import {
         }
         updateTopbarContext();
         syncGymClockTicker();
+        renderUx2Mini();
+        ux2AfterRender();
+        syncUx2Clock();
+        syncUx2Timer();
+        // Hand the running timer to (or back from) the dock / mini-player — only when that
+        // ownership actually changes, so the classic floating timer is not rebuilt on every
+        // tap.
+        const ux2OwnsNow = ux2OwnsTimer();
+        if (state.timer.running && ux2OwnsNow !== renderSection.ux2OwnedTimer) {
+            renderFloatingTimer();
+        }
+        renderSection.ux2OwnedTimer = ux2OwnsNow;
 
         if (pendingNoteFocus) {
             const key = pendingNoteFocus;
@@ -2336,6 +2367,17 @@ import {
 
     function workout() {
         const workoutItem = editWorkout();
+        // Your own active session gets the new screen when it is switched on; everything
+        // else — a finished session, a planned one, somebody else's — stays the classic
+        // editor, which is built for reviewing and correcting rather than doing.
+        if (ux2ShowsSession(workoutItem)) {
+            document.body.classList.add("ux2-in-session");
+            content(ux2Session(workoutItem));
+            renderPartnerPanel();
+            loadPartnerState().then(renderPartnerPanel);
+            loadPresence();
+            return;
+        }
         content(`<div class="workout-stack"><div id="partnerPanel"></div>${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
         // Painted from whatever is already held, then refreshed in the background, so
         // switching to this screen never flashes an empty panel.
@@ -3844,8 +3886,9 @@ import {
         ["red", "Red", "#f43f5e"]
     ];
 
-    function settingsSwitch(pref, label) {
-        const on = getPref(pref) === "1";
+    // `on` overrides the stored value for prefs whose default is decided elsewhere — "auto"
+    // for the new workout screen means "on for admins", which getPref alone cannot answer.
+    function settingsSwitch(pref, label, on = getPref(pref) === "1") {
         return `<label class="settings-switch"><input type="checkbox" data-action="set-pref-switch" data-pref="${pref}" ${on ? "checked" : ""} aria-label="${escapeHtml(label)}"><span></span></label>`;
     }
 
@@ -3884,6 +3927,7 @@ import {
         ]);
 
         const workoutGroup = settingsGroup("Тренування за замовчуванням", [
+            settingsRow("Новий екран тренування", settingsSwitch("newUi", "Новий екран тренування (бета)", ux2Enabled()), { hint: "Бета: компактні підходи, велика кнопка «Підхід виконано», своя клавіатура, мініплеєр і підсумок" }),
             settingsRow("Відпочинок між підходами", `<gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select>`),
             settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
             settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
@@ -4104,6 +4148,10 @@ import {
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
+        // The new workout screen's keypad: capture phase, so a tap elsewhere closes it before
+        // that tap's own action runs, and its keys win over the global Escape handling.
+        document.addEventListener("click", ux2KeypadOutside, true);
+        document.addEventListener("keydown", ux2KeypadKeydown, true);
         /*
          * The «Минулого разу» strip steps aside while a set field is being edited.
          *
@@ -5071,7 +5119,54 @@ import {
             "open-note": () => openNote(actionElement.dataset.noteKey),
             "open-workout-type": () => openWorkoutTypePicker(actionElement.dataset.workoutId),
             "dismiss-update": dismissUpdateBanner,
-            "close-sheet": closeSheet
+            "close-sheet": closeSheet,
+            // ---- new workout screen (ux2) ----
+            "ux2-minimize": ux2Minimize,
+            "ux2-complete-next": () => ux2CompleteSet(actionElement.dataset.ux2We, actionElement.dataset.ux2Set),
+            "ux2-cta-edit": () => ux2OpenKeypad(actionElement.dataset.ux2We, actionElement.dataset.ux2Set, actionElement.dataset.field),
+            "ux2-toggle-set": () => ux2ToggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
+            "ux2-add-set": () => ux2AddSet(actionElement.dataset.workoutExerciseId),
+            "ux2-apply-last": () => ux2ApplyLast(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
+            "ux2-edit": () => ux2OpenKeypad(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field),
+            "ux2-set-menu": () => ux2OpenSetMenu(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.superset === "1"),
+            "ux2-set-type": () => ux2SetType(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.type, actionElement.dataset.superset === "1"),
+            "ux2-set-rest": () => ux2SetRest(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, Number(actionElement.dataset.delta) || 0, actionElement.dataset.superset === "1"),
+            "ux2-sheet-toggle-set": () => { closeOverlay(); return ux2ToggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId); },
+            "ux2-delete-set": () => { closeOverlay(); return deleteSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, { skipConfirm: true }); },
+            "ux2-toggle-ex": () => {
+                const id = actionElement.dataset.workoutExerciseId;
+                state.expandedExercises = state.expandedExercises || new Set();
+                if (state.expandedExercises.has(id)) {
+                    state.expandedExercises.delete(id);
+                } else {
+                    state.expandedExercises.add(id);
+                }
+                renderSection();
+            },
+            "ux2-ex-menu": () => ux2OpenExerciseMenu(actionElement.dataset.workoutExerciseId),
+            "ux2-ex-focus": () => { closeOverlay(); openFocusMode(actionElement.dataset.workoutExerciseId || null); },
+            "ux2-ex-replace": () => { state.replaceExerciseTarget = actionElement.dataset.workoutExerciseId; openAddExerciseModal(); },
+            "ux2-ex-timed": () => { closeOverlay(); return toggleTimedBlock(actionElement.dataset.workoutExerciseId); },
+            "ux2-ex-info": () => openExercise(actionElement.dataset.exerciseId),
+            "ux2-ex-remove": () => { closeOverlay(); return removeWorkoutExercise(actionElement.dataset.workoutExerciseId); },
+            "ux2-ex-rest": () => ux2ExerciseRest(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.seconds) || 0),
+            "ux2-open-note": () => { closeOverlay(); openNote(actionElement.dataset.noteKey); },
+            "ux2-session-menu": ux2OpenSessionMenu,
+            "ux2-pick-type": () => { closeOverlay(); return openWorkoutTypePicker(actionElement.dataset.workoutId); },
+            "ux2-meta": ux2OpenMetaSheet,
+            "ux2-cardio": () => openCardioModal(actionElement.dataset.workoutId, null),
+            "ux2-superset": () => { closeOverlay(); return openSupersetBuilder(actionElement.dataset.workoutId); },
+            "ux2-template": () => openSaveTemplateModal(actionElement.dataset.workoutId),
+            "ux2-delete-workout": () => { closeOverlay(); return deleteWorkout(actionElement.dataset.workoutId); },
+            "ux2-classic": ux2SwitchToClassic,
+            "ux2-finish": ux2Finish,
+            "ux2-summary-done": ux2SummaryDone,
+            "ux2-summary-undo": () => ux2UndoFinish(actionElement.dataset.workoutId),
+            "ux2-timer": ux2OpenTimerSheet,
+            "ux2-timer-start": () => { startTimer(Number(actionElement.dataset.seconds) || 90); closeOverlay(); },
+            "ux2-timer-add": () => addTimerTime(Number(actionElement.dataset.delta) || 0),
+            "ux2-timer-pause": () => { toggleTimerPause(); ux2OpenTimerSheet(); },
+            "ux2-timer-skip": () => { stopTimer(); closeOverlay(); }
         };
 
         if (actions[action]) {
@@ -5241,6 +5336,11 @@ import {
     }
 
     function actionNeedsLoader(action) {
+        // The new workout screen paints every result itself, immediately: a spinner swapped
+        // into a 46px tick or into the big button would read as lag, not progress.
+        if (action.startsWith("ux2-")) {
+            return false;
+        }
         return !new Set([
             "navigate",
             "edit-workout",
@@ -7030,7 +7130,9 @@ import {
         }
     }
 
-    async function deleteSet(workoutExerciseId, setId) {
+    // `skipConfirm`: the new screen reaches this from a menu the user opened on purpose and
+    // already chose «Видалити» in; asking again is one tap too many when the undo is there.
+    async function deleteSet(workoutExerciseId, setId, options = {}) {
         const workoutExercise = editWorkoutExercise(workoutExerciseId);
         if (!workoutExercise) {
             return;
@@ -7041,7 +7143,7 @@ import {
         }
         const index = workoutExercise.sets.findIndex((item) => item.id === setId);
         const detail = describeSet(removed, setTypeLabels[removed.type] || "");
-        if (!(await confirmDialog(`Підхід №${index + 1}`, {
+        if (!options.skipConfirm && !(await confirmDialog(`Підхід №${index + 1}`, {
             title: "Видалити підхід?",
             detail,
             confirmLabel: "Видалити",
@@ -7108,7 +7210,8 @@ import {
         renderSection();
     }
 
-    async function finishWorkout(workoutId) {
+    // `quiet`: the new screen follows up with its own summary, so no toast on top of it.
+    async function finishWorkout(workoutId, options = {}) {
         const workoutItem = workoutId ? ownWorkout(workoutId) : (editWorkout() || activeWorkoutFor(currentUser().id));
         if (!workoutItem) {
             return;
@@ -7149,8 +7252,10 @@ import {
         await persistWorkout(workoutItem);
         invalidateFeed();
         renderSection();
-        toast("Тренування завершено", "Статистику та рекорди перераховано.");
-        checkAchievementUnlocks();
+        if (!options.quiet) {
+            toast("Тренування завершено", "Статистику та рекорди перераховано.");
+            checkAchievementUnlocks();
+        }
     }
 
     // Rounded to something a person would say out loud (see suggestedDurationMinutes).
@@ -10652,17 +10757,19 @@ import {
 
     // Toasts newly unlocked achievements (first run seeds silently so history
     // doesn't spam). Called at boot and after actions that can unlock something.
-    function checkAchievementUnlocks() {
+    // Returns the fresh ones; `silent` marks them seen without a toast, for a caller that
+    // shows them itself (the new screen's summary, which a toast would cover).
+    function checkAchievementUnlocks(options = {}) {
         const user = currentUser();
         if (!user) {
-            return;
+            return [];
         }
         const unlockedIds = userAchievements(user.id).filter((achievement) => achievement.unlockedAt).map((achievement) => achievement.id);
         const key = `ach-seen-${user.id}`;
         const raw = storage.readSetting(key);
         if (raw === null || raw === undefined || raw === "") {
             storage.writeSetting(key, JSON.stringify(unlockedIds));
-            return;
+            return [];
         }
         let seen;
         try {
@@ -10670,15 +10777,17 @@ import {
         } catch (error) {
             seen = new Set();
         }
-        const fresh = unlockedIds.filter((id) => !seen.has(id));
+        const fresh = unlockedIds.filter((id) => !seen.has(id)).map((id) => ACHIEVEMENTS.find((item) => item.id === id)).filter(Boolean);
         if (!fresh.length) {
-            return;
+            return [];
         }
-        fresh.forEach((id, index) => {
-            const achievement = ACHIEVEMENTS.find((item) => item.id === id);
-            setTimeout(() => toast("Досягнення відкрито", `«${achievement.title}» · +${achievement.xp} XP`, "achievement"), 350 + index * 900);
-        });
+        if (!options.silent) {
+            fresh.forEach((achievement, index) => {
+                setTimeout(() => toast("Досягнення відкрито", `«${achievement.title}» · +${achievement.xp} XP`, "achievement"), 350 + index * 900);
+            });
+        }
         storage.writeSetting(key, JSON.stringify(unlockedIds));
+        return fresh;
     }
 
     function userXp(userId, records = null) {
@@ -10844,8 +10953,10 @@ import {
 
     function renderFloatingTimer() {
         let node = document.getElementById("floatingTimer");
-        // Focus mode renders the timer inside its own layer — hide the floating one.
-        if (!state.timer.running || state.focus) {
+        syncUx2Timer();
+        // Focus mode renders the timer inside its own layer — hide the floating one. So does
+        // the new workout screen: its dock (or the mini-player) carries the ring.
+        if (!state.timer.running || state.focus || ux2OwnsTimer()) {
             if (node) {
                 node.classList.remove("visible");
             }
@@ -10889,6 +11000,7 @@ import {
     }
 
     function updateFloatingTimer() {
+        syncUx2Timer();
         const node = document.getElementById("floatingTimer");
         if (!node || !node.classList.contains("visible")) {
             return;
@@ -10909,6 +11021,1180 @@ import {
     function setTimerCollapsed(collapsed) {
         state.timer.collapsed = collapsed;
         renderFloatingTimer();
+    }
+
+    // ===== Новий інтерфейс тренування (ux2, бета) ===========================================
+    //
+    // The active session as a screen built for one job — doing the next set — rather than a
+    // form to fill in: one compact row per set with last time beside it, a thumb-sized button
+    // at the bottom that ticks the next set, a keypad of our own instead of the phone's, the
+    // session shrinking into a mini-player while you look at anything else, and a summary
+    // after «Завершити» instead of a toast.
+    //
+    // Behind the `newUi` preference. "auto" is on for admins only, so the people who asked
+    // for it test it before anybody else sees it; the Settings switch turns it on or off for
+    // anyone. Every change goes through the same mutations as the classic editor (toggleSet,
+    // addSet, deleteSet, persistWorkout), so switching views mid-session loses nothing. The
+    // pure decisions — next set, numbering, keypad input, deltas — live in lib/session.js.
+
+    function ux2Enabled() {
+        if (!state.database) {
+            return false;
+        }
+        const pref = getPref("newUi");
+        if (pref === "1" || pref === "0") {
+            return pref === "1";
+        }
+        return isAdmin();
+    }
+
+    /** Your own active workout with its sets loaded — the only thing the session shows. */
+    function ux2SessionWorkout() {
+        if (!ux2Enabled()) {
+            return null;
+        }
+        const me = currentUser();
+        const active = me ? activeWorkoutFor(me.id) : null;
+        return active && isHydratedWorkout(active) ? active : null;
+    }
+
+    function ux2ShowsSession(workoutItem) {
+        const session = ux2SessionWorkout();
+        return Boolean(session && workoutItem && session.id === workoutItem.id);
+    }
+
+    function ux2Title(workoutItem) {
+        const type = workoutItem.workoutType;
+        return type && type !== "custom" ? workoutTypeLabel(type) : workoutLabel(workoutItem);
+    }
+
+    /** m:ss — how a hold is read off a stopwatch. */
+    function ux2Clock(totalSeconds) {
+        const total = Math.max(0, Math.round(Number(totalSeconds) || 0));
+        return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+    }
+
+    /** A set the way it is said out loud: 92,5 × 6 · 20 × 0:45 · 12 повт · 0:45. */
+    function ux2SetText(set) {
+        if (!set) {
+            return "—";
+        }
+        const weight = Number(set.weight) || 0;
+        if (isTimedSet(set)) {
+            const time = ux2Clock(set.durationSeconds);
+            return weight ? `${numberDraft(weight)} × ${time}` : time;
+        }
+        const reps = Math.max(0, Math.round(Number(set.repetitions) || 0));
+        return weight ? `${numberDraft(weight)} × ${reps}` : `${reps} повт`;
+    }
+
+    /**
+     * Last time this exercise was actually DONE: finished sessions, completed sets.
+     *
+     * Not lastExerciseSets(): that walks every own workout, so a session planned for next
+     * week — first by date — would be offered as "last time".
+     */
+    function ux2LastSets(workoutItem, exerciseId) {
+        return workoutsFor(workoutItem.userId)
+            .filter((item) => item.id !== workoutItem.id && item.status === "completed" && isHydratedWorkout(item))
+            .sort(byDateDesc)
+            .flatMap((item) => item.exercises
+                .filter((entry) => entry.exerciseId === exerciseId)
+                .map((entry) => ({ date: item.date, sets: (entry.sets || []).filter((set) => set.isCompleted) })))
+            .find((entry) => entry.sets.length) || null;
+    }
+
+    function ux2Thumb(exercise) {
+        const media = exerciseMedia(exercise);
+        // The icon sits underneath and the gif covers it; a gif that fails removes itself
+        // and the icon is simply what is left.
+        return `<span class="ux2-thumb"><i data-lucide="dumbbell"></i>${media ? `<img src="${escapeHtml(media)}" alt="" referrerpolicy="no-referrer" loading="eager" decoding="sync" onerror="this.remove()">` : ""}</span>`;
+    }
+
+    // ---- The session screen ------------------------------------------------------------------
+
+    function ux2Session(workoutItem) {
+        const exercises = workoutItem.exercises;
+        const progress = sessionProgress(exercises);
+        const next = nextSessionSet(exercises);
+        const blocks = workoutBlocks(exercises);
+        const list = blocks.map((block) => block.kind === "superset"
+            ? ux2SupersetBlock(workoutItem, block, next)
+            : ux2ExerciseCard(workoutItem, block.exercise, next)).join("");
+        const empty = blocks.length
+            ? ""
+            : `${repeatSuggestionCard(workoutItem)}<div class="ux2-empty"><span class="ux2-empty-icon"><i data-lucide="dumbbell"></i></span><strong>Почнімо з першої вправи</strong><span>Минулі результати підтягнуться самі.</span></div>`;
+        const noteKey = `workout:${workoutItem.id}`;
+        const note = workoutItem.notes || state.openNotes.has(noteKey)
+            ? `<label class="ux2-note"><i data-lucide="sticky-note"></i><textarea rows="2" data-action="update-workout-notes" data-note-key="${escapeHtml(noteKey)}" placeholder="Нотатка до тренування">${escapeHtml(workoutItem.notes || "")}</textarea></label>`
+            : "";
+        return `<div class="ux2-session" data-workout-id="${workoutItem.id}">
+            ${ux2Header(workoutItem, progress)}
+            <div id="partnerPanel"></div>
+            ${note}
+            ${empty}
+            ${blocks.length ? `<div class="ux2-list">${list}</div>` : ""}
+            ${ux2CardioList(workoutItem)}
+            <button class="ux2-add-exercise" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i>Додати вправу</button>
+            <div class="ux2-dock">${ux2RestButton()}${ux2Cta(workoutItem, next, progress)}</div>
+        </div>`;
+    }
+
+    function ux2Header(workoutItem, progress) {
+        const clock = gymClockState(workoutItem);
+        const volume = workoutVolume(workoutItem);
+        const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
+        const parts = [
+            clock
+                ? `<span class="ux2-clock${clock.live ? " is-live" : ""}" data-ux2-clock>${clock.overflow ? `з ${escapeHtml(clock.startLabel)}` : formatClock(clock.ms)}</span>`
+                : `<span>ще не почато</span>`,
+            progress.total ? `<span>${progress.done} з ${progress.total}</span>` : "",
+            volume ? `<span>${number(volume)} кг</span>` : ""
+        ].filter(Boolean);
+        return `<header class="ux2-head">
+            <button class="ux2-icon-btn" type="button" data-action="ux2-minimize" title="Згорнути" aria-label="Згорнути тренування"><i data-lucide="chevron-down"></i></button>
+            <div class="ux2-head-main">
+                <h2 class="ux2-head-title">${escapeHtml(ux2Title(workoutItem))}</h2>
+                <div class="ux2-head-meta">${parts.join(`<span class="ux2-dot" aria-hidden="true">·</span>`)}</div>
+            </div>
+            ${workoutItem.exercises.length ? `<button class="ux2-icon-btn" type="button" data-action="open-focus" title="Фокус-режим" aria-label="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i></button>` : ""}
+            <button class="ux2-icon-btn" type="button" data-action="ux2-session-menu" title="Ще" aria-label="Меню тренування"><i data-lucide="more-horizontal"></i></button>
+            <div class="ux2-head-progress" aria-hidden="true"><span style="width:${pct}%"></span></div>
+            <div class="ux2-sync" id="ux2Sync" role="status" aria-live="polite"></div>
+        </header>`;
+    }
+
+    function ux2ExerciseCard(workoutItem, workoutExercise, next) {
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const sets = workoutExercise.sets || [];
+        const last = ux2LastSets(workoutItem, workoutExercise.exerciseId);
+        const timed = sets.length ? sets.some(isTimedSet) : Boolean(exercise.isTimed);
+        const bodyweight = isBodyweightExercise(exercise);
+        const doneCount = sets.filter((set) => set.isCompleted).length;
+        const done = sets.length > 0 && doneCount === sets.length;
+        state.expandedExercises = state.expandedExercises || new Set();
+        const collapsed = done && !state.expandedExercises.has(workoutExercise.id);
+        const labels = sessionSetLabels(sets);
+        const caption = done
+            ? `${doneCount} ${pluralUk(doneCount, "підхід", "підходи", "підходів")} · ${timed ? formatDuration(sets.reduce((sum, set) => sum + (Number(set.durationSeconds) || 0), 0)) : `${number(exerciseVolume(workoutExercise))} кг`}`
+            : `${escapeHtml(exercise.primaryMuscleGroup)}${last ? ` · минулого разу ${escapeHtml(shortDate(last.date))}` : " · вперше"}`;
+        const title = `<strong>${escapeHtml(exercise.name)}</strong><span>${caption}</span>`;
+        const head = done
+            ? `<button class="ux2-ex-title" type="button" data-action="ux2-toggle-ex" data-workout-exercise-id="${workoutExercise.id}" aria-expanded="${collapsed ? "false" : "true"}">${title}</button><span class="ux2-ex-done" title="Виконано"><i data-lucide="check"></i></span>`
+            : `<div class="ux2-ex-title">${title}</div>`;
+        const rows = sets.map((set, index) => ux2SetRow(workoutExercise, set, labels[index], pairedLast(last, index), Boolean(next && next.setId === set.id))).join("");
+        const columns = `<div class="ux2-row ux2-row-head" aria-hidden="true"><span>#</span><span>Минулий раз</span><span>${timed || bodyweight ? "+кг" : "кг"}</span><span>${timed ? "час" : "повт"}</span><span></span></div>`;
+        const noteKey = `exercise:${workoutExercise.id}`;
+        const note = workoutExercise.notes || state.openNotes.has(noteKey)
+            ? `<label class="ux2-note is-inline"><i data-lucide="sticky-note"></i><textarea rows="2" data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" data-note-key="${escapeHtml(noteKey)}" placeholder="Нотатка до вправи">${escapeHtml(workoutExercise.notes || "")}</textarea></label>`
+            : "";
+        return `<article class="ux2-ex${done ? " is-done" : ""}${collapsed ? " is-collapsed" : ""}" data-workout-exercise-id="${workoutExercise.id}">
+            <div class="ux2-ex-head">${ux2Thumb(exercise)}${head}<button class="ux2-icon-btn is-ghost" type="button" data-action="ux2-ex-menu" data-workout-exercise-id="${workoutExercise.id}" aria-label="Дії з вправою"><i data-lucide="more-vertical"></i></button></div>
+            ${collapsed ? "" : `<div class="ux2-sets">${sets.length ? columns + rows : `<p class="ux2-sets-empty">Підходів ще немає</p>`}</div>
+            <button class="ux2-add-set" type="button" data-action="ux2-add-set" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="plus"></i>Підхід</button>
+            ${note}`}
+        </article>`;
+    }
+
+    function ux2DeltaBadge(value, text) {
+        return value === null ? "" : `<span class="ux2-delta ${value > 0 ? "up" : "down"}">${value > 0 ? "+" : "−"}${text}</span>`;
+    }
+
+    function ux2SetRow(workoutExercise, set, label, lastSet, isNext, options = {}) {
+        const target = `data-workout-exercise-id="${workoutExercise.id}" data-set-id="${set.id}"`;
+        const timed = isTimedSet(set);
+        const measureField = timed ? "durationSeconds" : "repetitions";
+        const weight = Number(set.weight) || 0;
+        const measure = Math.round(Number(timed ? set.durationSeconds : set.repetitions) || 0);
+        const measureText = timed ? ux2Clock(measure) : String(measure);
+        const delta = loadDelta(set, lastSet);
+        const weightBadge = delta.weight === null ? "" : ux2DeltaBadge(delta.weight, numberDraft(Math.abs(delta.weight)));
+        const measureDelta = timed ? delta.seconds : delta.reps;
+        const measureBadge = measureDelta === null ? "" : ux2DeltaBadge(measureDelta, timed ? `${Math.abs(measureDelta)} с` : String(Math.abs(measureDelta)));
+        const kind = label.kind || "working";
+        const superset = options.superset ? ` data-superset="1"` : "";
+        const last = lastSet
+            ? `<button class="ux2-last" type="button" data-action="ux2-apply-last" ${target}${superset} title="Заповнити як минулого разу"><span>${escapeHtml(ux2SetText(lastSet))}</span>${isNext && !set.isCompleted ? `<i data-lucide="corner-down-left"></i>` : ""}</button>`
+            : `<span class="ux2-last is-empty">—</span>`;
+        return `<div class="ux2-row kind-${escapeHtml(kind)}${set.isCompleted ? " is-done" : ""}${isNext ? " is-next" : ""}" ${target}>
+            <button class="ux2-num" type="button" data-action="ux2-set-menu" ${target}${superset} aria-label="${escapeHtml(`${label.label}: ${setTypeLabel(set.type)}. Тип, відпочинок, видалення`)}">${escapeHtml(label.label)}</button>
+            ${last}
+            <button class="ux2-val${weight ? "" : " is-zero"}" type="button" data-action="ux2-edit" data-field="weight" ${target} aria-label="Вага: ${numberDraft(weight)} кг">${weightBadge}<span class="ux2-val-num">${numberDraft(weight)}</span></button>
+            <button class="ux2-val${measure ? "" : " is-zero"}" type="button" data-action="ux2-edit" data-field="${measureField}" ${target} aria-label="${timed ? "Час" : "Повтори"}: ${measureText}">${measureBadge}<span class="ux2-val-num">${measureText}</span></button>
+            <button class="ux2-check${set.isCompleted ? " is-on" : ""}" type="button" data-action="ux2-toggle-set" ${target} aria-pressed="${set.isCompleted ? "true" : "false"}" aria-label="${set.isCompleted ? "Зняти позначку" : "Позначити виконаним"}"><i data-lucide="check"></i></button>
+        </div>`;
+    }
+
+    /**
+     * A superset is still a list of ROUNDS, as in the classic card — A1, A2, rest — but the
+     * rows are the same compact rows as everywhere else, so nothing has to be relearned.
+     */
+    function ux2SupersetBlock(workoutItem, block, next) {
+        const { groupId, members } = block;
+        const rounds = roundCount(members);
+        const current = currentRoundIndex(members);
+        const finished = rounds > 0 && current >= rounds;
+        const rest = supersetRestSeconds(workoutItem, groupId);
+        const lasts = members.map((member) => ux2LastSets(workoutItem, member.exerciseId));
+        const anyTimed = members.some((member) => (member.sets || []).some(isTimedSet));
+        const status = finished ? "Усі раунди виконано" : rounds ? `Раунд ${Math.min(current + 1, rounds)} з ${rounds}` : "Раундів ще немає";
+        const gid = escapeHtml(groupId);
+        const names = members.map((member, index) => `<span class="ux2-ss-name"><b>${positionLabel(index)}</b>${escapeHtml(exerciseById(member.exerciseId).name)}</span>`).join("");
+        const roundRows = Array.from({ length: rounds }, (_, roundIndex) => {
+            const done = isRoundComplete(members, roundIndex);
+            if (done && !state.supersetOpenRounds[`${groupId}:${roundIndex}`]) {
+                const summary = roundSets(members, roundIndex).map((set) => (set ? ux2SetText(set) : "—")).join(" · ");
+                return `<button class="ux2-ss-round is-collapsed" type="button" data-action="superset-open-round" data-superset-id="${gid}" data-round="${roundIndex}"><span class="ux2-ss-round-no"><i data-lucide="check"></i></span><span class="ux2-ss-round-sum">${escapeHtml(summary)}</span><i data-lucide="chevron-down"></i></button>`;
+            }
+            const rows = members.map((member, memberIndex) => {
+                const set = (member.sets || [])[roundIndex];
+                if (!set) {
+                    return `<div class="ux2-row is-missing"><span class="ux2-num">${positionLabel(memberIndex)}</span><span class="ux2-last is-empty">немає підходу</span></div>`;
+                }
+                return ux2SetRow(member, set, { label: positionLabel(memberIndex), kind: set.type || "working" }, pairedLast(lasts[memberIndex], roundIndex), Boolean(next && next.setId === set.id), { superset: true });
+            }).join("");
+            return `<div class="ux2-ss-round${done ? " is-done" : ""}"><div class="ux2-ss-round-head"><span>Раунд ${roundIndex + 1}</span>${done ? `<button class="ux2-ss-fold" type="button" data-action="superset-close-round" data-superset-id="${gid}" data-round="${roundIndex}" aria-label="Згорнути раунд"><i data-lucide="chevron-up"></i></button>` : ""}</div>${rows}</div>`;
+        }).join("");
+        return `<article class="ux2-ex ux2-ss${finished ? " is-done" : ""}" data-superset-id="${gid}">
+            <div class="ux2-ss-head">
+                <span class="ux2-ss-badge"><i data-lucide="repeat-2"></i>Суперсет</span>
+                <span class="ux2-ss-status">${escapeHtml(status)} · відпочинок ${formatRest(rest)}</span>
+                <button class="ux2-icon-btn is-ghost" type="button" data-action="open-superset-menu" data-superset-id="${gid}" data-workout-id="${workoutItem.id}" aria-label="Керування суперсетом"><i data-lucide="more-vertical"></i></button>
+            </div>
+            <div class="ux2-ss-names">${names}</div>
+            ${rounds ? `<div class="ux2-sets"><div class="ux2-row ux2-row-head" aria-hidden="true"><span></span><span>Минулий раз</span><span>кг</span><span>${anyTimed ? "повт/час" : "повт"}</span><span></span></div>${roundRows}</div>` : ""}
+            <button class="ux2-add-set" type="button" data-action="superset-add-round" data-superset-id="${gid}" data-workout-id="${workoutItem.id}"><i data-lucide="plus"></i>Раунд</button>
+        </article>`;
+    }
+
+    function ux2CardioList(workoutItem) {
+        const sessions = workoutItem.cardioSessions || [];
+        if (!sessions.length) {
+            return "";
+        }
+        return `<section class="ux2-cardio"><h3><i data-lucide="heart-pulse"></i>Кардіо</h3>${sessions.map((session) => {
+            const details = [session.distance ? `${session.distance} км` : "", session.calories ? `${session.calories} ккал` : "", session.averageHeartRate ? `${session.averageHeartRate} уд/хв` : ""].filter(Boolean).join(" · ") || "Без деталей";
+            return `<div class="ux2-cardio-row"><button class="ux2-cardio-main" type="button" data-action="open-cardio-modal" data-workout-id="${workoutItem.id}" data-cardio-id="${session.id}"><span class="ux2-cardio-ico"><i data-lucide="${cardioIcon(session.type)}"></i></span><span class="ux2-cardio-text"><strong>${escapeHtml(cardioTypeLabel(session.type))} · ${session.durationMinutes} хв</strong><span>${escapeHtml(details)}</span></span></button><button class="ux2-icon-btn is-ghost" type="button" data-action="delete-cardio" data-workout-id="${workoutItem.id}" data-cardio-id="${session.id}" aria-label="Видалити кардіо"><i data-lucide="trash-2"></i></button></div>`;
+        }).join("")}</section>`;
+    }
+
+    /**
+     * The one button that matters, sized for a thumb and labelled with exactly what it will
+     * do: which set, of what, at what load. When there is nothing left to tick it becomes
+     * «Завершити»; before the first exercise it adds one.
+     */
+    function ux2Cta(workoutItem, next, progress) {
+        const button = (action, icon, title, sub, extra = "", cls = "") => `<button class="ux2-cta${cls}" type="button" data-action="${action}"${extra}><span class="ux2-cta-icon"><i data-lucide="${icon}"></i></span><span class="ux2-cta-text"><strong>${escapeHtml(title)}</strong>${sub ? `<span>${escapeHtml(sub)}</span>` : ""}</span></button>`;
+        if (!workoutItem.exercises.length) {
+            return button("open-add-exercise-modal", "plus", "Додати вправу", "З каталогу або власну");
+        }
+        if (!next) {
+            const sub = progress.total ? `Усі ${progress.total} ${pluralUk(progress.total, "підхід", "підходи", "підходів")} виконано` : "";
+            return button("ux2-finish", "flag", "Завершити тренування", sub, "", " is-finish");
+        }
+        const workoutExercise = workoutItem.exercises.find((item) => item.id === next.workoutExerciseId);
+        const set = workoutExercise.sets[next.index];
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const label = sessionSetLabels(workoutExercise.sets)[next.index];
+        const name = next.superset ? `${positionLabel(next.superset.memberIndex)} · ${exercise.name}` : exercise.name;
+        const timed = isTimedSet(set);
+        const ids = ` data-ux2-we="${workoutExercise.id}" data-ux2-set="${set.id}"`;
+        // A set with no reps (or no time) is not something to tick yet — the button asks for
+        // the number instead of recording an empty set.
+        if (!(Number(timed ? set.durationSeconds : set.repetitions) > 0)) {
+            const what = next.superset ? `раунд ${next.superset.round + 1}` : label.kind === "warmup" ? "розминку" : `підхід ${label.label}`;
+            return button("ux2-cta-edit", "pencil", `Введи ${what}`, name, `${ids} data-field="${timed ? "durationSeconds" : "repetitions"}"`, " is-input");
+        }
+        const title = next.superset
+            ? `Раунд ${next.superset.round + 1} · ${positionLabel(next.superset.memberIndex)} виконано`
+            : label.kind === "warmup" ? "Розминку виконано" : `Підхід ${label.label} виконано`;
+        return button("ux2-complete-next", "check", title, `${name} · ${ux2SetText(set)}`, ids);
+    }
+
+    function ux2RestButton(extra = "") {
+        return `<button class="ux2-rest${extra}" type="button" data-action="ux2-timer" data-ux2-timer aria-label="Таймер відпочинку"><svg viewBox="0 0 52 52" aria-hidden="true"><circle class="ux2-rest-track" cx="26" cy="26" r="23"></circle><circle class="ux2-rest-arc" cx="26" cy="26" r="23" pathLength="100"></circle></svg><span class="ux2-rest-value" data-ux2-timer-value></span><span class="ux2-rest-idle"><i data-lucide="timer"></i></span></button>`;
+    }
+
+    // ---- Rest timer: the ring in the dock and the mini-player ------------------------------------
+
+    /** Paints every ring from state.timer. Called from the timer's own tick and transitions. */
+    function syncUx2Timer() {
+        const nodes = document.querySelectorAll("[data-ux2-timer]");
+        const big = document.querySelector("[data-ux2-timer-big]");
+        if (!nodes.length && !big) {
+            return;
+        }
+        const timer = state.timer;
+        const running = Boolean(timer.running);
+        const ratio = !running ? 0 : timer.overtime ? 1 : timer.duration > 0 ? Math.max(0, Math.min(1, timer.remaining / timer.duration)) : 0;
+        const text = running ? timerDisplayValue() : "";
+        nodes.forEach((node) => {
+            node.classList.toggle("is-running", running);
+            node.classList.toggle("is-over", running && timer.overtime);
+            node.classList.toggle("is-paused", running && timer.paused);
+            const value = node.querySelector("[data-ux2-timer-value]");
+            if (value && value.textContent !== text) {
+                value.textContent = text;
+            }
+            const arc = node.querySelector(".ux2-rest-arc");
+            if (arc) {
+                arc.style.strokeDashoffset = String(100 - ratio * 100);
+            }
+        });
+        if (big) {
+            big.textContent = running ? timerDisplayValue() : "—";
+            big.classList.toggle("is-over", running && timer.overtime);
+            big.classList.toggle("is-idle", !running);
+        }
+    }
+
+    /** While the dock or the mini-player is on screen it is the timer; the floating one hides. */
+    function ux2OwnsTimer() {
+        return Boolean(document.querySelector(".ux2-dock, .ux2-mini"));
+    }
+
+    function ux2OpenTimerSheet() {
+        const timer = state.timer;
+        const running = Boolean(timer.running);
+        const presets = [45, 60, 90, 120, 180];
+        const controls = running
+            ? `<div class="ux2-timer-controls">
+                    <button class="ux2-round-btn" type="button" data-action="ux2-timer-add" data-delta="-15" aria-label="Мінус 15 секунд">−15</button>
+                    <button class="ux2-round-btn is-main" type="button" data-action="ux2-timer-pause" aria-label="${timer.paused ? "Продовжити" : "Пауза"}"><i data-lucide="${timer.paused ? "play" : "pause"}"></i></button>
+                    <button class="ux2-round-btn" type="button" data-action="ux2-timer-add" data-delta="15" aria-label="Плюс 15 секунд">+15</button>
+                </div>
+                <button class="button button-secondary ux2-wide" type="button" data-action="ux2-timer-skip"><i data-lucide="skip-forward"></i>Завершити відпочинок</button>`
+            : `<p class="ux2-sheet-hint">Стартує сам, щойно позначиш підхід. Або запусти вручну:</p>`;
+        ux2Sheet("Відпочинок", `<div class="ux2-timer-big${running ? "" : " is-idle"}" data-ux2-timer-big>${running ? timerDisplayValue() : "—"}</div>
+            ${controls}
+            <div class="ux2-sheet-block"><span class="ux2-sheet-label">${running ? "Почати заново" : "Запустити"}</span><div class="ux2-chip-row">${presets.map((value) => `<button class="ux2-chip" type="button" data-action="ux2-timer-start" data-seconds="${value}">${formatRest(value)}</button>`).join("")}</div></div>
+            <div class="ux2-switch-row"><span><strong>Авто-старт</strong><span>Після кожного виконаного підходу</span></span>${settingsSwitch("autoStartRest", "Авто-старт таймера відпочинку")}</div>`);
+        syncUx2Timer();
+    }
+
+    // ---- Mini-player and the session clock --------------------------------------------------------
+
+    /**
+     * The session, shrunk. While you read the feed or check the calendar the workout keeps
+     * going: its clock, the rest ring, and what comes next sit above the tab bar, one tap
+     * from the full screen.
+     */
+    function renderUx2Mini() {
+        const workoutItem = state.database ? ux2SessionWorkout() : null;
+        const show = Boolean(workoutItem) && !document.body.classList.contains("ux2-in-session") && !state.focus;
+        document.body.classList.toggle("ux2-has-mini", show);
+        let node = document.getElementById("ux2Mini");
+        if (!show) {
+            if (node) {
+                node.remove();
+            }
+            return;
+        }
+        if (!node) {
+            node = document.createElement("div");
+            node.id = "ux2Mini";
+            node.className = "ux2-mini";
+            document.body.appendChild(node);
+        }
+        const next = nextSessionSet(workoutItem.exercises);
+        const progress = sessionProgress(workoutItem.exercises);
+        const clock = gymClockState(workoutItem);
+        let line = "Додай першу вправу";
+        if (next) {
+            const workoutExercise = workoutItem.exercises.find((item) => item.id === next.workoutExerciseId);
+            line = `Далі: ${exerciseById(workoutExercise.exerciseId).name} · ${ux2SetText(workoutExercise.sets[next.index])}`;
+        } else if (progress.total) {
+            line = "Усе виконано — можна завершувати";
+        }
+        const open = `data-action="edit-workout" data-workout-id="${workoutItem.id}"`;
+        node.innerHTML = `${ux2RestButton(" is-mini")}<button class="ux2-mini-main" type="button" ${open}><strong><span class="ux2-mini-title">${escapeHtml(ux2Title(workoutItem))}</span>${clock ? `<span class="ux2-clock" data-ux2-clock>${clock.overflow ? `з ${escapeHtml(clock.startLabel)}` : formatClock(clock.ms)}</span>` : ""}</strong><span class="ux2-mini-line">${escapeHtml(line)}</span></button><button class="ux2-mini-open" type="button" ${open} aria-label="Відкрити тренування"><i data-lucide="chevron-up"></i></button>`;
+        iconsIn(node);
+        syncUx2Timer();
+    }
+
+    // Its own one-second tick, independent of the classic clock chip: that ticker follows
+    // editWorkout(), which on another screen may be a finished session, and stops itself.
+    let ux2ClockTimer = null;
+
+    function ux2PaintClock() {
+        const nodes = document.querySelectorAll("[data-ux2-clock]");
+        const clock = nodes.length ? gymClockState(ux2SessionWorkout()) : null;
+        if (clock) {
+            const text = clock.overflow ? `з ${clock.startLabel}` : formatClock(clock.ms);
+            nodes.forEach((node) => {
+                if (node.textContent !== text) {
+                    node.textContent = text;
+                }
+            });
+        }
+        return Boolean(clock && clock.live);
+    }
+
+    function syncUx2Clock() {
+        let live = false;
+        try {
+            live = ux2PaintClock();
+        } catch (error) {
+            live = false;
+        }
+        if (!live) {
+            clearInterval(ux2ClockTimer);
+            ux2ClockTimer = null;
+            return;
+        }
+        if (ux2ClockTimer) {
+            return;
+        }
+        ux2ClockTimer = setInterval(() => {
+            let still = false;
+            try {
+                still = ux2PaintClock();
+            } catch (error) {
+                still = false;
+            }
+            if (!still) {
+                clearInterval(ux2ClockTimer);
+                ux2ClockTimer = null;
+            }
+        }, 1000);
+    }
+
+    // Where «згорнути» goes back to: the last screen that was not the workout.
+    let ux2ReturnSection = null;
+
+    function ux2Minimize() {
+        const target = ux2ReturnSection && ux2ReturnSection !== "workout" && routableSections.has(ux2ReturnSection) && !["user", "post"].includes(ux2ReturnSection)
+            ? ux2ReturnSection
+            : defaultSection();
+        navigate(target);
+    }
+
+    // ---- Doing sets ----------------------------------------------------------------------------
+
+    /**
+     * After a tick, bring the next set into view — but only when it is not already
+     * comfortably visible. Moving the page under somebody who can already see the row is
+     * worse than not helping.
+     */
+    function ux2ScrollToNext() {
+        const row = document.querySelector(".ux2-row.is-next");
+        if (!row) {
+            return;
+        }
+        const rect = row.getBoundingClientRect();
+        const head = document.querySelector(".ux2-head");
+        const dock = document.querySelector(".ux2-dock");
+        const top = head ? head.getBoundingClientRect().bottom : 0;
+        const bottom = dock ? dock.getBoundingClientRect().top : window.innerHeight;
+        if (rect.top >= top + 8 && rect.bottom <= bottom - 24) {
+            return;
+        }
+        const target = window.scrollY + rect.top - (top + (bottom - top) * 0.3);
+        window.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+    }
+
+    async function ux2ToggleSet(workoutExerciseId, setId) {
+        const set = editSetByIds(workoutExerciseId, setId);
+        if (!set) {
+            return;
+        }
+        const completing = !set.isCompleted;
+        if (completing && navigator.vibrate) {
+            navigator.vibrate(12);
+        }
+        await toggleSet(workoutExerciseId, setId);
+        if (completing) {
+            ux2ScrollToNext();
+        }
+    }
+
+    /** The big button. It ticks the set it was LABELLED with, if that one is still open. */
+    async function ux2CompleteSet(workoutExerciseId, setId) {
+        const set = editSetByIds(workoutExerciseId, setId);
+        if (!set || set.isCompleted) {
+            renderSection();
+            return;
+        }
+        await ux2ToggleSet(workoutExerciseId, setId);
+    }
+
+    async function ux2AddSet(workoutExerciseId) {
+        await addSet(workoutExerciseId);
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        const added = workoutExercise ? workoutExercise.sets.at(-1) : null;
+        const row = added ? document.querySelector(`.ux2-row[data-set-id="${CSS.escape(added.id)}"]`) : null;
+        if (row) {
+            row.classList.add("is-fresh");
+        }
+    }
+
+    /** «Минулого разу» is a button: one tap copies last time's numbers into this set. */
+    function ux2ApplyLast(workoutExerciseId, setId) {
+        const workoutItem = editWorkout();
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        const set = workoutExercise ? workoutExercise.sets.find((item) => item.id === setId) : null;
+        if (!workoutItem || !set) {
+            return;
+        }
+        const last = pairedLast(ux2LastSets(workoutItem, workoutExercise.exerciseId), workoutExercise.sets.indexOf(set));
+        if (!last) {
+            return;
+        }
+        set.weight = Number(last.weight) || 0;
+        // Like with like: a hold copies its time, a rep set its reps. Across the two only the
+        // weight carries over, rather than silently turning the set into the other kind.
+        if (isTimedSet(set) && isTimedSet(last)) {
+            set.durationSeconds = Math.round(Number(last.durationSeconds) || 0);
+        } else if (!isTimedSet(set) && !isTimedSet(last)) {
+            set.repetitions = Math.round(Number(last.repetitions) || 0);
+        }
+        schedulePersistWorkout(workoutItem);
+        renderSection();
+        showSyncIndicator("success", "Як минулого разу");
+    }
+
+    // ---- Sheets: one bottom sheet per question -----------------------------------------------------
+
+    function ux2Sheet(title, body, options = {}) {
+        openModal(`<div class="ux2-sheet">
+            <div class="ux2-sheet-head">${options.lead || ""}<div class="ux2-sheet-title"><h2>${escapeHtml(title)}</h2>${options.caption ? `<p>${escapeHtml(options.caption)}</p>` : ""}</div><button class="icon-button" type="button" data-action="close-overlay" aria-label="Закрити"><i data-lucide="x"></i></button></div>
+            ${body}
+        </div>`, { sheet: true });
+    }
+
+    function ux2MenuItem(action, icon, label, attrs = "", options = {}) {
+        const cls = `ux2-menu-item${options.danger ? " is-danger" : ""}${options.primary ? " is-primary" : ""}`;
+        return `<button class="${cls}" type="button" data-action="${action}"${attrs}><span class="ux2-menu-ico"><i data-lucide="${icon}"></i></span><span class="ux2-menu-text"><strong>${escapeHtml(label)}</strong>${options.hint ? `<span>${escapeHtml(options.hint)}</span>` : ""}</span>${options.value ? `<span class="ux2-menu-value">${escapeHtml(options.value)}</span>` : ""}</button>`;
+    }
+
+    /** Everything about one set that is not a number: its type, its rest, removing it. */
+    function ux2OpenSetMenu(workoutExerciseId, setId, superset = false) {
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        const set = workoutExercise ? workoutExercise.sets.find((item) => item.id === setId) : null;
+        if (!set) {
+            closeOverlay();
+            return;
+        }
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const index = workoutExercise.sets.indexOf(set);
+        const label = sessionSetLabels(workoutExercise.sets)[index];
+        const ids = ` data-workout-exercise-id="${workoutExercise.id}" data-set-id="${set.id}"${superset ? ` data-superset="1"` : ""}`;
+        const types = ["warmup", "working", "drop", "failure", "backoff"].map((type) => `<button class="ux2-chip${set.type === type ? " is-on" : ""}" type="button" data-action="ux2-set-type" data-type="${type}"${ids}>${escapeHtml(setTypeLabel(type))}</button>`).join("");
+        const rest = Math.max(0, Math.round(Number(set.restSeconds) || 0));
+        const title = superset ? `Раунд ${index + 1}` : label.kind === "warmup" ? "Розминка" : `Підхід ${label.label}`;
+        ux2Sheet(title, `<div class="ux2-sheet-block"><span class="ux2-sheet-label">Тип підходу</span><div class="ux2-chip-row">${types}</div></div>
+            ${superset ? "" : `<div class="ux2-sheet-block ux2-stepper-row"><span class="ux2-sheet-label">Відпочинок після нього</span><div class="ux2-stepper"><button class="ux2-round-btn" type="button" data-action="ux2-set-rest" data-delta="-15"${ids} aria-label="Мінус 15 секунд"><i data-lucide="minus"></i></button><strong>${formatRest(rest)}</strong><button class="ux2-round-btn" type="button" data-action="ux2-set-rest" data-delta="15"${ids} aria-label="Плюс 15 секунд"><i data-lucide="plus"></i></button></div></div>`}
+            <div class="ux2-menu">
+                ${ux2MenuItem("ux2-sheet-toggle-set", set.isCompleted ? "rotate-ccw" : "check", set.isCompleted ? "Зняти позначку «виконано»" : "Позначити виконаним", ids)}
+                ${superset ? "" : ux2MenuItem("ux2-delete-set", "trash-2", "Видалити підхід", ids, { danger: true, hint: "12 секунд, щоб повернути" })}
+            </div>`, { caption: `${exercise.name} · ${ux2SetText(set)}` });
+    }
+
+    async function ux2SetType(workoutExerciseId, setId, type, superset) {
+        await updateSetField(workoutExerciseId, setId, "type", type);
+        renderSection();
+        ux2OpenSetMenu(workoutExerciseId, setId, superset);
+    }
+
+    function ux2SetRest(workoutExerciseId, setId, delta, superset) {
+        const set = editSetByIds(workoutExerciseId, setId);
+        if (!set) {
+            return;
+        }
+        set.restSeconds = Math.max(0, Math.min(3600, Math.round(Number(set.restSeconds) || 0) + delta));
+        schedulePersistWorkout(editWorkout());
+        ux2OpenSetMenu(workoutExerciseId, setId, superset);
+    }
+
+    function ux2OpenExerciseMenu(workoutExerciseId) {
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        if (!workoutExercise) {
+            closeOverlay();
+            return;
+        }
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const sets = workoutExercise.sets || [];
+        const timed = sets.some(isTimedSet);
+        const id = ` data-workout-exercise-id="${workoutExercise.id}"`;
+        const open = sets.filter((set) => !set.isCompleted);
+        const restNow = open.length && open.every((set) => set.restSeconds === open[0].restSeconds) ? open[0].restSeconds : null;
+        const restChips = [60, 90, 120, 180].map((value) => `<button class="ux2-chip${restNow === value ? " is-on" : ""}" type="button" data-action="ux2-ex-rest" data-seconds="${value}"${id}>${formatRest(value)}</button>`).join("");
+        ux2Sheet(exercise.name, `<div class="ux2-menu">
+                ${ux2MenuItem("ux2-ex-focus", "crosshair", "Фокус на цій вправі", id, { hint: "Один підхід на весь екран" })}
+                ${ux2MenuItem("ux2-ex-replace", "repeat", "Замінити вправу", id)}
+                ${ux2MenuItem("ux2-ex-timed", timed ? "repeat-2" : "timer", timed ? "Рахувати повтори" : "Рахувати час", id, { hint: timed ? "Замість секунд" : "Планка, віс, утримання" })}
+                ${ux2MenuItem("ux2-open-note", "sticky-note", workoutExercise.notes ? "Нотатка до вправи" : "Додати нотатку", ` data-note-key="exercise:${workoutExercise.id}"`)}
+                ${ux2MenuItem("ux2-ex-info", "info", "Техніка виконання", ` data-exercise-id="${escapeHtml(exercise.id)}"`)}
+            </div>
+            ${open.length ? `<div class="ux2-sheet-block"><span class="ux2-sheet-label">Відпочинок для невиконаних підходів</span><div class="ux2-chip-row">${restChips}</div></div>` : ""}
+            <div class="ux2-menu">${ux2MenuItem("ux2-ex-remove", "trash-2", "Прибрати вправу", id, { danger: true })}</div>`, {
+            caption: `${exercise.primaryMuscleGroup} · ${sets.length} ${pluralUk(sets.length, "підхід", "підходи", "підходів")}`,
+            lead: ux2Thumb(exercise)
+        });
+    }
+
+    function ux2ExerciseRest(workoutExerciseId, seconds) {
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        if (!workoutExercise) {
+            return;
+        }
+        workoutExercise.sets.filter((set) => !set.isCompleted).forEach((set) => {
+            set.restSeconds = seconds;
+        });
+        schedulePersistWorkout(editWorkout());
+        ux2OpenExerciseMenu(workoutExerciseId);
+        showSyncIndicator("success", `Відпочинок ${formatRest(seconds)}`);
+    }
+
+    function ux2OpenSessionMenu() {
+        const workoutItem = editWorkout();
+        if (!workoutItem) {
+            return;
+        }
+        const id = ` data-workout-id="${workoutItem.id}"`;
+        const progress = sessionProgress(workoutItem.exercises);
+        const durationValue = workoutItem.durationOverride == null ? `авто · ${autoDuration(workoutItem)} хв` : formatDurationLabel(Number(workoutItem.durationOverride));
+        ux2Sheet(ux2Title(workoutItem), `<div class="ux2-menu">
+                ${ux2MenuItem("ux2-finish", "flag", "Завершити тренування", "", { primary: true, hint: progress.total ? `${progress.done} з ${progress.total} ${pluralUk(progress.total, "підходу", "підходів", "підходів")} виконано` : "" })}
+            </div>
+            <div class="ux2-menu">
+                ${ux2MenuItem("ux2-pick-type", "layers", "Тип тренування", id, { value: workoutTypeLabel(workoutItem.workoutType) })}
+                ${ux2MenuItem("ux2-meta", "calendar-clock", "Дата і тривалість", id, { value: `${shortDate(workoutItem.date)} · ${durationValue}` })}
+                ${ux2MenuItem("ux2-open-note", "sticky-note", workoutItem.notes ? "Нотатка до тренування" : "Додати нотатку", ` data-note-key="workout:${workoutItem.id}"`)}
+                ${ux2MenuItem("ux2-cardio", "heart-pulse", "Додати кардіо", id)}
+                ${supersetsEnabled() ? ux2MenuItem("ux2-superset", "repeat-2", "Створити суперсет", id, { hint: hasUnlimited() ? "2–3 вправи, один відпочинок після раунду" : "Доступно в PRO" }) : ""}
+                ${workoutItem.exercises.length ? ux2MenuItem("ux2-template", "bookmark-plus", "Зберегти як шаблон", id) : ""}
+            </div>
+            <div class="ux2-menu">
+                ${ux2MenuItem("ux2-classic", "layout-list", "Класичний вигляд", "", { hint: "Повернути старий екран тренування" })}
+                ${ux2MenuItem("ux2-delete-workout", "trash-2", "Видалити тренування", id, { danger: true })}
+            </div>`, { caption: `${workoutLabel(workoutItem)} · ${formatDate(workoutItem.date)}` });
+    }
+
+    function ux2OpenMetaSheet() {
+        const workoutItem = editWorkout();
+        if (!workoutItem) {
+            return;
+        }
+        const bounds = workoutDateBounds();
+        const dateAttrs = bounds.min ? ` min="${bounds.min}" max="${bounds.max}"` : "";
+        const minutes = [15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240];
+        ux2Sheet("Дата і тривалість", `<div class="field-grid two ux2-meta-grid">
+                <div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div>
+                <div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${minutes.map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div>
+            </div>
+            <button class="button button-primary ux2-wide" type="button" data-action="close-overlay"><i data-lucide="check"></i>Готово</button>`);
+    }
+
+    function ux2SwitchToClassic() {
+        closeOverlay();
+        ux2CloseKeypad({ silent: true });
+        setPref("newUi", "0");
+        applyPreferences();
+        renderSection();
+        renderFloatingTimer();
+        toast("Класичний вигляд", "Новий можна повернути в Налаштуваннях → Тренування.");
+    }
+
+    // ---- Keypad -------------------------------------------------------------------------------
+    //
+    // The phone's own number keyboard covers half the screen, has no decimal comma on half
+    // the phones out there, pushes the page around as it opens, and knows nothing about
+    // plates. This one types straight into the set (the row above updates as you type), has
+    // ± by the plate step of the equipment, «як минулого разу», and «Далі» that walks
+    // weight → reps → next set. The first key replaces the value, like a selected field.
+
+    const ux2Pad = { open: false, workoutExerciseId: null, setId: null, field: null, draft: "", fresh: true };
+
+    function ux2PadTarget() {
+        if (!ux2Pad.open) {
+            return null;
+        }
+        const workoutItem = editWorkout();
+        const workoutExercise = workoutItem ? workoutItem.exercises.find((item) => item.id === ux2Pad.workoutExerciseId) : null;
+        const set = workoutExercise ? workoutExercise.sets.find((item) => item.id === ux2Pad.setId) : null;
+        return set ? { workoutItem, workoutExercise, set, exercise: exerciseById(workoutExercise.exerciseId) } : null;
+    }
+
+    function ux2FieldText(set, field) {
+        if (ux2Pad.open && ux2Pad.setId === set.id && ux2Pad.field === field) {
+            if (field === "durationSeconds") {
+                return durationDigitsLabel(ux2Pad.draft);
+            }
+            return ux2Pad.draft === "" ? "0" : ux2Pad.draft;
+        }
+        if (field === "durationSeconds") {
+            return ux2Clock(set.durationSeconds);
+        }
+        if (field === "weight") {
+            return numberDraft(set.weight);
+        }
+        return String(Math.round(Number(set[field]) || 0));
+    }
+
+    function ux2OpenKeypad(workoutExerciseId, setId, field) {
+        const switching = ux2Pad.open && ux2Pad.setId !== setId;
+        Object.assign(ux2Pad, { open: true, workoutExerciseId, setId, field });
+        const target = ux2PadTarget();
+        if (!target || !["weight", "repetitions", "durationSeconds"].includes(field)) {
+            ux2CloseKeypad();
+            return;
+        }
+        ux2Pad.draft = field === "durationSeconds" ? digitsFromDuration(target.set.durationSeconds) : numberDraft(target.set[field]);
+        ux2Pad.fresh = true;
+        if (switching) {
+            // Moving to another set: repaint so the deltas and the big button catch up with
+            // what was just typed into the previous one.
+            renderSection();
+        }
+        ux2RenderKeypad();
+        ux2MarkEditing();
+        ux2RevealEditing();
+    }
+
+    function ux2NextField(target) {
+        const { workoutExercise, set } = target;
+        const measure = isTimedSet(set) ? "durationSeconds" : "repetitions";
+        if (ux2Pad.field === "weight") {
+            return { workoutExerciseId: workoutExercise.id, setId: set.id, field: measure };
+        }
+        const following = workoutExercise.sets[workoutExercise.sets.indexOf(set) + 1];
+        return following ? { workoutExerciseId: workoutExercise.id, setId: following.id, field: "weight" } : null;
+    }
+
+    function ux2RenderKeypad() {
+        const target = ux2PadTarget();
+        if (!target) {
+            ux2CloseKeypad({ silent: true });
+            return;
+        }
+        let node = document.getElementById("ux2Keypad");
+        if (!node) {
+            node = document.createElement("div");
+            node.id = "ux2Keypad";
+            node.className = "ux2-kp";
+            node.setAttribute("role", "dialog");
+            node.setAttribute("aria-label", "Введення значення");
+            node.addEventListener("click", ux2KeypadClick);
+            document.body.appendChild(node);
+        }
+        const { set, workoutExercise, exercise, workoutItem } = target;
+        const timed = isTimedSet(set);
+        const measure = timed ? "durationSeconds" : "repetitions";
+        const last = pairedLast(ux2LastSets(workoutItem, workoutExercise.exerciseId), workoutExercise.sets.indexOf(set));
+        const step = fieldStep(ux2Pad.field, exercise.equipment);
+        const stepText = ux2Pad.field === "durationSeconds" ? `${step} с` : numberDraft(step);
+        const decimals = (FIELD_LIMITS[ux2Pad.field] || {}).decimals > 0;
+        const chip = (field, label) => `<button class="ux2-kp-field${ux2Pad.field === field ? " is-active" : ""}" type="button" data-kp-field="${field}"><span>${label}</span><strong data-kp-out="${field}">${escapeHtml(ux2FieldText(set, field))}</strong></button>`;
+        const key = (value, label = value) => `<button class="ux2-kp-key" type="button" data-kp="${value}">${label}</button>`;
+        const nextLabel = ux2NextField(target) ? `Далі<i data-lucide="arrow-right"></i>` : `Готово<i data-lucide="check"></i>`;
+        node.innerHTML = `<div class="ux2-kp-top">
+                ${chip("weight", timed || isBodyweightExercise(exercise) ? "+кг" : "кг")}
+                ${chip(measure, timed ? "час" : "повт")}
+                ${last ? `<button class="ux2-kp-last" type="button" data-kp="last" title="Як минулого разу"><i data-lucide="corner-down-left"></i><span>${escapeHtml(ux2SetText(last))}</span></button>` : `<span class="ux2-kp-spacer"></span>`}
+                <button class="ux2-kp-close" type="button" data-kp="close" aria-label="Сховати клавіатуру"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <div class="ux2-kp-keys">
+                ${key("1")}${key("2")}${key("3")}<button class="ux2-kp-key is-fn" type="button" data-kp="back" aria-label="Стерти"><i data-lucide="delete"></i></button>
+                ${key("4")}${key("5")}${key("6")}<button class="ux2-kp-key is-fn" type="button" data-kp="minus">−${escapeHtml(stepText)}</button>
+                ${key("7")}${key("8")}${key("9")}<button class="ux2-kp-key is-fn" type="button" data-kp="plus">+${escapeHtml(stepText)}</button>
+                <button class="ux2-kp-key" type="button" data-kp=","${decimals ? "" : " disabled"}>,</button>${key("0")}<button class="ux2-kp-key is-next" type="button" data-kp="next">${nextLabel}</button>
+            </div>`;
+        iconsIn(node);
+        // Opened on the next frame's style, so the slide-up actually animates the first time.
+        void node.offsetWidth;
+        node.classList.add("is-open");
+        document.body.classList.add("ux2-kp-open");
+    }
+
+    /** Paints the typed value into the keypad chips and the row above, without a re-render. */
+    function ux2PaintPad(target) {
+        const { set } = target;
+        document.querySelectorAll("#ux2Keypad [data-kp-out]").forEach((node) => {
+            node.textContent = ux2FieldText(set, node.dataset.kpOut);
+        });
+        const cell = document.querySelector(`.ux2-row[data-set-id="${CSS.escape(set.id)}"] .ux2-val[data-field="${ux2Pad.field}"]`);
+        if (cell) {
+            const num = cell.querySelector(".ux2-val-num");
+            if (num) {
+                num.textContent = ux2FieldText(set, ux2Pad.field);
+            }
+            cell.classList.toggle("is-zero", !(Number(set[ux2Pad.field]) > 0));
+        }
+    }
+
+    function ux2CommitDraft() {
+        const target = ux2PadTarget();
+        if (!target) {
+            ux2CloseKeypad({ silent: true });
+            return;
+        }
+        const value = ux2Pad.field === "durationSeconds" ? durationFromDigits(ux2Pad.draft) : draftNumber(ux2Pad.draft);
+        target.set[ux2Pad.field] = value;
+        schedulePersistWorkout(target.workoutItem);
+        ux2PaintPad(target);
+    }
+
+    function ux2KeypadType(key) {
+        ux2Pad.draft = ux2Pad.field === "durationSeconds"
+            ? durationDigitsPress(ux2Pad.draft, key, ux2Pad.fresh)
+            : keypadPress(ux2Pad.draft, key, ux2Pad.field, ux2Pad.fresh);
+        ux2Pad.fresh = false;
+        ux2CommitDraft();
+    }
+
+    function ux2KeypadStep(direction) {
+        const target = ux2PadTarget();
+        if (!target) {
+            return;
+        }
+        const step = fieldStep(ux2Pad.field, target.exercise.equipment);
+        const value = stepValue(Number(target.set[ux2Pad.field]) || 0, direction * step, ux2Pad.field);
+        ux2Pad.draft = ux2Pad.field === "durationSeconds" ? digitsFromDuration(value) : numberDraft(value);
+        // A stepped value is a finished value: the next digit starts over rather than
+        // appending to it.
+        ux2Pad.fresh = true;
+        ux2CommitDraft();
+    }
+
+    function ux2KeypadApplyLast() {
+        const target = ux2PadTarget();
+        if (!target) {
+            return;
+        }
+        ux2ApplyLast(target.workoutExercise.id, target.set.id);
+        ux2Pad.draft = ux2Pad.field === "durationSeconds" ? digitsFromDuration(target.set.durationSeconds) : numberDraft(target.set[ux2Pad.field]);
+        ux2Pad.fresh = true;
+        ux2RenderKeypad();
+        ux2MarkEditing();
+    }
+
+    function ux2KeypadNext() {
+        const target = ux2PadTarget();
+        const next = target ? ux2NextField(target) : null;
+        if (!next) {
+            ux2CloseKeypad();
+            return;
+        }
+        ux2OpenKeypad(next.workoutExerciseId, next.setId, next.field);
+    }
+
+    function ux2KeypadClick(event) {
+        const button = event.target.closest("button");
+        if (!button || button.disabled) {
+            return;
+        }
+        if (button.dataset.kpField) {
+            ux2OpenKeypad(ux2Pad.workoutExerciseId, ux2Pad.setId, button.dataset.kpField);
+            return;
+        }
+        const key = button.dataset.kp;
+        if (key === "close") {
+            ux2CloseKeypad();
+        } else if (key === "next") {
+            ux2KeypadNext();
+        } else if (key === "last") {
+            ux2KeypadApplyLast();
+        } else if (key === "minus" || key === "plus") {
+            ux2KeypadStep(key === "plus" ? 1 : -1);
+        } else if (key) {
+            ux2KeypadType(key);
+        }
+    }
+
+    function ux2CloseKeypad(options = {}) {
+        const wasOpen = ux2Pad.open;
+        ux2Pad.open = false;
+        const node = document.getElementById("ux2Keypad");
+        if (node) {
+            node.classList.remove("is-open");
+        }
+        document.body.classList.remove("ux2-kp-open");
+        document.querySelectorAll(".ux2-row.is-editing, .ux2-val.is-editing").forEach((item) => item.classList.remove("is-editing"));
+        if (wasOpen && !options.silent) {
+            renderSection();
+        }
+    }
+
+    function ux2MarkEditing() {
+        document.querySelectorAll(".ux2-row.is-editing, .ux2-val.is-editing").forEach((item) => item.classList.remove("is-editing"));
+        if (!ux2Pad.open) {
+            return;
+        }
+        const row = document.querySelector(`.ux2-row[data-set-id="${CSS.escape(ux2Pad.setId)}"]`);
+        if (!row) {
+            return;
+        }
+        row.classList.add("is-editing");
+        const cell = row.querySelector(`.ux2-val[data-field="${ux2Pad.field}"]`);
+        if (cell) {
+            cell.classList.add("is-editing");
+        }
+    }
+
+    /** Keeps the row being typed into visible between the header and the keypad. */
+    function ux2RevealEditing() {
+        const row = document.querySelector(".ux2-row.is-editing");
+        const pad = document.getElementById("ux2Keypad");
+        if (!row || !pad) {
+            return;
+        }
+        const padTop = window.innerHeight - pad.offsetHeight;
+        const head = document.querySelector(".ux2-head");
+        const top = head ? head.getBoundingClientRect().bottom : 0;
+        const rect = row.getBoundingClientRect();
+        if (rect.bottom > padTop - 12) {
+            window.scrollBy({ top: rect.bottom - (padTop - 12) + 36, behavior: "smooth" });
+        } else if (rect.top < top + 8) {
+            window.scrollBy({ top: rect.top - top - 44, behavior: "smooth" });
+        }
+    }
+
+    /** A tap anywhere that is not the keypad or another value closes it. Taps, not scrolls. */
+    function ux2KeypadOutside(event) {
+        if (!ux2Pad.open) {
+            return;
+        }
+        const pad = document.getElementById("ux2Keypad");
+        if (pad && pad.contains(event.target)) {
+            return;
+        }
+        if (event.target.closest && event.target.closest('[data-action="ux2-edit"], [data-action="ux2-cta-edit"]')) {
+            return;
+        }
+        ux2CloseKeypad();
+    }
+
+    function ux2KeypadKeydown(event) {
+        if (!ux2Pad.open || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+            return;
+        }
+        const tag = event.target && event.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !element("modalBackdrop").classList.contains("hidden")) {
+            return;
+        }
+        const key = event.key;
+        let handled = true;
+        if (/^\d$/.test(key)) {
+            ux2KeypadType(key);
+        } else if (key === "," || key === ".") {
+            ux2KeypadType(",");
+        } else if (key === "Backspace") {
+            ux2KeypadType("back");
+        } else if (key === "Enter" || key === "Tab") {
+            ux2KeypadNext();
+        } else if (key === "Escape") {
+            ux2CloseKeypad();
+        } else if (key === "ArrowUp" || key === "ArrowDown") {
+            ux2KeypadStep(key === "ArrowUp" ? 1 : -1);
+        } else {
+            handled = false;
+        }
+        if (handled) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }
+
+    /** After every render: keep the keypad pointed at a row that still exists. */
+    function ux2AfterRender() {
+        if (!ux2Pad.open) {
+            return;
+        }
+        if (!document.body.classList.contains("ux2-in-session") || !ux2PadTarget()) {
+            ux2CloseKeypad({ silent: true });
+            return;
+        }
+        ux2MarkEditing();
+    }
+
+    // ---- Finishing --------------------------------------------------------------------------------
+
+    let ux2LastFinish = null;
+
+    /**
+     * «Завершити» asks only when there is something to decide: sets that were never ticked.
+     * They used to be counted as done without a word; now the choice is spelled out — drop
+     * them, or count them — and either way the session can be reopened from the summary.
+     */
+    async function ux2Finish() {
+        const workoutItem = editWorkout();
+        const me = currentUser();
+        if (!workoutItem || workoutItem.status !== "active" || !me || workoutItem.userId !== me.id) {
+            closeOverlay();
+            return;
+        }
+        closeOverlay();
+        ux2CloseKeypad({ silent: true });
+        const sets = workoutItem.exercises.flatMap((item) => item.sets || []);
+        const pending = sets.filter((set) => !set.isCompleted);
+        const doneCount = sets.length - pending.length;
+        let mode = "complete";
+        if (pending.length && doneCount) {
+            const choice = await choiceDialog(`${pending.length} ${pluralUk(pending.length, "підхід", "підходи", "підходів")} ще не позначено.`, {
+                title: "Завершити тренування?",
+                closable: true,
+                choices: [
+                    { label: "Прибрати невиконані", value: "drop", variant: "primary" },
+                    { label: "Зарахувати їх теж", value: "complete" }
+                ]
+            });
+            if (!choice) {
+                return;
+            }
+            mode = choice;
+        } else if (pending.length) {
+            const confirmed = await confirmDialog("Жодного підходу ще не позначено.", {
+                title: "Завершити тренування?",
+                detail: "Усі заплановані підходи буде зараховано як виконані.",
+                confirmLabel: "Зарахувати і завершити",
+                danger: false
+            });
+            if (!confirmed) {
+                return;
+            }
+        }
+        const snapshot = {
+            workoutId: workoutItem.id,
+            exercises: JSON.parse(JSON.stringify(workoutItem.exercises)),
+            supersetGroups: JSON.parse(JSON.stringify(workoutItem.supersetGroups || [])),
+            lastSetAt: workoutItem.lastSetAt || null
+        };
+        const records = new Map(recordsFor(me.id).map((record) => [record.exerciseId, record]));
+        const before = { xp: userXp(me.id), records };
+        if (mode === "drop") {
+            workoutItem.exercises.forEach((item) => {
+                item.sets = (item.sets || []).filter((set) => set.isCompleted);
+            });
+            const emptied = workoutItem.exercises.filter((item) => !item.sets.length);
+            workoutItem.exercises = workoutItem.exercises.filter((item) => item.sets.length);
+            new Set(emptied.map((item) => item.supersetGroupId).filter(Boolean)).forEach((groupId) => dissolveLoneSuperset(workoutItem, groupId));
+        }
+        ux2LastFinish = snapshot;
+        await finishWorkout(workoutItem.id, { quiet: true });
+        ux2ShowSummary(workoutItem, before, checkAchievementUnlocks({ silent: true }));
+    }
+
+    function ux2XpGained(workoutItem, before, recordCount) {
+        if (!usingServerScoring()) {
+            return Math.max(0, userXp(workoutItem.userId) - before.xp);
+        }
+        // The server's scoring block is what XP is read from, and it is only refreshed by a
+        // reload — so the gain is worked out here by the kernel's own rules (workout + volume
+        // + streak + first result per exercise). Achievements are left to the server.
+        const volume = workoutVolume(workoutItem);
+        let gained = XP_REWARDS.workout + Math.min(XP_REWARDS.volumeCap, Math.floor(volume / XP_REWARDS.volumePerXp));
+        const previous = workoutsFor(workoutItem.userId)
+            .filter((item) => item.id !== workoutItem.id && item.status === "completed" && String(item.date) <= String(workoutItem.date))
+            .sort(byDateDesc)[0];
+        if (previous && kernelDayDiff(new Date(workoutItem.date), new Date(previous.date)) <= 2) {
+            gained += XP_REWARDS.streak;
+        }
+        return gained + recordCount * XP_REWARDS.record;
+    }
+
+    function ux2ShowSummary(workoutItem, before, achievements = []) {
+        const me = currentUser();
+        const sets = workoutItem.exercises.flatMap((item) => item.sets || []).filter((set) => set.isCompleted);
+        const volume = workoutVolume(workoutItem);
+        const previousSame = workoutsFor(me.id)
+            .filter((item) => item.id !== workoutItem.id && item.status === "completed" && isHydratedWorkout(item) && item.workoutType === workoutItem.workoutType)
+            .sort(byDateDesc)[0];
+        const pct = previousSame ? percentChange(volume, workoutVolume(previousSame)) : null;
+        const records = [];
+        let firstResults = 0;
+        workoutItem.exercises.forEach((item) => {
+            let best = null;
+            (item.sets || []).filter((set) => set.isCompleted && set.type !== "warmup").forEach((set) => {
+                const value = oneRepMax(set.weight, set.repetitions);
+                if (value > 0 && (!best || value > best.value)) {
+                    best = { value, set };
+                }
+            });
+            if (!best) {
+                return;
+            }
+            const previous = before.records.get(item.exerciseId);
+            if (!previous) {
+                firstResults += 1;
+            } else if (best.value > previous.estimatedOneRepMax) {
+                records.push({ exercise: exerciseById(item.exerciseId), best, previous });
+            }
+        });
+        const gained = ux2XpGained(workoutItem, before, firstResults);
+        const levelBefore = levelForXp(before.xp);
+        const levelAfter = levelForXp(before.xp + gained);
+        const frameBefore = frameForLevel(levelBefore.level);
+        const frameAfter = frameForLevel(levelAfter.level);
+        const spanMs = workoutItem.firstSetAt && workoutItem.lastSetAt ? new Date(workoutItem.lastSetAt) - new Date(workoutItem.firstSetAt) : 0;
+        const lengthLabel = spanMs > 0 ? sessionLengthLabel(spanMs) : sessionLengthLabel(duration(workoutItem) * 60000);
+        const when = workoutItem.firstSetAt && workoutItem.lastSetAt
+            ? `${weekdayLabel(workoutItem.date)} · ${timeOfDay(workoutItem.firstSetAt)} – ${timeOfDay(workoutItem.lastSetAt)}`
+            : `${weekdayLabel(workoutItem.date)} · ${formatDate(workoutItem.date)}`;
+        const kpi = (value, label, extra = "", index = 0) => `<div class="ux2-kpi" style="--i:${index}"><strong>${value}${extra}</strong><span>${escapeHtml(label)}</span></div>`;
+        const pctBadge = pct === null ? "" : `<em class="${pct >= 0 ? "up" : "down"}">${pct > 0 ? "+" : ""}${pct}%</em>`;
+        const recordRows = records.map((record) => `<div class="ux2-sum-rec"><span class="ux2-sum-rec-ico"><i data-lucide="flame"></i></span><div><strong>${escapeHtml(record.exercise.name)} · ${escapeHtml(ux2SetText(record.best.set))}</strong><span>1ПМ ≈ ${number(record.best.value)} кг · було ${number(record.previous.estimatedOneRepMax)}</span></div></div>`).join("");
+        const levelUp = levelAfter.level > levelBefore.level;
+        const progressLine = levelAfter.isMax
+            ? "Максимальний рівень"
+            : levelUp ? `Новий рівень! Ще ${number(levelAfter.xpToNext)} XP до ${levelAfter.level + 1}-го` : `${number(levelAfter.xpToNext)} XP до рівня ${levelAfter.level + 1}`;
+        openModal(`<div class="ux2-sum">
+            <div class="ux2-sum-top"><button class="icon-button" type="button" data-action="ux2-summary-done" aria-label="Закрити"><i data-lucide="x"></i></button></div>
+            <div class="ux2-sum-hero">
+                <span class="ux2-sum-kicker"><i data-lucide="sparkles"></i>${escapeHtml(workoutLabel(workoutItem))}</span>
+                <h2>${escapeHtml(ux2Title(workoutItem) === workoutLabel(workoutItem) ? "Тренування завершено" : ux2Title(workoutItem))}</h2>
+                <p>${escapeHtml(when)}</p>
+            </div>
+            <div class="ux2-sum-kpis">
+                ${kpi(escapeHtml(lengthLabel), "час", "", 0)}
+                ${kpi(number(volume), previousSame ? "кг · до минулого" : "кг обсягу", pctBadge, 1)}
+                ${kpi(String(sets.length), pluralUk(sets.length, "підхід", "підходи", "підходів"), "", 2)}
+                ${kpi(String(records.length), pluralUk(records.length, "рекорд", "рекорди", "рекордів"), "", 3)}
+            </div>
+            ${records.length ? `<section class="ux2-sum-card" style="--i:4"><h3>Рекорди</h3>${recordRows}</section>` : ""}
+            ${achievements.length ? `<section class="ux2-sum-card is-gold" style="--i:5"><h3>Досягнення</h3>${achievements.map((achievement) => `<div class="ux2-sum-rec"><span class="ux2-sum-rec-ico is-gold"><i data-lucide="${escapeHtml(achievement.icon || "trophy")}"></i></span><div><strong>«${escapeHtml(achievement.title)}»</strong><span>${escapeHtml(achievement.caption || "")} · +${number(achievement.xp)} XP</span></div></div>`).join("")}</section>` : ""}
+            <section class="ux2-sum-card" style="--i:6"><h3>Прогрес</h3>
+                <div class="ux2-sum-xp">${framedAvatar(me, "small", levelAfter.level)}<div class="ux2-sum-xp-text"><strong>+${number(gained)} XP · рівень ${levelAfter.level}</strong><span>${escapeHtml(progressLine)}${frameAfter.name !== frameBefore.name ? ` · нова рамка «${escapeHtml(frameAfter.name)}»` : ""}</span><div class="ux2-sum-bar"><span style="width:${Math.round(levelAfter.progress * 100)}%"></span></div></div></div>
+            </section>
+            <div class="ux2-sum-actions">
+                <button class="button button-primary ux2-wide" type="button" data-action="ux2-summary-done"><i data-lucide="check"></i>Готово</button>
+                <button class="ux2-link" type="button" data-action="ux2-summary-undo" data-workout-id="${workoutItem.id}"><i data-lucide="undo-2"></i>Повернутися до тренування</button>
+            </div>
+        </div>`, { fullscreen: true });
+    }
+
+    /** Undo for «Завершити»: the session comes back exactly as it was, unticked sets included. */
+    async function ux2UndoFinish(workoutId) {
+        const workoutItem = ownWorkout(workoutId);
+        const snapshot = ux2LastFinish && ux2LastFinish.workoutId === workoutId ? ux2LastFinish : null;
+        if (!workoutItem || !snapshot || workoutItem.status !== "completed") {
+            closeOverlay();
+            return;
+        }
+        const other = activeWorkoutFor(currentUser().id);
+        if (other && other.id !== workoutItem.id) {
+            toast("Уже є активне тренування", "Спершу заверши його.");
+            return;
+        }
+        workoutItem.exercises = snapshot.exercises;
+        workoutItem.supersetGroups = snapshot.supersetGroups;
+        workoutItem.lastSetAt = snapshot.lastSetAt;
+        workoutItem.status = "active";
+        workoutItem.finishedAt = null;
+        workoutItem.updatedAt = new Date().toISOString();
+        ux2LastFinish = null;
+        state.editingWorkoutId = workoutItem.id;
+        await persistWorkout(workoutItem);
+        invalidateFeed();
+        closeOverlay();
+        goToWorkoutEditor(workoutItem.id);
+        renderSection();
+    }
+
+    function ux2SummaryDone() {
+        ux2LastFinish = null;
+        closeOverlay();
+        navigate(defaultSection());
     }
 
     // ===== Focus mode =====
@@ -12159,6 +13445,9 @@ import {
         // — and because it is vertically centred, it jumped up and down under the cursor
         // while you were still typing into it.
         modal.classList.toggle("modal-list", !!opts.list);
+        // A short menu or a single question slides up from the bottom edge on a phone,
+        // where the thumb already is, instead of appearing in the middle of the screen.
+        modal.classList.toggle("modal-sheet", !!opts.sheet);
         iconsIn(modal);
         lockBackgroundScroll();
         revealOverlay(modal);
@@ -12875,9 +14164,23 @@ import {
         if (status === "success") {
             iconsIn(chip);
         }
+        // The session screen hides the topbar the chip lives in, so it gets a copy under
+        // its own header — otherwise "saved" would quietly stop being said mid-workout.
+        // Only the outcome, not every "saving…": the session screen stays calm.
+        const sessionChip = status === "success" ? document.getElementById("ux2Sync") : null;
+        if (sessionChip) {
+            sessionChip.className = `ux2-sync visible ${status}`;
+            sessionChip.innerHTML = chip.innerHTML;
+        }
         clearTimeout(syncIndicatorTimeoutId);
         if (status !== "loading") {
-            syncIndicatorTimeoutId = setTimeout(() => chip.classList.remove("visible"), 1900);
+            syncIndicatorTimeoutId = setTimeout(() => {
+                chip.classList.remove("visible");
+                const copy = document.getElementById("ux2Sync");
+                if (copy) {
+                    copy.classList.remove("visible");
+                }
+            }, 1900);
         }
     }
 
@@ -15124,8 +16427,7 @@ import {
             ${clock
                 ? `<button class="presence-clock is-watchable" type="button" data-action="watch-workout" data-workout-id="${escapeHtml(item.workoutId)}" data-presence-clock="${escapeHtml(item.workoutId)}" title="Подивитися тренування ${escapeHtml(item.displayName)}">${escapeHtml(elapsed)}</button>`
                 : `<span class="presence-clock is-word">${escapeHtml(elapsed)}</span>`}
-            ${partnerInviteButton(item)}
-            <button class="presence-cheer${sent ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">${escapeHtml(sent || "💪")}</button>
+            <span class="presence-actions">${partnerInviteButton(item)}<button class="presence-cheer${sent ? " is-sent" : ""}" type="button" data-action="cheer" data-workout-id="${escapeHtml(item.workoutId)}" aria-label="Підбадьорити ${escapeHtml(item.displayName)}">${escapeHtml(sent || "💪")}</button></span>
         </div>`;
     }
 
