@@ -3276,11 +3276,14 @@ import {
         if (!source) {
             return "";
         }
-        return `<div class="repeat-suggest"><div class="repeat-suggest-main"><span class="repeat-suggest-icon"><i data-lucide="history"></i></span><div><strong>Повторити тренування в ${WEEKDAY_ACC[weekdayOf(workoutItem.date)]}?</strong><p class="card-caption">Минулого разу (${formatDate(source.date)}) — ${source.exercises.length} вправ, ${workoutSetCount(source)} підходів. Заповнити так само (ваги, повтори, відпочинок), а дату лишити сьогоднішню.</p></div></div><button class="button button-primary compact" type="button" data-action="apply-weekday-workout" data-workout-id="${source.id}"><i data-lucide="copy"></i>Застосувати</button></div>`;
+        return `<div class="repeat-suggest"><div class="repeat-suggest-main"><span class="repeat-suggest-icon"><i data-lucide="history"></i></span><div><strong>Повторити тренування в ${WEEKDAY_ACC[weekdayOf(workoutItem.date)]}?</strong><p class="card-caption">Минулого разу (${formatDate(source.date)}) — ${source.exercises.length} вправ, ${workoutSetCount(source)} підходів. Ті самі вправи, а ваги й повтори — з останнього разу, коли ти їх робив.</p></div></div><button class="button button-primary compact" type="button" data-action="apply-weekday-workout" data-workout-id="${source.id}"><i data-lucide="copy"></i>Застосувати</button></div>`;
     }
 
-    // Copy a source workout's exercises + sets (fresh: uncompleted, no notes) + cardio
-    // + type into the current empty workout, keeping today's date.
+    // Copy a source workout's exercises + cardio + type into the current empty workout,
+    // keeping today's date. The NUMBERS come from the last time each exercise was done, not
+    // from the source: the source is matched by weekday and can be months old, and a set
+    // filled with July's weights next to a «Минулий раз» column showing last week's is
+    // exactly the mismatch it used to produce.
     async function applyWeekdayWorkout(sourceId) {
         const workoutItem = editWorkout();
         const source = state.database.workouts.find((item) => item.id === sourceId);
@@ -3293,7 +3296,8 @@ import {
             exerciseId: exercise.exerciseId,
             order: index + 1,
             notes: "",
-            sets: (exercise.sets || []).map((set) => ({ ...set, id: createId("set"), isCompleted: false }))
+            sets: (latestDoneSets(workoutItem.userId, exercise.exerciseId, workoutItem.id)?.sets || exercise.sets || [])
+                .map((set) => ({ ...set, id: createId("set"), isCompleted: false, notes: "" }))
         }));
         workoutItem.cardioSessions = (source.cardioSessions || []).map((session) => ({ ...session, id: createId("cardio") }));
         // Fresh un-ticked sets — the clock must forget the session this was copied from.
@@ -3301,7 +3305,7 @@ import {
         workoutItem.updatedAt = new Date().toISOString();
         await persistWorkout(workoutItem);
         renderSection();
-        toast("Тренування заповнено", `Скопійовано з ${formatDate(source.date)}. Перевір ваги й починай.`);
+        toast("Тренування заповнено", `Вправи — з ${formatDate(source.date)}, ваги й повтори — з останнього разу.`);
     }
 
     function cardioBlock(workoutItem, readonly) {
@@ -4477,14 +4481,16 @@ import {
         }
     }
 
-    // Pull-to-refresh: drag down from the very top to reload. Touch-only, armed
-    // only at scrollTop===0, with resistance + a threshold, and disabled while an
-    // overlay is open or the touch starts on a toast / nav / input — so it never
-    // hijacks normal scrolling or other gestures.
+    // Pull-to-refresh, the way a native list does it.
+    //
+    // The old one woke up on a 6 px nudge at the top of any screen and floated a ring over
+    // the header — so it appeared constantly, mostly while nobody meant it. Now: nothing at
+    // all until the finger has clearly pulled DOWN (a dead zone, and a sideways swipe never
+    // counts), then the ring slides out from under the header, fills as you pull, ticks once
+    // at the threshold, and refreshes only if you let go past it. Off on the workout screen
+    // entirely: mid-session a refresh is never what was meant, and live sync keeps that
+    // screen current anyway. Touch-primary devices only.
     function setupPullToRefresh() {
-        // Phones/tablets only — a touch-PRIMARY device (pointer: coarse). Desktops,
-        // including touch-capable laptops driven by a mouse, report (pointer: fine)
-        // and are excluded, so PTR never touches desktop mouse-wheel / reload.
         const touchPrimary = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
         if (!touchPrimary) {
             return;
@@ -4492,8 +4498,9 @@ import {
         if (document.getElementById("ptrIndicator")) {
             return;
         }
-        const THRESHOLD = 72;
-        const MAX = 130;
+        const DEAD_ZONE = 28; // finger travel before anything shows
+        const THRESHOLD = 64; // ring travel (after resistance) that refreshes on release
+        const MAX = 110;
         const indicator = document.createElement("div");
         indicator.id = "ptrIndicator";
         indicator.className = "ptr-indicator";
@@ -4501,17 +4508,36 @@ import {
         indicator.innerHTML = `<svg class="ptr-ring" viewBox="0 0 36 36" width="22" height="22" aria-hidden="true"><circle class="ptr-track" cx="18" cy="18" r="15"></circle><circle class="ptr-prog" cx="18" cy="18" r="15" transform="rotate(-90 18 18)"></circle></svg>`;
         document.body.appendChild(indicator);
         const prog = indicator.querySelector(".ptr-prog");
+        const ring = indicator.querySelector(".ptr-ring");
         const CIRC = 2 * Math.PI * 15; // ~94.25
         prog.style.strokeDasharray = String(CIRC);
         prog.style.strokeDashoffset = String(CIRC);
 
+        let startX = 0;
         let startY = 0;
         let armed = false;
         let pulling = false;
         let refreshing = false;
+        let ticked = false;
         let pull = 0;
+        let base = 0;
 
         const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+
+        // Where the ring parks: just under the header, which it slides out from behind.
+        const headerBottom = () => {
+            const bar = document.querySelector(".topbar");
+            if (!bar || getComputedStyle(bar).display === "none") {
+                return 0;
+            }
+            return Math.max(0, bar.getBoundingClientRect().bottom);
+        };
+
+        // Screens where a pull is never a refresh.
+        const blocked = () => scrollLocked
+            || state.section === "workout"
+            || Boolean(state.focus)
+            || ux2Pad.open;
 
         // PTR must NOT hijack a drag that belongs to an inner scrollable region
         // (a list, a portaled dropdown panel, any overflow:auto box). If the touch
@@ -4529,22 +4555,33 @@ import {
             return false;
         };
 
-        function setPull(px, animate) {
+        function place(px, animate) {
             pull = px;
-            indicator.style.transition = animate ? "transform 0.26s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease" : "none";
-            const reveal = Math.min(px, MAX);
-            indicator.style.transform = `translateX(-50%) translateY(${Math.min(72, -64 + reveal * 1.15)}px)`;
-            indicator.style.opacity = String(Math.min(1, px / 26));
+            indicator.style.transition = animate ? "transform 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease" : "none";
+            // At 0 the ring sits fully behind the header; it comes out as the pull grows.
+            indicator.style.transform = `translateX(-50%) translateY(${base - 46 + Math.min(px, MAX)}px)`;
+            indicator.style.opacity = px > 0 || refreshing ? "1" : "0";
             const ratio = Math.max(0, Math.min(1, px / THRESHOLD));
             prog.style.strokeDashoffset = String(CIRC * (1 - ratio));
-            indicator.querySelector(".ptr-ring").style.transform = refreshing ? "" : `rotate(${ratio * 270}deg)`;
-            indicator.classList.toggle("ready", ratio >= 1 && !refreshing);
+            ring.style.transform = refreshing ? "" : `rotate(${ratio * 270}deg)`;
+            const ready = ratio >= 1 && !refreshing;
+            indicator.classList.toggle("ready", ready);
+            // One tick when the pull becomes a refresh — the threshold should be felt, not
+            // guessed at.
+            if (ready && !ticked) {
+                ticked = true;
+                if (navigator.vibrate) {
+                    navigator.vibrate(8);
+                }
+            } else if (!ready) {
+                ticked = false;
+            }
         }
 
         function reset(animate) {
             pulling = false;
             indicator.classList.remove("ptr-loading", "ready");
-            setPull(0, animate);
+            place(0, animate);
         }
 
         async function trigger() {
@@ -4552,7 +4589,7 @@ import {
             indicator.classList.add("ptr-loading");
             indicator.classList.remove("ready");
             indicator.style.transition = "transform 0.26s cubic-bezier(0.22,1,0.36,1)";
-            indicator.style.transform = "translateX(-50%) translateY(20px)";
+            indicator.style.transform = `translateX(-50%) translateY(${base + 12}px)`;
             indicator.style.opacity = "1";
             try {
                 await refreshData();
@@ -4563,23 +4600,19 @@ import {
         }
 
         document.addEventListener("touchstart", (event) => {
-            if (refreshing || scrollLocked || event.touches.length !== 1) {
-                armed = false;
+            armed = false;
+            if (refreshing || event.touches.length !== 1 || blocked()) {
                 return;
             }
-            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .focus-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, .we-drag-handle, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
-                armed = false;
+            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .focus-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, .we-drag-handle, .ux2-kp, .ux2-mini, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
                 return;
             }
-            if (insideScrollable(event.target)) {
-                armed = false; // let the inner list / scroll region take the drag
+            if (insideScrollable(event.target) || !atTop()) {
                 return;
             }
-            if (!atTop()) {
-                armed = false;
-                return;
-            }
+            startX = event.touches[0].clientX;
             startY = event.touches[0].clientY;
+            base = headerBottom();
             armed = true;
             pulling = false;
         }, { passive: true });
@@ -4588,22 +4621,39 @@ import {
             if (!armed || refreshing) {
                 return;
             }
+            const dx = event.touches[0].clientX - startX;
             const dy = event.touches[0].clientY - startY;
-            if (dy <= 0 || !atTop()) {
+            if (!pulling) {
+                // A sideways swipe (the presence row, a chip strip) is never a pull, and
+                // neither is scrolling the page down.
+                if ((Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) || dy < -6) {
+                    armed = false;
+                    return;
+                }
+                if (dy <= 0) {
+                    return;
+                }
+            }
+            if (!atTop()) {
+                armed = false;
                 if (pulling) {
                     reset(true);
                 }
-                if (!atTop()) {
-                    armed = false;
+                return;
+            }
+            // At the very top and moving down: the only native thing left is the bounce,
+            // which the pull replaces.
+            event.preventDefault();
+            const distance = dy - DEAD_ZONE;
+            if (distance <= 0) {
+                if (pulling) {
+                    place(0, false);
                 }
                 return;
             }
-            const resisted = Math.min(MAX, dy * 0.5);
-            if (resisted > 3) {
-                pulling = true;
-                event.preventDefault(); // own the gesture; suppress native overscroll
-                setPull(resisted, false);
-            }
+            pulling = true;
+            // Rubber band: easy at first, stiffer towards the end, never past MAX.
+            place(MAX * (1 - Math.exp(-distance / (MAX * 1.2))), false);
         }, { passive: false });
 
         const onEnd = () => {
@@ -5149,6 +5199,7 @@ import {
             "ux2-ex-timed": () => { closeOverlay(); return toggleTimedBlock(actionElement.dataset.workoutExerciseId); },
             "ux2-ex-info": () => openExercise(actionElement.dataset.exerciseId),
             "ux2-ex-remove": () => { closeOverlay(); return removeWorkoutExercise(actionElement.dataset.workoutExerciseId); },
+            "ux2-fill-last": () => ux2FillFromLast(actionElement.dataset.workoutExerciseId || null),
             "ux2-ex-rest": () => ux2ExerciseRest(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.seconds) || 0),
             "ux2-open-note": () => { closeOverlay(); openNote(actionElement.dataset.noteKey); },
             "ux2-session-menu": ux2OpenSessionMenu,
@@ -9708,7 +9759,7 @@ import {
         const currentUserId = state.database?.currentUserId;
         // Carry over the exact same sets (count + weight + reps + type) from the last
         // time this exercise was done, just reset to not-completed.
-        const last = currentUserId ? lastExerciseSets(currentUserId, exercise.id) : null;
+        const last = currentUserId ? latestDoneSets(currentUserId, exercise.id, editWorkout()?.id || null) : null;
         if (last && last.sets.length) {
             // Carry the MEASURE over too, not just the numbers: without this a plank you
             // held for 45 s last week came back as a set of 45 repetitions.
@@ -10625,6 +10676,25 @@ import {
                 .map((workoutExercise) => ({ date: workoutItem.date, sets: workoutExercise.sets || [], notes: String(workoutExercise.notes || "").trim() })));
     }
 
+    /**
+     * Last time an exercise was actually DONE: finished sessions only, completed sets only,
+     * most recent first. What "як минулого разу" means everywhere it is used to FILL a set —
+     * lastExerciseSets() below walks every own workout, so a session planned for next week
+     * (first by date) or one copied from months ago could stand in for last time.
+     */
+    function latestDoneSets(userId, exerciseId, excludedWorkoutId = null) {
+        if (!userId) {
+            return null;
+        }
+        return workoutsFor(userId)
+            .filter((item) => item.id !== excludedWorkoutId && item.status === "completed" && isHydratedWorkout(item))
+            .sort(byDateDesc)
+            .flatMap((item) => item.exercises
+                .filter((entry) => entry.exerciseId === exerciseId)
+                .map((entry) => ({ date: item.date, sets: (entry.sets || []).filter((set) => set.isCompleted) })))
+            .find((entry) => entry.sets.length) || null;
+    }
+
     function lastExerciseSets(userId, exerciseId, excludedWorkoutId = null) {
         return exerciseInstances(userId, exerciseId, excludedWorkoutId).find((entry) => entry.sets.length) || null;
     }
@@ -11095,13 +11165,7 @@ import {
      * week — first by date — would be offered as "last time".
      */
     function ux2LastSets(workoutItem, exerciseId) {
-        return workoutsFor(workoutItem.userId)
-            .filter((item) => item.id !== workoutItem.id && item.status === "completed" && isHydratedWorkout(item))
-            .sort(byDateDesc)
-            .flatMap((item) => item.exercises
-                .filter((entry) => entry.exerciseId === exerciseId)
-                .map((entry) => ({ date: item.date, sets: (entry.sets || []).filter((set) => set.isCompleted) })))
-            .find((entry) => entry.sets.length) || null;
+        return latestDoneSets(workoutItem.userId, exerciseId, workoutItem.id);
     }
 
     function ux2Thumb(exercise) {
@@ -11553,6 +11617,65 @@ import {
         showSyncIndicator("success", "Як минулого разу");
     }
 
+    /**
+     * Rewrites the sets not yet done with last time's: same count, same numbers, same kind.
+     * Completed sets are never touched — they are what actually happened today.
+     */
+    function ux2FillExerciseFromLast(workoutItem, workoutExercise) {
+        const last = ux2LastSets(workoutItem, workoutExercise.exerciseId);
+        if (!last || workoutExercise.supersetGroupId) {
+            return false;
+        }
+        const sets = workoutExercise.sets || [];
+        const kept = [];
+        last.sets.forEach((source, index) => {
+            const fill = {
+                type: source.type || "working",
+                weight: Number(source.weight) || 0,
+                repetitions: Math.round(Number(source.repetitions) || 0),
+                durationSeconds: isTimedSet(source) ? Math.round(Number(source.durationSeconds) || 0) : null,
+                restSeconds: Number(source.restSeconds) || Number(getPref("defaultRest")) || 90
+            };
+            const current = sets[index];
+            if (current && current.isCompleted) {
+                kept.push(current);
+            } else if (current) {
+                kept.push(Object.assign(current, fill));
+            } else {
+                kept.push(createSet(fill.type, fill.weight, fill.repetitions, source.rpe, fill.restSeconds, false, fill.durationSeconds));
+            }
+        });
+        // Beyond last time's count only completed sets stay.
+        sets.slice(last.sets.length).forEach((set) => {
+            if (set.isCompleted) {
+                kept.push(set);
+            }
+        });
+        workoutExercise.sets = kept;
+        return true;
+    }
+
+    function ux2FillFromLast(workoutExerciseId = null) {
+        const workoutItem = editWorkout();
+        if (!workoutItem) {
+            return;
+        }
+        const targets = workoutExerciseId
+            ? workoutItem.exercises.filter((item) => item.id === workoutExerciseId)
+            : workoutItem.exercises;
+        const changed = targets.filter((item) => ux2FillExerciseFromLast(workoutItem, item)).length;
+        closeOverlay();
+        if (!changed) {
+            showSyncIndicator("success", "Минулих результатів немає");
+            return;
+        }
+        touchGymClock(workoutItem);
+        workoutItem.updatedAt = new Date().toISOString();
+        persistWorkout(workoutItem);
+        renderSection();
+        showSyncIndicator("success", "Як минулого разу");
+    }
+
     // ---- Sheets: one bottom sheet per question -----------------------------------------------------
 
     function ux2Sheet(title, body, options = {}) {
@@ -11619,7 +11742,9 @@ import {
         const open = sets.filter((set) => !set.isCompleted);
         const restNow = open.length && open.every((set) => set.restSeconds === open[0].restSeconds) ? open[0].restSeconds : null;
         const restChips = [60, 90, 120, 180].map((value) => `<button class="ux2-chip${restNow === value ? " is-on" : ""}" type="button" data-action="ux2-ex-rest" data-seconds="${value}"${id}>${formatRest(value)}</button>`).join("");
+        const last = workoutExercise.supersetGroupId ? null : ux2LastSets(editWorkout(), workoutExercise.exerciseId);
         ux2Sheet(exercise.name, `<div class="ux2-menu">
+                ${last ? ux2MenuItem("ux2-fill-last", "history", "Як минулого разу", id, { hint: last.sets.map((set) => ux2SetText(set)).join(" · ") }) : ""}
                 ${ux2MenuItem("ux2-ex-focus", "crosshair", "Фокус на цій вправі", id, { hint: "Один підхід на весь екран" })}
                 ${ux2MenuItem("ux2-ex-replace", "repeat", "Замінити вправу", id)}
                 ${ux2MenuItem("ux2-ex-timed", timed ? "repeat-2" : "timer", timed ? "Рахувати повтори" : "Рахувати час", id, { hint: timed ? "Замість секунд" : "Планка, віс, утримання" })}
@@ -11658,6 +11783,7 @@ import {
                 ${ux2MenuItem("ux2-finish", "flag", "Завершити тренування", "", { primary: true, hint: progress.total ? `${progress.done} з ${progress.total} ${pluralUk(progress.total, "підходу", "підходів", "підходів")} виконано` : "" })}
             </div>
             <div class="ux2-menu">
+                ${workoutItem.exercises.length ? ux2MenuItem("ux2-fill-last", "history", "Усе як минулого разу", "", { hint: "Невиконані підходи — останніми результатами" }) : ""}
                 ${ux2MenuItem("ux2-pick-type", "layers", "Тип тренування", id, { value: workoutTypeLabel(workoutItem.workoutType) })}
                 ${ux2MenuItem("ux2-meta", "calendar-clock", "Дата і тривалість", id, { value: `${shortDate(workoutItem.date)} · ${durationValue}` })}
                 ${ux2MenuItem("ux2-open-note", "sticky-note", workoutItem.notes ? "Нотатка до тренування" : "Додати нотатку", ` data-note-key="workout:${workoutItem.id}"`)}

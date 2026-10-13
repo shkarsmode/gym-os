@@ -2960,9 +2960,9 @@ tr:last-child td {
 /* ---------- Pull-to-refresh ---------- */
 .ptr-indicator {
     position: fixed;
-    top: calc(8px + env(safe-area-inset-top));
+    top: 0;
     left: 50%;
-    z-index: 70;
+    z-index: 19;
     display: grid;
     place-items: center;
     width: 40px;
