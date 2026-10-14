@@ -14289,3 +14289,148 @@ body.ux2-kp-open .ux2-dock {
         padding-bottom: 12px;
     }
 }
+
+/* ---- Phone: the exercise catalogue is a list, not a wall of posters -----------------
+   Each card used to be a 200 px banner (gif or silhouette) plus description, three chips,
+   author and reactions — about one screen per exercise, so 21 exercises were 12½ screens
+   of scrolling. On a phone each one is a single row now: thumbnail, name, muscle and
+   equipment, reactions on the right. The whole row still opens the exercise. */
+@media (max-width: 920px) {
+    .exercise-card-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    .exercise-card-grid > .exercise-card {
+        contain-intrinsic-size: auto 88px;
+    }
+
+    .exercise-card-grid .exercise-card {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "thumb body react"
+            "thumb tags react"
+            "thumb foot react";
+        grid-template-rows: auto auto auto;
+        column-gap: 12px;
+        row-gap: 0;
+        align-items: center;
+        padding: 10px;
+        border-radius: 16px;
+    }
+
+    .exercise-card-grid .exercise-card .exercise-thumb {
+        grid-area: thumb;
+        align-self: start;
+        width: 64px;
+        height: 64px;
+        margin: 0;
+        border-radius: 12px;
+    }
+
+    .exercise-card-grid .exercise-card .exercise-thumb-ph svg {
+        width: 34px;
+        height: 34px;
+    }
+
+    .exercise-card-grid .exercise-card-body {
+        grid-area: body;
+        gap: 4px;
+    }
+
+    .exercise-card-grid .exercise-card-body h3 {
+        font-size: 15px;
+        overflow-wrap: anywhere;
+    }
+
+    .exercise-card-grid .exercise-card-desc {
+        display: none;
+    }
+
+    /* Muscle and equipment are what you scan for; the movement pattern can wait for the
+       detail view. */
+    .exercise-card-grid .exercise-card-body .tag-row {
+        flex-wrap: nowrap;
+        gap: 4px;
+        margin: 0;
+        overflow: hidden;
+    }
+
+    .exercise-card-grid .exercise-card-body .tag-row .chip {
+        flex: 0 1 auto;
+        min-width: 0;
+        min-height: 0;
+        padding: 2px 8px;
+        overflow: hidden;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .exercise-card-grid .exercise-card-body .tag-row .chip:nth-last-child(2) {
+        display: none;
+    }
+
+    .exercise-card-grid .exercise-card-tags {
+        grid-area: tags;
+        position: static;
+        flex-direction: row;
+        align-items: center;
+        margin-top: 4px;
+    }
+
+    .exercise-card-grid .exercise-card-footer {
+        grid-area: foot;
+        margin: 4px 0 0;
+        padding: 0;
+        border: 0;
+    }
+
+    .exercise-card-grid .exercise-card-footer .exercise-meta {
+        display: none;
+    }
+
+    .exercise-card-grid .exercise-card-footer:not(:has(.exercise-card-actions)) {
+        display: none;
+    }
+
+    .exercise-card-grid .exercise-card-reactions {
+        grid-area: react;
+        flex-direction: column;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+
+    .exercise-card-grid .exercise-card-reactions .react-btn {
+        min-width: 52px;
+        min-height: 34px;
+        justify-content: center;
+    }
+
+    /* The counter under the filters: a line of text, not a dashboard tile. */
+    .catalog-count .cc-bar {
+        display: none;
+    }
+
+    .catalog-count {
+        min-height: 0;
+        padding: 8px 12px;
+    }
+
+    .catalog-count .cc-num {
+        font-size: 20px;
+    }
+}
+
+@media (max-width: 920px) {
+    /* Edit / delete stay reachable in the list, just not poster-sized. */
+    .exercise-card-grid .exercise-card-actions .icon-button {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+    }
+}
