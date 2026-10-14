@@ -14656,3 +14656,15 @@ body.ux2-kp-open .ux2-dock {
     align-items: center;
     gap: 6px;
 }
+
+/* ---- Profile: one list instead of a stack of buttons -------------------------------- */
+.profile-menu {
+    margin-top: 16px;
+}
+
+.ux2-menu-chev {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    color: var(--color-faint);
+}

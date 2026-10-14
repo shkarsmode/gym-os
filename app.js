@@ -3733,7 +3733,7 @@ import {
         const summary = userStats(user.id);
         const info = userLevel(user.id);
         const recent = workoutsFor(user.id).filter((workoutItem) => workoutItem.status === "completed").sort(byDateDesc).slice(0, 5);
-        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: true })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal)}</span></div><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div><div class="inline-actions wrap"><button class="button button-primary compact" type="button" data-action="open-profile-editor"><i data-lucide="pen-line"></i>Редагувати</button><button class="button button-secondary compact" type="button" data-action="open-onboarding"><i data-lucide="hand-metal"></i>Знайомство</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="levels"><i data-lucide="medal"></i>Прокачка</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="settings"><i data-lucide="settings"></i>Налаштування</button><button class="button button-secondary compact" type="button" data-action="navigate" data-section="changelog"><i data-lucide="sparkles"></i>Що нового</button></div>${achievementBadges(user.id)}</section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", compactKg(summary.totalVolume), "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="card span-12"><div class="profile-header"><div class="list-row profile-identity">${framedAvatar(user, "large", info.level)}<div class="profile-headline"><h2>${escapeHtml(user.displayName)}</h2><div class="profile-badges">${levelBadge(info, { link: true })}${roleStatusBadge(user)}<span class="badge accent">${escapeHtml(user.trainingGoal)}</span></div><p class="card-caption">${escapeHtml(user.name)} · ${user.height} см · ${user.bodyweight} кг · ${escapeHtml(user.trainingExperience)} · фокус: ${escapeHtml(user.favoriteMuscleGroup)}</p></div></div>${profileMenu(user, info)}</section><section class="card span-12"><h2>Останні тренування</h2><div class="activity-feed">${workoutHistoryList(recent)}</div></section>${metric("Тренування", summary.completedWorkouts, "calendar-check", "Завершено", "span-3")}${metric("Загальний обсяг", compactKg(summary.totalVolume), "boxes", "Усі завершені підходи", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets} робочих`, "span-3")}${metric("Кардіо", `${summary.cardioMinutes} хв`, "heart-pulse", `${summary.cardioDistance} км`, "span-3")}${chartCard("Історія ваги тіла", "Щотижневі заміри.", "profileBodyweight", "span-6")}${chartCard("Тренд розрахункового 1ПМ", "Демо-тренд жиму лежачи.", "profileMax", "span-6")}<section class="card span-12"><h2>Особисті рекорди</h2><div class="exercise-card-grid">${recordsFor(user.id).slice(0, 6).map(recordCard).join("") || emptyInline("PR ще немає", "Заверши робочі підходи, щоб GymOS визначив рекорди.")}</div></section></div>`);
         requestAnimationFrame(() => {
             bodyweightChart("profileBodyweight", user.id);
             maxTrendChart("profileMax", user.id);
@@ -9056,6 +9056,19 @@ import {
     // A row of gold achievement icons (unlocked only, no captions) so anyone opening
     // a profile can see what the person earned. Each icon is a tooltip trigger
     // (title + caption) via the shared [data-tip-body] engine.
+    function profileMenu(user, info) {
+        const achievements = userAchievements(user.id);
+        const unlocked = achievements.filter((achievement) => achievement.unlockedAt).length;
+        return `<div class="ux2-menu profile-menu">
+            ${ux2MenuItem("open-profile-editor", "pen-line", "Редагувати профіль", "", { hint: "Ім'я, фото, зріст, вага, ціль", chevron: true })}
+            ${ux2MenuItem("navigate", "medal", "Прокачка", ` data-section="levels"`, { value: `Рівень ${info.level}`, chevron: true })}
+            ${ux2MenuItem("navigate", "trophy", "Досягнення", ` data-section="levels"`, { value: `${unlocked} з ${achievements.length}`, chevron: true })}
+            ${ux2MenuItem("navigate", "settings", "Налаштування", ` data-section="settings"`, { chevron: true })}
+            ${ux2MenuItem("navigate", "sparkles", "Що нового", ` data-section="changelog"`, { value: `v${APP_VERSION}`, chevron: true })}
+            ${ux2MenuItem("open-onboarding", "hand-metal", "Знайомство", "", { hint: "Пройти питання про себе ще раз", chevron: true })}
+        </div>`;
+    }
+
     function achievementBadges(userId) {
         // Most recently unlocked first, so the freshest achievements lead the row.
         const unlocked = userAchievements(userId)
@@ -12154,7 +12167,7 @@ import {
 
     function ux2MenuItem(action, icon, label, attrs = "", options = {}) {
         const cls = `ux2-menu-item${options.danger ? " is-danger" : ""}${options.primary ? " is-primary" : ""}`;
-        return `<button class="${cls}" type="button" data-action="${action}"${attrs}><span class="ux2-menu-ico"><i data-lucide="${icon}"></i></span><span class="ux2-menu-text"><strong>${escapeHtml(label)}</strong>${options.hint ? `<span>${escapeHtml(options.hint)}</span>` : ""}</span>${options.value ? `<span class="ux2-menu-value">${escapeHtml(options.value)}</span>` : ""}</button>`;
+        return `<button class="${cls}" type="button" data-action="${action}"${attrs}><span class="ux2-menu-ico"><i data-lucide="${icon}"></i></span><span class="ux2-menu-text"><strong>${escapeHtml(label)}</strong>${options.hint ? `<span>${escapeHtml(options.hint)}</span>` : ""}</span>${options.value ? `<span class="ux2-menu-value">${escapeHtml(options.value)}</span>` : ""}${options.chevron ? `<i data-lucide="chevron-right" class="ux2-menu-chev"></i>` : ""}</button>`;
     }
 
     /** Everything about one set that is not a number: its type, its rest, removing it. */
