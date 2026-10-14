@@ -13864,3 +13864,138 @@ body.ux2-kp-open .ux2-dock {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 162px);
     }
 }
+
+/* ---- Rest between sets (ux2) ----------------------------------------------------------
+   A full-width divider between two set rows with the rest time on it: the whole width is
+   the tap target (a phone thumb does not aim at a 60 px pill), the visible part stays
+   quiet. While that rest is running the line fills left to right and the pill counts. */
+.ux2-rest-line {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 30px;
+    margin: -6px 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-faint);
+    cursor: pointer;
+    touch-action: manipulation;
+    --ux2-rest-p: 0;
+}
+
+.ux2-rest-line::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 40px;
+    right: 6px;
+    height: 1px;
+    background: var(--color-border);
+    transform: translateY(-50%);
+}
+
+.ux2-rest-line-pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    font: 600 12px/1.5 var(--font-body);
+    font-variant-numeric: tabular-nums;
+}
+
+.ux2-rest-line-pill svg {
+    width: 13px;
+    height: 13px;
+}
+
+.ux2-rest-line:active .ux2-rest-line-pill {
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+}
+
+.ux2-rest-line.is-running {
+    color: var(--color-accent);
+}
+
+.ux2-rest-line.is-running::before {
+    height: 2px;
+    background: linear-gradient(90deg, var(--color-accent) calc(var(--ux2-rest-p) * 100%), var(--color-border) 0);
+}
+
+.ux2-rest-line.is-running .ux2-rest-line-pill {
+    border-color: var(--color-accent-border);
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+    font-weight: 700;
+}
+
+.ux2-rest-line.is-over {
+    color: var(--color-warning);
+}
+
+.ux2-rest-line.is-over::before {
+    background: var(--color-warning);
+}
+
+.ux2-rest-line.is-over .ux2-rest-line-pill {
+    border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+}
+
+/* The idle ring names the rest that comes next. */
+.ux2-rest-idle {
+    flex-direction: column;
+    gap: 1px;
+}
+
+.ux2-rest-idle small {
+    font: 700 10.5px/1 var(--font-display);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted);
+}
+
+.ux2-rest.is-mini .ux2-rest-idle small {
+    display: none;
+}
+
+/* Rest sheet: one big number, presets, and who it applies to. */
+.ux2-rest-pick {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    padding: 4px 0;
+}
+
+.ux2-rest-big {
+    min-width: 128px;
+    text-align: center;
+    font: 800 48px/1 var(--font-display);
+    font-variant-numeric: tabular-nums;
+}
+
+.ux2-rest-presets {
+    justify-content: center;
+}
+
+.ux2-rest-presets .ux2-chip {
+    min-width: 64px;
+}
+
+.ux2-rest-scope {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.ux2-rest-scope .segment-button {
+    min-height: 40px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
