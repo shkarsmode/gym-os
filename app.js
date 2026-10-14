@@ -18,7 +18,7 @@ import { gymClockState, nextGymClockMarks, formatClock, formatDurationLabel, tim
 import {
     FIELD_LIMITS, sessionSetLabels, nextSessionSet, sessionProgress, pairedLast, previousSetDelta, fieldStep, stepValue,
     keypadPress, draftNumber, numberDraft, digitsFromDuration, durationFromDigits, durationDigitsPress, durationDigitsLabel,
-    percentChange, sessionLengthLabel
+    percentChange, sessionLengthLabel, suggestExercises
 } from "./lib/session.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
@@ -5200,6 +5200,8 @@ import {
             "ux2-ex-info": () => openExercise(actionElement.dataset.exerciseId),
             "ux2-ex-remove": () => { closeOverlay(); return removeWorkoutExercise(actionElement.dataset.workoutExerciseId); },
             "ux2-fill-last": () => ux2FillFromLast(actionElement.dataset.workoutExerciseId || null),
+            "ux2-reorder": () => ux2OpenReorderSheet(actionElement.dataset.workoutExerciseId || null),
+            "ux2-reorder-move": () => ux2MoveBlockBy(actionElement.dataset.key, Number(actionElement.dataset.dir) || 0),
             "ux2-ex-rest": () => ux2ExerciseRest(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.seconds) || 0),
             "ux2-open-note": () => { closeOverlay(); openNote(actionElement.dataset.noteKey); },
             "ux2-session-menu": ux2OpenSessionMenu,
@@ -6041,6 +6043,39 @@ import {
         });
     }
 
+    /**
+     * The first thing the picker shows: exercises from your recent sessions that are not in
+     * this one yet — "what you usually do next" — one tap each. Only while nothing is being
+     * searched or filtered: a search is a person who already knows what they want.
+     */
+    function pickerSuggestions() {
+        if (state.replaceExerciseTarget || state.filters.exerciseSearch.trim() || state.filters.pickerMuscle !== "all" || state.filters.pickerEquipment !== "all") {
+            return "";
+        }
+        const me = currentUser();
+        const workoutItem = me ? editWorkout() : null;
+        if (!workoutItem || !isHydratedWorkout(workoutItem)) {
+            return "";
+        }
+        const picks = suggestExercises(workoutsFor(me.id).filter(isHydratedWorkout), workoutItem, { limit: 5 })
+            .map((pick) => ({ ...pick, exercise: exerciseById(pick.exerciseId) }))
+            .filter((pick) => pick.exercise && !pick.exercise.isMissing);
+        if (!picks.length) {
+            return "";
+        }
+        const type = workoutItem.workoutType && workoutItem.workoutType !== "custom" ? workoutTypeLabel(workoutItem.workoutType) : "";
+        const sameType = type && picks.some((pick) => pick.sameTypeCount);
+        const title = sameType ? `Зазвичай у ${type}` : "З твоїх останніх тренувань";
+        return `<section class="picker-suggest">
+            <h3 class="picker-suggest-title"><i data-lucide="sparkles"></i>${escapeHtml(title)}</h3>
+            <div class="picker-suggest-list">${picks.map((pick) => `<button class="picker-suggest-item" type="button" data-action="add-exercise" data-exercise-id="${escapeHtml(pick.exercise.id)}">
+                ${ux2Thumb(pick.exercise)}
+                <span class="picker-suggest-text"><strong>${escapeHtml(pick.exercise.name)}</strong><span>${escapeHtml(pick.exercise.primaryMuscleGroup)} · ${pick.count} ${pluralUk(pick.count, "раз", "рази", "разів")} нещодавно · ${escapeHtml(shortDate(pick.lastDate))}</span></span>
+                <span class="picker-suggest-add" aria-hidden="true"><i data-lucide="plus"></i></span>
+            </button>`).join("")}</div>
+        </section>`;
+    }
+
     function exercisePickerCards() {
         const items = pickerExercises();
         if (!items.length) {
@@ -6064,7 +6099,7 @@ import {
         const note = items.length > limit
             ? `<p class="card-caption picker-count">Показано ${limit} з ${items.length} — уточни пошук або фільтри.</p>`
             : `<p class="card-caption picker-count">Знайдено: ${items.length}</p>`;
-        return note + shown.map((exercise) => {
+        return pickerSuggestions() + note + shown.map((exercise) => {
             const mineBadge = isMyExercise(exercise) ? `<span class="pill-badge mine"><i data-lucide="bookmark-check"></i>Моя</span>` : "";
             const overlay = mineBadge ? `<div class="exercise-card-tags">${mineBadge}</div>` : "";
             return `<article class="exercise-card has-thumb">${exerciseThumb(exercise)}${overlay}<h3>${escapeHtml(exercise.name)}</h3><p class="card-caption">${escapeHtml(exercise.primaryMuscleGroup)} · ${escapeHtml(exercise.movementPattern)} · ${escapeHtml(exercise.equipment)}</p><button class="button button-primary compact" type="button" data-action="add-exercise" data-exercise-id="${exercise.id}">Додати</button></article>`;
@@ -11229,7 +11264,7 @@ import {
             ${empty}
             ${blocks.length ? `<div class="ux2-list">${list}</div>` : ""}
             ${ux2CardioList(workoutItem)}
-            <button class="ux2-add-exercise" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i>Додати вправу</button>
+            ${blocks.length ? `<button class="ux2-add-exercise" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i>Додати вправу</button>` : ""}
             <div class="ux2-dock">${ux2RestButton("", ux2UpcomingRest(workoutItem, next))}${ux2Cta(workoutItem, next, progress)}</div>
         </div>`;
     }
@@ -11824,6 +11859,171 @@ import {
         showSyncIndicator("success", "Як минулого разу");
     }
 
+    // ---- Reordering exercises --------------------------------------------------------------------
+    //
+    // A bottom sheet with the session as a list: drag a row by its grip, or nudge it with the
+    // arrows — on a phone the arrows are the dependable way, the drag the quick one. A
+    // superset moves as one block, so a reorder can never split a round.
+
+    function ux2BlockKey(block) {
+        return block.kind === "superset" ? `ss:${block.groupId}` : `ex:${block.exercise.id}`;
+    }
+
+    /** Puts a block at a new index and renumbers `order` so members stay together. */
+    function ux2MoveBlock(key, toIndex) {
+        const workoutItem = editWorkout();
+        if (!workoutItem) {
+            return false;
+        }
+        const blocks = workoutBlocks(workoutItem.exercises);
+        const from = blocks.findIndex((block) => ux2BlockKey(block) === key);
+        const target = Math.max(0, Math.min(blocks.length - 1, toIndex));
+        if (from < 0 || target === from) {
+            return false;
+        }
+        const [moved] = blocks.splice(from, 1);
+        blocks.splice(target, 0, moved);
+        let order = 1;
+        blocks.forEach((block) => {
+            (block.kind === "superset" ? block.members : [block.exercise]).forEach((member) => {
+                member.order = order;
+                order += 1;
+            });
+        });
+        workoutItem.updatedAt = new Date().toISOString();
+        persistWorkout(workoutItem);
+        renderSection();
+        return true;
+    }
+
+    function ux2MoveBlockBy(key, direction) {
+        const workoutItem = editWorkout();
+        const index = workoutItem ? workoutBlocks(workoutItem.exercises).findIndex((block) => ux2BlockKey(block) === key) : -1;
+        if (index >= 0 && ux2MoveBlock(key, index + direction)) {
+            ux2OpenReorderSheet(null, key);
+        }
+    }
+
+    function ux2OpenReorderSheet(workoutExerciseId = null, focusKey = null) {
+        const workoutItem = editWorkout();
+        if (!workoutItem) {
+            return;
+        }
+        const blocks = workoutBlocks(workoutItem.exercises);
+        // Opened from an exercise's own menu: that row is the one being moved.
+        const highlight = focusKey || (workoutExerciseId
+            ? ux2BlockKey(blocks.find((block) => (block.kind === "superset" ? block.members : [block.exercise]).some((member) => member.id === workoutExerciseId)) || blocks[0])
+            : null);
+        const rows = blocks.map((block, index) => {
+            const key = ux2BlockKey(block);
+            let main;
+            if (block.kind === "superset") {
+                const names = block.members.map((member, memberIndex) => `${positionLabel(memberIndex)} ${exerciseById(member.exerciseId).name}`).join(" · ");
+                main = `<span class="ux2-thumb ux2-ro-ss"><i data-lucide="repeat-2"></i></span><span class="ux2-ro-text"><strong>Суперсет</strong><span>${escapeHtml(names)}</span></span>`;
+            } else {
+                const exercise = exerciseById(block.exercise.exerciseId);
+                const sets = block.exercise.sets || [];
+                const done = sets.length > 0 && sets.every((set) => set.isCompleted);
+                main = `${ux2Thumb(exercise)}<span class="ux2-ro-text"><strong>${escapeHtml(exercise.name)}</strong><span>${sets.length} ${pluralUk(sets.length, "підхід", "підходи", "підходів")}${done ? " · виконано" : ""}</span></span>`;
+            }
+            return `<li class="ux2-ro-row${key === highlight ? " is-focus" : ""}" data-ro-key="${escapeHtml(key)}">
+                <span class="ux2-ro-handle" data-ro-handle aria-hidden="true"><i data-lucide="grip-vertical"></i></span>
+                ${main}
+                <button class="ux2-ro-btn" type="button" data-action="ux2-reorder-move" data-key="${escapeHtml(key)}" data-dir="-1" aria-label="Вище"${index === 0 ? " disabled" : ""}><i data-lucide="arrow-up"></i></button>
+                <button class="ux2-ro-btn" type="button" data-action="ux2-reorder-move" data-key="${escapeHtml(key)}" data-dir="1" aria-label="Нижче"${index === blocks.length - 1 ? " disabled" : ""}><i data-lucide="arrow-down"></i></button>
+            </li>`;
+        }).join("");
+        ux2Sheet("Порядок вправ", `<p class="ux2-sheet-hint">Тягни за ⠿ або тисни стрілки — зберігається одразу.</p>
+            <ol class="ux2-ro-list" id="ux2ReorderList">${rows}</ol>
+            <button class="button button-primary ux2-wide" type="button" data-action="close-overlay"><i data-lucide="check"></i>Готово</button>`, { caption: ux2Title(workoutItem) });
+        ux2BindReorderDrag();
+    }
+
+    /**
+     * Drag by the grip. The grip alone has `touch-action: none`, so a finger anywhere else in
+     * the sheet still scrolls it; the rows around the dragged one slide out of its way, and
+     * the new order is saved on release.
+     */
+    function ux2BindReorderDrag() {
+        const list = document.getElementById("ux2ReorderList");
+        if (!list) {
+            return;
+        }
+        list.addEventListener("pointerdown", (event) => {
+            const handle = event.target.closest("[data-ro-handle]");
+            const row = handle ? handle.closest(".ux2-ro-row") : null;
+            if (!row || event.button > 0) {
+                return;
+            }
+            event.preventDefault();
+            const rows = [...list.children];
+            const from = rows.indexOf(row);
+            const rects = rows.map((item) => item.getBoundingClientRect());
+            const step = rows.length > 1 ? rects[1].top - rects[0].top : rects[0].height;
+            const startY = event.clientY;
+            let to = from;
+            // Capture where the browser allows it; the listeners sit on the window either way,
+            // so a drag whose capture was refused (or lost) still tracks the finger.
+            try {
+                handle.setPointerCapture(event.pointerId);
+            } catch (error) {
+                // not an active pointer (synthetic) — the window listeners cover it
+            }
+            row.classList.add("is-dragging");
+            list.classList.add("is-sorting");
+            const pointerId = event.pointerId;
+            const onMove = (move) => {
+                if (move.pointerId !== pointerId) {
+                    return;
+                }
+                const dy = move.clientY - startY;
+                row.style.transform = `translateY(${dy}px)`;
+                const centre = rects[from].top + rects[from].height / 2 + dy;
+                to = 0;
+                rows.forEach((item, index) => {
+                    if (index !== from && rects[index].top + rects[index].height / 2 < centre) {
+                        to += 1;
+                    }
+                });
+                rows.forEach((item, index) => {
+                    if (index === from) {
+                        return;
+                    }
+                    let shift = 0;
+                    if (from < to && index > from && index <= to) {
+                        shift = -step;
+                    } else if (from > to && index >= to && index < from) {
+                        shift = step;
+                    }
+                    item.style.transform = shift ? `translateY(${shift}px)` : "";
+                });
+            };
+            const finish = (end) => {
+                if (end && end.pointerId !== pointerId) {
+                    return;
+                }
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", finish);
+                window.removeEventListener("pointercancel", finish);
+                rows.forEach((item) => {
+                    item.style.transform = "";
+                });
+                row.classList.remove("is-dragging");
+                list.classList.remove("is-sorting");
+                const key = row.dataset.roKey;
+                if (to !== from && ux2MoveBlock(key, to)) {
+                    if (navigator.vibrate) {
+                        navigator.vibrate(8);
+                    }
+                    ux2OpenReorderSheet(null, key);
+                }
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", finish);
+            window.addEventListener("pointercancel", finish);
+        });
+    }
+
     // ---- Sheets: one bottom sheet per question -----------------------------------------------------
 
     function ux2Sheet(title, body, options = {}) {
@@ -11895,6 +12095,7 @@ import {
                 ${last ? ux2MenuItem("ux2-fill-last", "history", "Як минулого разу", id, { hint: last.sets.map((set) => ux2SetText(set)).join(" · ") }) : ""}
                 ${ux2MenuItem("ux2-ex-focus", "crosshair", "Фокус на цій вправі", id, { hint: "Один підхід на весь екран" })}
                 ${ux2MenuItem("ux2-ex-replace", "repeat", "Замінити вправу", id)}
+                ${workoutBlocks(editWorkout().exercises).length > 1 ? ux2MenuItem("ux2-reorder", "arrow-up-down", "Перемістити", id, { hint: "Змінити порядок вправ" }) : ""}
                 ${ux2MenuItem("ux2-ex-timed", timed ? "repeat-2" : "timer", timed ? "Рахувати повтори" : "Рахувати час", id, { hint: timed ? "Замість секунд" : "Планка, віс, утримання" })}
                 ${ux2MenuItem("ux2-open-note", "sticky-note", workoutExercise.notes ? "Нотатка до вправи" : "Додати нотатку", ` data-note-key="exercise:${workoutExercise.id}"`)}
                 ${ux2MenuItem("ux2-ex-info", "info", "Техніка виконання", ` data-exercise-id="${escapeHtml(exercise.id)}"`)}
@@ -11932,6 +12133,7 @@ import {
             </div>
             <div class="ux2-menu">
                 ${workoutItem.exercises.length ? ux2MenuItem("ux2-fill-last", "history", "Усе як минулого разу", "", { hint: "Невиконані підходи — останніми результатами" }) : ""}
+                ${workoutBlocks(workoutItem.exercises).length > 1 ? ux2MenuItem("ux2-reorder", "arrow-up-down", "Порядок вправ", "", { hint: "Перетягнути або стрілками" }) : ""}
                 ${ux2MenuItem("ux2-pick-type", "layers", "Тип тренування", id, { value: workoutTypeLabel(workoutItem.workoutType) })}
                 ${ux2MenuItem("ux2-meta", "calendar-clock", "Дата і тривалість", id, { value: `${shortDate(workoutItem.date)} · ${durationValue}` })}
                 ${ux2MenuItem("ux2-open-note", "sticky-note", workoutItem.notes ? "Нотатка до тренування" : "Додати нотатку", ` data-note-key="workout:${workoutItem.id}"`)}
