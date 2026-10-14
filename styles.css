@@ -14897,3 +14897,73 @@ body.ux2-kp-open .ux2-dock {
     color: var(--color-muted);
     font-size: 12.5px;
 }
+
+/* ---- Phone: everything tappable is fingertip-sized --------------------------------------
+   A measured pass over the feed, «Сьогодні», settings, levels and the workout screen found
+   cheer / invite / report buttons at 31 px, accent swatches at 26, switches 25 tall, an
+   info tip at 18 and text links 21 tall. Where growing the control would shift a layout
+   that works, the hit area grows instead (an invisible ::after around it); everywhere else
+   the control itself reaches ~40-44 px. */
+@media (max-width: 920px) {
+    .presence-cheer,
+    .presence-invite {
+        min-width: 40px;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .presence-clock.is-watchable {
+        min-height: 34px;
+        padding: 6px 8px;
+    }
+
+    .feed-act {
+        min-height: 44px;
+    }
+
+    .feed-card .icon-button[data-action="open-report"],
+    .icon-button[data-action="copy-workout-start"] {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+    }
+
+    .settings-seg .segment-button {
+        min-height: 40px;
+    }
+
+    .settings-swatch {
+        width: 36px;
+        height: 36px;
+    }
+
+    .settings-row-control .button.compact {
+        min-height: 40px;
+    }
+
+    .settings-switch,
+    .info-tip,
+    .ux2-num,
+    .link-button {
+        position: relative;
+    }
+
+    .settings-switch::after,
+    .info-tip::after,
+    .ux2-num::after,
+    .link-button::after {
+        content: "";
+        position: absolute;
+        inset: -10px;
+    }
+
+    .ux2-num::after {
+        inset: -6px;
+    }
+
+    .link-button::after {
+        inset: -12px -6px;
+    }
+}
