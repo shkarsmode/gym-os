@@ -11320,10 +11320,22 @@ import {
             : "";
         return `<article class="ux2-ex${done ? " is-done" : ""}${collapsed ? " is-collapsed" : ""}" data-workout-exercise-id="${workoutExercise.id}">
             <div class="ux2-ex-head">${ux2Thumb(exercise)}${head}<button class="ux2-icon-btn is-ghost" type="button" data-action="ux2-ex-menu" data-workout-exercise-id="${workoutExercise.id}" aria-label="Дії з вправою"><i data-lucide="more-vertical"></i></button></div>
-            ${collapsed ? "" : `<div class="ux2-sets">${sets.length ? columns + rows : `<p class="ux2-sets-empty">Підходів ще немає</p>`}</div>
+            ${collapsed ? "" : `${ux2PreviousNote(workoutItem, workoutExercise.exerciseId)}<div class="ux2-sets">${sets.length ? columns + rows : `<p class="ux2-sets-empty">Підходів ще немає</p>`}</div>
             <button class="ux2-add-set" type="button" data-action="ux2-add-set" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="plus"></i>Підхід</button>
             ${note}`}
         </article>`;
+    }
+
+    /**
+     * The note left on this exercise in an earlier session («хват ширше», «наступного разу
+     * 55»). It is advice for the sets about to be done, so it sits above them, not under.
+     */
+    function ux2PreviousNote(workoutItem, exerciseId, compact = false) {
+        const last = lastExerciseNote(workoutItem.userId, exerciseId, workoutItem.id);
+        if (!last) {
+            return "";
+        }
+        return `<div class="ux2-prev-note${compact ? " is-compact" : ""}"><i data-lucide="sticky-note"></i><div><span class="ux2-prev-note-label">Остання нотатка · ${escapeHtml(shortDate(last.date))}</span><p>${escapeHtml(last.notes)}</p></div></div>`;
     }
 
     function ux2DeltaBadge(value, text) {
@@ -11369,7 +11381,7 @@ import {
         const anyTimed = members.some((member) => (member.sets || []).some(isTimedSet));
         const status = finished ? "Усі раунди виконано" : rounds ? `Раунд ${Math.min(current + 1, rounds)} з ${rounds}` : "Раундів ще немає";
         const gid = escapeHtml(groupId);
-        const names = members.map((member, index) => `<span class="ux2-ss-name"><b>${positionLabel(index)}</b>${escapeHtml(exerciseById(member.exerciseId).name)}</span>`).join("");
+        const names = members.map((member, index) => `<span class="ux2-ss-name"><b>${positionLabel(index)}</b>${escapeHtml(exerciseById(member.exerciseId).name)}</span>${finished ? "" : ux2PreviousNote(workoutItem, member.exerciseId, true)}`).join("");
         const roundRows = Array.from({ length: rounds }, (_, roundIndex) => {
             const done = isRoundComplete(members, roundIndex);
             if (done && !state.supersetOpenRounds[`${groupId}:${roundIndex}`]) {
