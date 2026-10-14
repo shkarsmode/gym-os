@@ -1165,7 +1165,7 @@ import {
         autoStartRest: "1",       // "1" = auto-start rest timer on set completion
         useSupersets: "1",        // "1" = offer merging 2–3 exercises into rounds
         keepAwake: "1",           // "1" = hold a screen wake lock while a workout is active
-        newUi: "auto"             // new workout screen (beta): "1" on, "0" off, "auto" = admins only
+        newUi: "auto"             // new workout screen: "0" = classic, anything else = new
     };
 
     function getPref(key) {
@@ -4101,7 +4101,7 @@ import {
         ]);
 
         const workoutGroup = settingsGroup("Тренування за замовчуванням", [
-            settingsRow("Новий екран тренування", settingsSwitch("newUi", "Новий екран тренування (бета)", ux2Enabled()), { hint: "Бета: компактні підходи, велика кнопка «Підхід виконано», своя клавіатура, мініплеєр і підсумок" }),
+            settingsRow("Новий екран тренування", settingsSwitch("newUi", "Новий екран тренування", ux2Enabled()), { hint: "Вимкни, щоб повернути класичний редактор тренування" }),
             settingsRow("Відпочинок між підходами", `<gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select>`),
             settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
             settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
@@ -11358,15 +11358,13 @@ import {
     // addSet, deleteSet, persistWorkout), so switching views mid-session loses nothing. The
     // pure decisions — next set, numbering, keypad input, deltas — live in lib/session.js.
 
+    // On for everybody since 0.68.7 (it began as an admins-only beta); «Класичний вигляд»
+    // is the way out and is remembered as "0". "auto" — never touched — means on.
     function ux2Enabled() {
         if (!state.database) {
             return false;
         }
-        const pref = getPref("newUi");
-        if (pref === "1" || pref === "0") {
-            return pref === "1";
-        }
-        return isAdmin();
+        return getPref("newUi") !== "0";
     }
 
     /** Your own active workout with its sets loaded — the only thing the session shows. */
