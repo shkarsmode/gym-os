@@ -13999,3 +13999,26 @@ body.ux2-kp-open .ux2-dock {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* The big button reads exercise first, then the load in bold, then which set it is. */
+.ux2-cta-text > span {
+    opacity: 0.85;
+}
+
+.ux2-cta-text > span b {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+/* A long exercise name wraps to a second line rather than losing its end — the name is the
+   headline of the button now. */
+.ux2-cta-text strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    line-height: 1.15;
+}

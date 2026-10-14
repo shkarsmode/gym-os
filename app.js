@@ -11174,6 +11174,20 @@ import {
         return weight ? `${numberDraft(weight)} × ${reps}` : `${reps} повт`;
     }
 
+    /** The load with its unit, as the big button says it: 17,5 кг × 5 · 12 повт · 20 кг × 0:45. */
+    function ux2LoadText(set) {
+        if (!set) {
+            return "";
+        }
+        const weight = Number(set.weight) || 0;
+        if (isTimedSet(set)) {
+            const time = ux2Clock(set.durationSeconds);
+            return weight ? `${numberDraft(weight)} кг × ${time}` : time;
+        }
+        const reps = Math.max(0, Math.round(Number(set.repetitions) || 0));
+        return weight ? `${numberDraft(weight)} кг × ${reps}` : `${reps} повт`;
+    }
+
     /**
      * Last time this exercise was actually DONE: finished sessions, completed sets.
      *
@@ -11450,31 +11464,39 @@ import {
      * «Завершити»; before the first exercise it adds one.
      */
     function ux2Cta(workoutItem, next, progress) {
-        const button = (action, icon, title, sub, extra = "", cls = "") => `<button class="ux2-cta${cls}" type="button" data-action="${action}"${extra}><span class="ux2-cta-icon"><i data-lucide="${icon}"></i></span><span class="ux2-cta-text"><strong>${escapeHtml(title)}</strong>${sub ? `<span>${escapeHtml(sub)}</span>` : ""}</span></button>`;
+        // `subHtml` is built from escaped parts by the callers below.
+        const button = (action, icon, title, subHtml, extra = "", cls = "") => `<button class="ux2-cta${cls}" type="button" data-action="${action}"${extra}><span class="ux2-cta-icon"><i data-lucide="${icon}"></i></span><span class="ux2-cta-text"><strong>${escapeHtml(title)}</strong>${subHtml ? `<span>${subHtml}</span>` : ""}</span></button>`;
         if (!workoutItem.exercises.length) {
             return button("open-add-exercise-modal", "plus", "Додати вправу", "З каталогу або власну");
         }
         if (!next) {
             const sub = progress.total ? `Усі ${progress.total} ${pluralUk(progress.total, "підхід", "підходи", "підходів")} виконано` : "";
-            return button("ux2-finish", "flag", "Завершити тренування", sub, "", " is-finish");
+            return button("ux2-finish", "flag", "Завершити тренування", escapeHtml(sub), "", " is-finish");
         }
         const workoutExercise = workoutItem.exercises.find((item) => item.id === next.workoutExerciseId);
         const set = workoutExercise.sets[next.index];
         const exercise = exerciseById(workoutExercise.exerciseId);
-        const label = sessionSetLabels(workoutExercise.sets)[next.index];
+        const labels = sessionSetLabels(workoutExercise.sets);
+        const label = labels[next.index];
         const name = next.superset ? `${positionLabel(next.superset.memberIndex)} · ${exercise.name}` : exercise.name;
         const timed = isTimedSet(set);
         const ids = ` data-ux2-we="${workoutExercise.id}" data-ux2-set="${set.id}"`;
+        // Which set it is comes last and small: what you are about to do is the exercise and
+        // the load, and the tick icon already says what the button does.
+        let position;
+        if (next.superset) {
+            const members = workoutItem.exercises.filter((item) => item.supersetGroupId === next.superset.groupId);
+            position = `раунд ${next.superset.round + 1} з ${roundCount(members)}`;
+        } else {
+            const working = labels.filter((item) => item.kind !== "warmup").length;
+            position = label.kind === "warmup" ? "розминка" : `підхід ${label.label} з ${working}`;
+        }
         // A set with no reps (or no time) is not something to tick yet — the button asks for
         // the number instead of recording an empty set.
         if (!(Number(timed ? set.durationSeconds : set.repetitions) > 0)) {
-            const what = next.superset ? `раунд ${next.superset.round + 1}` : label.kind === "warmup" ? "розминку" : `підхід ${label.label}`;
-            return button("ux2-cta-edit", "pencil", `Введи ${what}`, name, `${ids} data-field="${timed ? "durationSeconds" : "repetitions"}"`, " is-input");
+            return button("ux2-cta-edit", "pencil", name, `<b>введи ${timed ? "час" : "повтори"}</b> · ${escapeHtml(position)}`, `${ids} data-field="${timed ? "durationSeconds" : "repetitions"}"`, " is-input");
         }
-        const title = next.superset
-            ? `Раунд ${next.superset.round + 1} · ${positionLabel(next.superset.memberIndex)} виконано`
-            : label.kind === "warmup" ? "Розминку виконано" : `Підхід ${label.label} виконано`;
-        return button("ux2-complete-next", "check", title, `${name} · ${ux2SetText(set)}`, ids);
+        return button("ux2-complete-next", "check", name, `<b>${escapeHtml(ux2LoadText(set))}</b> · ${escapeHtml(position)}`, ids);
     }
 
     function ux2RestButton(extra = "", upcoming = null) {
@@ -11588,7 +11610,7 @@ import {
         let line = "Додай першу вправу";
         if (next) {
             const workoutExercise = workoutItem.exercises.find((item) => item.id === next.workoutExerciseId);
-            line = `Далі: ${exerciseById(workoutExercise.exerciseId).name} · ${ux2SetText(workoutExercise.sets[next.index])}`;
+            line = `Далі: ${exerciseById(workoutExercise.exerciseId).name} · ${ux2LoadText(workoutExercise.sets[next.index])}`;
         } else if (progress.total) {
             line = "Усе виконано — можна завершувати";
         }
