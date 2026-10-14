@@ -14471,3 +14471,188 @@ body.ux2-kp-open .ux2-dock {
         line-height: 1.3;
     }
 }
+
+/* ---- Phone calendar: a month grid with dots ------------------------------------------- */
+.calendar-shell.is-phone {
+    padding: 12px;
+}
+
+.pcal {
+    display: grid;
+    gap: 10px;
+}
+
+.pcal-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pcal-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    text-align: center;
+}
+
+.pcal-title strong {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.pcal-title span {
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.pcal-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pcal-scope {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.pcal-scope .segment-button {
+    min-height: 38px;
+}
+
+.pcal-today {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 12px;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pcal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+}
+
+.pcal-wd {
+    padding: 2px 0 4px;
+    color: var(--color-faint);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.pcal-day {
+    position: relative;
+    min-height: 50px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    justify-items: center;
+    gap: 2px;
+    padding: 6px 2px 4px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.pcal-day:active {
+    background: var(--color-elevated);
+}
+
+.pcal-num {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.pcal-day.is-today {
+    border-color: var(--color-accent);
+}
+
+.pcal-day.is-today .pcal-num {
+    color: var(--color-accent);
+}
+
+.pcal-day.has-own {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-2));
+}
+
+.pcal-dots {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+}
+
+.pcal-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-faint);
+}
+
+.pcal-dot.is-own.is-completed {
+    background: var(--color-accent);
+}
+
+.pcal-dot.is-own.is-active {
+    background: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.pcal-dot.is-own.is-planned {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.pcal-dot.is-own.is-missed {
+    background: var(--color-faint);
+}
+
+.pcal-dot.is-team {
+    width: 6px;
+    height: 6px;
+    background: var(--dot, var(--color-muted));
+}
+
+.pcal-more {
+    color: var(--color-muted);
+    font-size: 9.5px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.pcal-blank {
+    min-height: 50px;
+}
+
+.pcal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 14px;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.pcal-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
