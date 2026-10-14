@@ -2306,40 +2306,120 @@ import {
         team: "Спільний прогрес твого спортивного ком'юніті. Сума тренувань та кілограмів, піднятих усіма учасниками твоєї групи. Мотивує змагальним духом та показує силу командної роботи."
     };
 
-    // The Панель is a lean control hub: at-a-glance status, the primary start CTA,
-    // quick links to every section (the only way to reach Вправи / Рейтинги /
-    // Команда on mobile, where the bottom bar has no room), and recent activity.
-    // Deep stats + charts now live in the Статистика tab.
+    // «Сьогодні» — what matters right now, in the order you need it: start (or repeat) a
+    // session, this week against the last one, fresh records, what is planned next, then the
+    // way into every section and your last sessions. It used to repeat other screens:
+    // «Продовжити» is the mini-player's job, «Зараз тренуються» the feed's.
     function dashboard() {
         const user = currentUser();
         const active = activeWorkoutFor(user.id);
-        // Presence is painted from whatever is already held and refreshed in the
-        // background, so switching sections never flashes an empty strip.
-        setTimeout(() => {
-            renderPresenceStrip();
-            loadPresence();
-        }, 0);
-        content(`
-            <div class="grid dashboard-grid">
-                <section class="card span-12 dash-quickstart">
-                    <div class="card-header">
-                        <div>
-                            <h2>Швидкий старт</h2>
-                            <p class="card-caption">${active ? "У тебе є активне тренування — продовж або відкрий календар." : "Почни нову сесію або переглянь історію в календарі."}</p>
-                        </div>
-                    </div>
-                    <div class="action-row wrap">
-                        ${active
-                            ? `<button class="button button-primary large-workout-button" type="button" data-action="edit-workout" data-workout-id="${active.id}"><i data-lucide="activity"></i>Продовжити тренування</button>`
-                            : startWorkoutButton(null)}
-                        <button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Перейти до календаря</button>
-                    </div>
-                </section>
-                <div id="presenceStrip" class="span-12"></div>
-                ${navHub()}
-                <section class="card span-12"><div class="card-header"><div><h2>Історія тренувань</h2><p class="card-caption">${state.filters.activityScope === "all" ? "Спільна стрічка команди — чужі лише для перегляду." : "Твої завершені тренування."}</p></div><div class="activity-toolbar"><div class="segmented">${[["mine", "Мої"], ["all", "Усі"]].map(([value, label]) => `<button class="segment-button ${(state.filters.activityScope === "all" ? "all" : "mine") === value ? "active" : ""}" type="button" data-action="activity-scope" data-scope="${value}">${label}</button>`).join("")}</div></div></div><div class="activity-feed">${activityFeed()}</div></section>
+        content(`<div class="grid dashboard-grid today">
+            ${todayHero(user, active)}
+            ${todayWeek(user)}
+            ${todayRecords(user)}
+            ${todayNext(user)}
+            ${navHub()}
+            ${todayRecent(user)}
+        </div>`);
+    }
+
+    function todayHero(user, active) {
+        const name = escapeHtml(firstName(user.displayName));
+        const hour = new Date().getHours();
+        const hello = hour < 5 ? "Доброї ночі" : hour < 12 ? "Доброго ранку" : hour < 18 ? "Доброго дня" : "Доброго вечора";
+        if (active) {
+            // On the new screen the session is already one tap away in the mini-player.
+            if (ux2Enabled()) {
+                return "";
+            }
+            const progress = sessionProgress(active.exercises || []);
+            return `<section class="card span-12 today-hero"><div class="today-hero-text"><span class="today-hello">${hello}, ${name}</span><strong>Тренування йде</strong><span>${escapeHtml(ux2Title(active))}${progress.total ? ` · ${progress.done} з ${progress.total} підходів` : ""}</span></div><div class="today-hero-actions"><button class="button button-primary" type="button" data-action="edit-workout" data-workout-id="${active.id}"><i data-lucide="activity"></i>Продовжити тренування</button></div></section>`;
+        }
+        const today = dateInput(new Date());
+        const done = workoutsFor(user.id).filter((item) => item.status === "completed").sort(byDateDesc);
+        const last = done[0] || null;
+        // What to offer as a one-tap repeat: last time on this weekday, else the latest.
+        const repeat = sameWeekdayWorkout(user.id, today, null) || last;
+        let sub = "Почнімо перше тренування";
+        if (last) {
+            const days = kernelDayDiff(new Date(`${today}T12:00:00`), new Date(`${String(last.date).slice(0, 10)}T12:00:00`));
+            const when = days <= 0 ? "сьогодні" : days === 1 ? "вчора" : `${days} ${pluralUk(days, "день", "дні", "днів")} тому`;
+            sub = `Останнє тренування — ${when} (${ux2Title(last)})`;
+        }
+        return `<section class="card span-12 today-hero">
+            <div class="today-hero-text"><span class="today-hello">${hello}, ${name}</span><strong>Готовий тренуватись?</strong><span>${escapeHtml(sub)}</span></div>
+            <div class="today-hero-actions">
+                ${startWorkoutButton(null, { label: "Почати тренування", buttonClass: "button button-primary" })}
+                ${repeat ? `<button class="button button-secondary" type="button" data-action="copy-workout-start" data-workout-id="${repeat.id}"><i data-lucide="copy"></i>Повторити ${escapeHtml(ux2Title(repeat))} · ${escapeHtml(shortDate(repeat.date))}</button>` : ""}
             </div>
-        `);
+        </section>`;
+    }
+
+    function todayWeek(user) {
+        const now = new Date();
+        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+        const shift = (days) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + days);
+        const from = dateInput(monday);
+        const to = dateInput(shift(7));
+        const lastFrom = dateInput(shift(-7));
+        const done = workoutsFor(user.id).filter((item) => item.status === "completed");
+        const day = (item) => String(item.date || "").slice(0, 10);
+        const thisWeek = done.filter((item) => day(item) >= from && day(item) < to);
+        const lastWeek = done.filter((item) => day(item) >= lastFrom && day(item) < from);
+        const volume = (list) => list.reduce((sum, item) => sum + (Number(workoutVolumeOf(item)) || 0), 0);
+        // No percentage against last week: a week in progress against a finished one only ever
+        // reads as a loss (Tuesday, one session: «−81%»). Last week is a plain line instead.
+        const trained = new Set(thisWeek.map(day));
+        const todayKey = dateInput(now);
+        const streakDays = Number(userStats(user.id).trainingStreak) || 0;
+        const dots = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"].map((name, index) => {
+            const key = dateInput(shift(index));
+            return `<span class="today-day${trained.has(key) ? " is-on" : ""}${key === todayKey ? " is-today" : ""}"><b>${name}</b><i aria-hidden="true"></i></span>`;
+        }).join("");
+        return `<section class="card span-6 today-week">
+            <h3 class="today-label">Цей тиждень</h3>
+            <div class="today-days" aria-label="Дні тижня з тренуваннями">${dots}</div>
+            <div class="today-kpis">
+                <div><strong>${thisWeek.length}</strong><span>${pluralUk(thisWeek.length, "тренування", "тренування", "тренувань")}</span></div>
+                <div><strong>${escapeHtml(compactKg(volume(thisWeek)))}</strong><span>обсяг</span></div>
+                <div><strong>${streakDays}</strong><span>${pluralUk(streakDays, "день", "дні", "днів")} поспіль</span></div>
+            </div>
+            ${lastWeek.length ? `<p class="today-week-last">Минулого тижня: ${lastWeek.length} ${pluralUk(lastWeek.length, "тренування", "тренування", "тренувань")} · ${escapeHtml(compactKg(volume(lastWeek)))}</p>` : ""}
+        </section>`;
+    }
+
+    function todayRecords(user) {
+        const records = recordsFor(user.id).slice().sort((left, right) => String(right.date).localeCompare(String(left.date))).slice(0, 3);
+        if (!records.length) {
+            return "";
+        }
+        return `<section class="card span-6 today-records">
+            <h3 class="today-label">Свіжі рекорди</h3>
+            ${records.map((record) => `<button class="today-rec" type="button" data-action="open-exercise" data-exercise-id="${escapeHtml(record.exerciseId)}"><span class="today-rec-ico"><i data-lucide="flame"></i></span><span class="today-rec-text"><strong>${escapeHtml(record.exercise.name)}</strong><span>${numberDraft(record.weight)} кг × ${record.repetitions} · 1ПМ ≈ ${number(record.estimatedOneRepMax)} кг · ${escapeHtml(shortDate(record.date))}</span></span><i data-lucide="chevron-right" class="ux2-menu-chev"></i></button>`).join("")}
+        </section>`;
+    }
+
+    function todayNext(user) {
+        const today = dateInput(new Date());
+        const next = workoutsFor(user.id)
+            .filter((item) => item.status === "planned" && String(item.date || "").slice(0, 10) >= today)
+            .sort((left, right) => String(left.date).localeCompare(String(right.date)))[0];
+        if (!next) {
+            return "";
+        }
+        return `<section class="card span-12 today-next">
+            <span class="today-next-ico"><i data-lucide="calendar-clock"></i></span>
+            <div class="today-next-text"><span class="today-label">Заплановано</span><strong>${escapeHtml(ux2Title(next))}</strong><span>${escapeHtml(weekdayLabel(next.date))} · ${escapeHtml(formatDate(next.date))}</span></div>
+            <button class="button button-secondary compact" type="button" data-action="edit-workout" data-workout-id="${next.id}">Відкрити</button>
+        </section>`;
+    }
+
+    function todayRecent(user) {
+        const recent = workoutsFor(user.id).filter((item) => item.status === "completed").sort(byDateDesc).slice(0, 3);
+        if (!recent.length) {
+            return "";
+        }
+        return `<section class="card span-12 today-recent"><div class="today-recent-head"><h3 class="today-label">Останні тренування</h3><button class="link-button" type="button" data-action="navigate" data-section="calendar">Усі в календарі</button></div><div class="activity-feed">${workoutHistoryList(recent)}</div></section>`;
     }
 
     // Quick-access grid of every section — laconic icon cards. Essential on mobile,
@@ -6724,7 +6804,7 @@ import {
                 exerciseId: exercise.exerciseId,
                 order: index + 1,
                 notes: "",
-                sets: (exercise.sets || []).map((set) => ({
+                sets: (latestDoneSets(me.id, exercise.exerciseId)?.sets || exercise.sets || []).map((set) => ({
                     id: createId("set"),
                     type: set.type || "working",
                     weight: Number(set.weight) || 0,
