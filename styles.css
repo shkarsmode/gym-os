@@ -13775,7 +13775,7 @@ body.ux2-kp-open .ux2-dock {
    training right now become one swipeable row instead of a wall of cards — the first
    screen of the feed shows posts again. */
 @media (max-width: 920px) {
-    html.ux2 .feed-head {
+    .feed-head {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
@@ -13785,20 +13785,20 @@ body.ux2-kp-open .ux2-dock {
         background: none;
     }
 
-    html.ux2 .feed-head-row {
+    .feed-head-row {
         display: contents;
     }
 
-    html.ux2 .feed-head-row > div:first-child {
+    .feed-head-row > div:first-child {
         display: none;
     }
 
-    html.ux2 .feed-head .feed-bell {
+    .feed-head .feed-bell {
         grid-column: 2;
         grid-row: 1;
     }
 
-    html.ux2 .feed-head .feed-tabs {
+    .feed-head .feed-tabs {
         grid-column: 1;
         grid-row: 1;
         margin-top: 0;
@@ -14263,4 +14263,29 @@ body.ux2-kp-open .ux2-dock {
 
 .ux2-prev-note.is-compact p {
     font-size: 13px;
+}
+
+/* ---- Phone: no title twice ----------------------------------------------------------
+   The topbar already names the screen; the first card repeating it (with a sentence on
+   how to use the screen) pushed the content down by 150–250 px on every page. And the
+   «GYM PROGRESS OS» line above the title is branding the phone has no room for — except
+   when the workout editor borrows it for the exercise you are on. */
+@media (max-width: 920px) {
+    .head-dup {
+        display: none !important;
+    }
+
+    .card-header:has(> .head-dup:only-child),
+    .card-header.head-dup {
+        display: none;
+    }
+
+    .topbar:not(.is-context) .eyebrow {
+        display: none;
+    }
+
+    .stats-head {
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
 }

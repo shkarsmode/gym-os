@@ -3432,7 +3432,7 @@ import {
 
     function calendar() {
         const history = workoutsFor(currentUser().id).sort(byDateDesc).slice(0, 8);
-        content(`<div class="grid dashboard-grid"><section class="calendar-shell span-12"><div class="card-header" style="margin-bottom:16px;"><div><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div>${startWorkoutButton(null, { compact: true })}</div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div>${loadMoreControl()}</section></div>`);
+        content(`<div class="grid dashboard-grid"><section class="calendar-shell span-12"><div class="card-header" style="margin-bottom:16px;"><div class="head-dup"><h2>Календар</h2><p class="card-caption">Натисни день, щоб побачити тренування і керувати ними.</p></div>${startWorkoutButton(null, { compact: true })}</div><div id="calendarContainer"></div><div class="legend-list inline"><span><i class="legend-dot active"></i>Активне</span><span><i class="legend-dot completed"></i>Завершено</span><span><i class="legend-dot planned"></i>Інше</span></div></section><section class="card span-12"><div class="card-header"><div><h2>Останні тренування</h2><p class="card-caption">Натисни, щоб відкрити й керувати.</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div>${loadMoreControl()}</section></div>`);
         requestAnimationFrame(renderCalendar);
     }
 
@@ -3441,7 +3441,7 @@ import {
         // is how a counter starts disagreeing with the cards underneath it.
         const items = filteredExercises();
         const catalogShown = items.length;
-        content(`<section class="card"><div class="card-header"><div><h2>Каталог вправ</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням + фільтри за групою м'язів і обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div id="exerciseCatalogFilters">${catalogFilterRow()}</div><div class="catalog-count" id="catalogCount" data-shown="${catalogShown}">${catalogCounterMarkup(catalogShown)}</div></section><section class="exercise-card-grid" id="exerciseCatalogGrid" style="margin-top:16px;">${exerciseCatalogCards(items)}</section>`);
+        content(`<section class="card catalog-head"><div class="card-header"><div class="head-dup"><h2>Каталог вправ</h2><p class="card-caption">Пошук за назвою, alias, м'язом, патерном або обладнанням + фільтри за групою м'язів і обладнанням.</p></div><button class="button button-primary compact" type="button" data-action="open-custom-exercise"><i data-lucide="plus"></i>Власна вправа</button></div><div id="exerciseCatalogFilters">${catalogFilterRow()}</div><div class="catalog-count" id="catalogCount" data-shown="${catalogShown}">${catalogCounterMarkup(catalogShown)}</div></section><section class="exercise-card-grid" id="exerciseCatalogGrid" style="margin-top:16px;">${exerciseCatalogCards(items)}</section>`);
     }
 
     // Same filter row as the add-exercise modal: search + visual muscle-grid trigger
@@ -3586,7 +3586,7 @@ import {
         const summary = userId ? userStats(userId) : teamStats();
         const history = (userId ? workoutsFor(userId) : state.database.workouts).sort(byDateDesc).slice(0, 8);
         const scopeName = userId ? (userId === currentUser().id ? "Твій прогрес" : escapeHtml(userById(userId).displayName)) : "Уся команда";
-        content(`<section class="card stats-head"><div class="card-header"><div><h2>Статистика</h2><p class="card-caption">${scopeName} · за весь час. Обери учасника нижче або «Усі» для команди.</p></div></div>${statsUserBar(userId)}</section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Усього тренувань", summary.totalWorkouts, "calendar", "Усі статуси", "span-3")}${metric("Завершено", summary.completedWorkouts, "check-circle-2", "Фінішовані сесії", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets || 0} робочих`, "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Завершені підходи", "span-3")}${metric("Середня тривалість", `${summary.averageDurationMinutes || 0} хв`, "timer", "Завершені тренування", "span-3")}${metric("Кардіо хвилини", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} км`, "span-3")}${metric("Найчастіша вправа", summary.mostUsedExercise?.name || "—", "repeat", "Частота вправ", "span-3")}${metric("Найсильніший фокус", summary.mostTrainedMuscleGroup || "—", "target", "За завершеними підходами", "span-3")}${chartCard("Обсяг у часі", "Завершений обсяг за сесіями.", "statsVolume", "span-6")}${chartCard("Підходи за м'язами", "Розподіл завершених підходів.", "statsMuscle", "span-6")}${chartCard("Прогрес вправи", "Тренд розрахункового 1ПМ.", "statsProgress", "span-6")}${chartCard("Регулярність", "Кількість вправ у сесії.", "statsConsistency", "span-6")}${contributorCard()}<section class="card span-12"><div class="card-header"><div><h2>Історія</h2><p class="card-caption">${userId ? "Тренування обраного учасника." : "Спільна стрічка команди."}</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div>${loadMoreControl()}</section></div>`);
+        content(`<section class="card stats-head"><div class="card-header head-dup"><div><h2>Статистика</h2><p class="card-caption">${scopeName} · за весь час. Обери учасника нижче або «Усі» для команди.</p></div></div>${statsUserBar(userId)}</section><div class="grid dashboard-grid" style="margin-top:16px;">${metric("Усього тренувань", summary.totalWorkouts, "calendar", "Усі статуси", "span-3")}${metric("Завершено", summary.completedWorkouts, "check-circle-2", "Фінішовані сесії", "span-3")}${metric("Підходи", summary.totalSets, "list-checks", `${summary.workingSets || 0} робочих`, "span-3")}${metric("Загальний обсяг", `${number(summary.totalVolume)} кг`, "boxes", "Завершені підходи", "span-3")}${metric("Середня тривалість", `${summary.averageDurationMinutes || 0} хв`, "timer", "Завершені тренування", "span-3")}${metric("Кардіо хвилини", summary.cardioMinutes || 0, "heart-pulse", `${summary.cardioDistance || 0} км`, "span-3")}${metric("Найчастіша вправа", summary.mostUsedExercise?.name || "—", "repeat", "Частота вправ", "span-3")}${metric("Найсильніший фокус", summary.mostTrainedMuscleGroup || "—", "target", "За завершеними підходами", "span-3")}${chartCard("Обсяг у часі", "Завершений обсяг за сесіями.", "statsVolume", "span-6")}${chartCard("Підходи за м'язами", "Розподіл завершених підходів.", "statsMuscle", "span-6")}${chartCard("Прогрес вправи", "Тренд розрахункового 1ПМ.", "statsProgress", "span-6")}${chartCard("Регулярність", "Кількість вправ у сесії.", "statsConsistency", "span-6")}${contributorCard()}<section class="card span-12"><div class="card-header"><div><h2>Історія</h2><p class="card-caption">${userId ? "Тренування обраного учасника." : "Спільна стрічка команди."}</p></div></div><div class="activity-feed">${workoutHistoryList(history)}</div>${loadMoreControl()}</section></div>`);
         requestAnimationFrame(() => {
             volumeChart("statsVolume", userId);
             muscleDistributionChart("statsMuscle", userId);
@@ -3629,7 +3629,7 @@ import {
                 </div>
             </button>`;
         }).join("");
-        content(`<section class="card rankings-card"><div class="card-header rankings-header"><div><h2>Командний рейтинг</h2><p class="card-caption">За рівнем, регулярністю та обсягом. Натисни на учасника, щоб відкрити його тренування.</p></div><div class="rankings-lift-picker"><label>Найкращий підйом</label><gym-select data-action="rankings-lift-filter">${muscleOptions}</gym-select></div></div><div class="rank-list">${rows}</div></section>`);
+        content(`<section class="card rankings-card"><div class="card-header rankings-header"><div class="head-dup"><h2>Командний рейтинг</h2><p class="card-caption">За рівнем, регулярністю та обсягом. Натисни на учасника, щоб відкрити його тренування.</p></div><div class="rankings-lift-picker"><label>Найкращий підйом</label><gym-select data-action="rankings-lift-filter">${muscleOptions}</gym-select></div></div><div class="rank-list">${rows}</div></section>`);
     }
 
     function users() {
@@ -3957,7 +3957,7 @@ import {
     }
 
     function changelog() {
-        content(`<section class="card"><div class="card-header"><div><h2>Що нового</h2><p class="card-caption">Останні зміни, фічі та виправлення GymOS</p></div><span class="role-badge admin"><i data-lucide="sparkles"></i>v${escapeHtml(APP_VERSION)}</span></div><div class="timeline">${CHANGELOG.map(changelogEntry).join("")}</div></section>`);
+        content(`<section class="card"><div class="card-header"><div class="head-dup"><h2>Що нового</h2><p class="card-caption">Останні зміни, фічі та виправлення GymOS</p></div><span class="role-badge admin"><i data-lucide="sparkles"></i>v${escapeHtml(APP_VERSION)}</span></div><div class="timeline">${CHANGELOG.map(changelogEntry).join("")}</div></section>`);
     }
 
     function changelogEntry(entry) {
@@ -8345,7 +8345,7 @@ import {
         content(`<div class="grid dashboard-grid">
             <section class="card span-12 feed-head">
                 <div class="feed-head-row">
-                    <div><h2>Повідомлення</h2><p class="card-caption">Реакції, коменти й відповіді на твої пости.</p></div>
+                    <div class="head-dup"><h2>Повідомлення</h2><p class="card-caption">Реакції, коменти й відповіді на твої пости.</p></div>
                     <button class="button button-secondary compact" type="button" data-action="mark-all-read"><i data-lucide="check-check"></i>Прочитати все</button>
                 </div>
             </section>
