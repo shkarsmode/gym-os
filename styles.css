@@ -14434,3 +14434,40 @@ body.ux2-kp-open .ux2-dock {
         min-height: 36px;
     }
 }
+
+/* ---- Phone: stat tiles show their whole number ----------------------------------------
+   Half a phone is ~170 px; the icon took 50 of it and the value and label were both
+   single-line with an ellipsis, so the tiles read «1 756 51…», «УСЬОГО ТРЕНУВ…», «Жим
+   га…». The icon goes on a phone, the label may take two lines, and a text value (an
+   exercise name) wraps at a size that fits. */
+@media (max-width: 920px) {
+    .metric-card .metric-icon {
+        display: none;
+    }
+
+    .metric-card {
+        align-items: flex-start;
+        min-height: 72px;
+        padding: 12px 14px;
+    }
+
+    .metric-card .metric-value {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+    }
+
+    .metric-card.is-text .metric-value {
+        font-size: 16px;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+    }
+
+    .metric-card .metric-label-text {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        line-height: 1.3;
+    }
+}
