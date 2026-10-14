@@ -11404,7 +11404,7 @@ import {
         const label = index >= 0 ? sessionSetLabels(workoutExercise.sets)[index] : null;
         const scope = groupId ? "" : `<div class="segmented ux2-rest-scope">
                 <button class="segment-button${ux2RestScope === "all" ? " active" : ""}" type="button" data-action="ux2-rest-scope" data-scope="all"${ids}>Усі підходи вправи</button>
-                <button class="segment-button${ux2RestScope === "one" ? " active" : ""}" type="button" data-action="ux2-rest-scope" data-scope="one"${ids}>Лише після ${label && label.kind === "warmup" ? "розминки" : `підходу ${label ? label.label : ""}`}</button>
+                <button class="segment-button${ux2RestScope === "one" ? " active" : ""}" type="button" data-action="ux2-rest-scope" data-scope="one"${ids}>Лише після підходу ${label ? label.label : ""}</button>
             </div>`;
         const caption = groupId
             ? "Після кожного раунду суперсету"
@@ -11486,10 +11486,9 @@ import {
         let position;
         if (next.superset) {
             const members = workoutItem.exercises.filter((item) => item.supersetGroupId === next.superset.groupId);
-            position = `раунд ${next.superset.round + 1} з ${roundCount(members)}`;
+            position = `раунд ${next.superset.round + 1}/${roundCount(members)}`;
         } else {
-            const working = labels.filter((item) => item.kind !== "warmup").length;
-            position = label.kind === "warmup" ? "розминка" : `підхід ${label.label} з ${working}`;
+            position = `підхід ${label.label}/${labels.length}`;
         }
         // A set with no reps (or no time) is not something to tick yet — the button asks for
         // the number instead of recording an empty set.
@@ -11853,7 +11852,7 @@ import {
         const ids = ` data-workout-exercise-id="${workoutExercise.id}" data-set-id="${set.id}"${superset ? ` data-superset="1"` : ""}`;
         const types = ["warmup", "working", "drop", "failure", "backoff"].map((type) => `<button class="ux2-chip${set.type === type ? " is-on" : ""}" type="button" data-action="ux2-set-type" data-type="${type}"${ids}>${escapeHtml(setTypeLabel(type))}</button>`).join("");
         const rest = Math.max(0, Math.round(Number(set.restSeconds) || 0));
-        const title = superset ? `Раунд ${index + 1}` : label.kind === "warmup" ? "Розминка" : `Підхід ${label.label}`;
+        const title = superset ? `Раунд ${index + 1}` : `Підхід ${label.label}`;
         ux2Sheet(title, `<div class="ux2-sheet-block"><span class="ux2-sheet-label">Тип підходу</span><div class="ux2-chip-row">${types}</div></div>
             ${superset ? "" : `<div class="ux2-sheet-block ux2-stepper-row"><span class="ux2-sheet-label">Відпочинок після нього</span><div class="ux2-stepper"><button class="ux2-round-btn" type="button" data-action="ux2-set-rest" data-delta="-15"${ids} aria-label="Мінус 15 секунд"><i data-lucide="minus"></i></button><strong>${formatRest(rest)}</strong><button class="ux2-round-btn" type="button" data-action="ux2-set-rest" data-delta="15"${ids} aria-label="Плюс 15 секунд"><i data-lucide="plus"></i></button></div></div>`}
             <div class="ux2-menu">
