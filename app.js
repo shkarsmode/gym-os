@@ -1165,7 +1165,7 @@ import {
         autoStartRest: "1",       // "1" = auto-start rest timer on set completion
         useSupersets: "1",        // "1" = offer merging 2–3 exercises into rounds
         keepAwake: "1",           // "1" = hold a screen wake lock while a workout is active
-        newUi: "auto"             // new workout screen: "0" = classic, anything else = new
+        newUi: "auto"             // new workout screen, opt-in: only "1" turns it on
     };
 
     function getPref(key) {
@@ -4101,7 +4101,7 @@ import {
         ]);
 
         const workoutGroup = settingsGroup("Тренування за замовчуванням", [
-            settingsRow("Новий екран тренування", settingsSwitch("newUi", "Новий екран тренування", ux2Enabled()), { hint: "Вимкни, щоб повернути класичний редактор тренування" }),
+            settingsRow("Новий екран тренування", settingsSwitch("newUi", "Новий екран тренування", ux2Enabled()), { hint: "Експериментальний: компактні підходи й велика кнопка «підхід виконано»" }),
             settingsRow("Відпочинок між підходами", `<gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select>`),
             settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
             settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
@@ -11358,13 +11358,14 @@ import {
     // addSet, deleteSet, persistWorkout), so switching views mid-session loses nothing. The
     // pure decisions — next set, numbering, keypad input, deltas — live in lib/session.js.
 
-    // On for everybody since 0.68.7 (it began as an admins-only beta); «Класичний вигляд»
-    // is the way out and is remembered as "0". "auto" — never touched — means on.
+    // Opt-in. It was the default for everybody in 0.68.7; the owner trained on it and asked
+    // for the classic workout screen back (2026-10-15), keeping everything else. Only an
+    // explicit "1" from the Settings switch turns it on now.
     function ux2Enabled() {
         if (!state.database) {
             return false;
         }
-        return getPref("newUi") !== "0";
+        return getPref("newUi") === "1";
     }
 
     /** Your own active workout with its sets loaded — the only thing the session shows. */

@@ -13804,18 +13804,18 @@ body.ux2-kp-open .ux2-dock {
         margin-top: 0;
     }
 
-    html.ux2 .presence-card {
+    .presence-card {
         padding: 12px 0 6px;
     }
 
-    html.ux2 .presence-head {
+    .presence-head {
         margin-bottom: 0;
         padding: 0 14px;
     }
 
     /* Scrolls sideways, with room inside the scroller for the frames' corner
        decorations — the reason the classic strip wraps instead. */
-    html.ux2 .presence-row {
+    .presence-row {
         flex-wrap: nowrap;
         gap: 4px 10px;
         padding: 12px 14px 8px;
@@ -13825,26 +13825,26 @@ body.ux2-kp-open .ux2-dock {
         scrollbar-width: none;
     }
 
-    html.ux2 .presence-row::-webkit-scrollbar {
+    .presence-row::-webkit-scrollbar {
         display: none;
     }
 
-    html.ux2 .presence-person {
+    .presence-person {
         min-width: 70px;
         scroll-snap-align: start;
     }
 
-    html.ux2 .presence-face {
+    .presence-face {
         zoom: 0.72;
     }
 
-    html.ux2 .presence-actions {
+    .presence-actions {
         display: flex;
         gap: 4px;
         margin-top: 2px;
     }
 
-    html.ux2 .presence-divider {
+    .presence-divider {
         min-height: 48px;
     }
 }
