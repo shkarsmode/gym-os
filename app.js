@@ -1165,7 +1165,10 @@ import {
         autoStartRest: "1",       // "1" = auto-start rest timer on set completion
         useSupersets: "1",        // "1" = offer merging 2–3 exercises into rounds
         keepAwake: "1",           // "1" = hold a screen wake lock while a workout is active
-        newUi: "auto"             // new workout screen, opt-in: only "1" turns it on
+        // New workout screen, opt-in ("1"). A fresh key on purpose: the old `newUi` could hold
+        // a "1" left over from testing the beta, which kept that screen on after the classic one
+        // was made the default again — and prefs sync across devices, so it followed you.
+        newWorkoutScreen: "0"
     };
 
     function getPref(key) {
@@ -4101,7 +4104,7 @@ import {
         ]);
 
         const workoutGroup = settingsGroup("Тренування за замовчуванням", [
-            settingsRow("Новий екран тренування", settingsSwitch("newUi", "Новий екран тренування", ux2Enabled()), { hint: "Експериментальний: компактні підходи й велика кнопка «підхід виконано»" }),
+            settingsRow("Новий екран тренування", settingsSwitch("newWorkoutScreen", "Новий екран тренування", ux2Enabled()), { hint: "Експериментальний: компактні підходи й велика кнопка «підхід виконано»" }),
             settingsRow("Відпочинок між підходами", `<gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select>`),
             settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
             settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
@@ -11352,9 +11355,9 @@ import {
     // session shrinking into a mini-player while you look at anything else, and a summary
     // after «Завершити» instead of a toast.
     //
-    // Behind the `newUi` preference. "auto" is on for admins only, so the people who asked
-    // for it test it before anybody else sees it; the Settings switch turns it on or off for
-    // anyone. Every change goes through the same mutations as the classic editor (toggleSet,
+    // Opt-in through the `newWorkoutScreen` preference (Settings → Тренування). It was an
+    // admins-only beta, then briefly everyone's default (0.68.7), and is opt-in again since
+    // the owner chose the classic screen. Every change goes through the same mutations as the classic editor (toggleSet,
     // addSet, deleteSet, persistWorkout), so switching views mid-session loses nothing. The
     // pure decisions — next set, numbering, keypad input, deltas — live in lib/session.js.
 
@@ -11365,7 +11368,7 @@ import {
         if (!state.database) {
             return false;
         }
-        return getPref("newUi") === "1";
+        return getPref("newWorkoutScreen") === "1";
     }
 
     /** Your own active workout with its sets loaded — the only thing the session shows. */
@@ -12376,7 +12379,7 @@ import {
     function ux2SwitchToClassic() {
         closeOverlay();
         ux2CloseKeypad({ silent: true });
-        setPref("newUi", "0");
+        setPref("newWorkoutScreen", "0");
         applyPreferences();
         renderSection();
         renderFloatingTimer();
