@@ -3300,18 +3300,16 @@ import {
             ${actionBar}
             <section class="card workout-head">
                 <div class="card-header">
-                    <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button></div><div class="workout-title-line"><h2>${escapeHtml(workoutLabel(workoutItem))}</h2>${readonly ? `<span class="chip">${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span>` : `<button class="chip chip-button workout-type-chip" type="button" data-action="open-workout-type" data-workout-id="${workoutItem.id}" title="Змінити тип тренування"><span>${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span><i data-lucide="chevron-down"></i></button>`}</div><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
+                    <div style="flex:1;min-width:0;"><div class="tag-row" style="margin-bottom:10px;"><span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span>${readonly ? `<span class="status-badge readonly">Лише перегляд</span>` : ""}${owner.id === currentUser().id ? "" : `<button class="chip chip-button" type="button" data-action="open-user" data-user-id="${owner.id}">${escapeHtml(owner.displayName)}</button>`}</div><div class="workout-title-line"><h2>${escapeHtml(workoutLabel(workoutItem))}</h2>${readonly ? `<span class="chip">${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span>` : `<button class="chip chip-button workout-type-chip" type="button" data-action="open-workout-type" data-workout-id="${workoutItem.id}" title="Змінити тип тренування"><span>${escapeHtml(workoutTypeLabel(workoutItem.workoutType))}</span><i data-lucide="chevron-down"></i></button>`}</div><p class="card-caption">${formatDate(workoutItem.date)} · ${duration(workoutItem)} хв · ${number(workoutVolume(workoutItem))} кг${readonly ? "" : ` · ${completedSets} завершених підходів`}</p></div>
+                    ${readonly ? "" : `<button class="icon-button workout-menu-btn" type="button" data-action="ux2-session-menu" title="Ще" aria-label="Меню тренування: тип, дата, нотатка, кардіо, шаблон, видалення"><i data-lucide="more-horizontal"></i></button>`}
                 </div>
                 ${contextBanner}
-                ${readonly ? "" : `<div class="field-grid two" style="margin-top:14px;"><div class="field"><label>Дата</label><gym-date value="${escapeHtml(workoutItem.date)}"${dateAttrs} data-action="edit-workout-meta" data-field="date" data-workout-id="${workoutItem.id}"></gym-date></div><div class="field"><label>Тривалість</label><gym-select data-action="edit-workout-meta" data-field="durationOverride" data-workout-id="${workoutItem.id}"><option value="auto" ${workoutItem.durationOverride == null ? "selected" : ""}>Авто (${autoDuration(workoutItem)} хв)</option>${[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 210, 240].map((min) => `<option value="${min}" ${Number(workoutItem.durationOverride) === min ? "selected" : ""}>${formatDurationLabel(min)}</option>`).join("")}</gym-select></div></div>`}
-                ${readonly ? "" : `<div class="action-row wrap" style="margin-top:14px;">${workoutItem.exercises.length ? `<button class="button button-secondary compact" type="button" data-action="open-save-template" data-workout-id="${workoutItem.id}"><i data-lucide="bookmark-plus"></i>Зберегти як шаблон</button>` : ""}<button class="button button-danger compact" type="button" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i>Видалити тренування</button></div>`}
-                ${noteField(`workout:${workoutItem.id}`, "Нотатки тренування", "Додати нотатку до тренування", workoutItem.notes, `data-action="update-workout-notes"`, readonly)}
+                ${readonly || workoutItem.notes || state.openNotes.has(`workout:${workoutItem.id}`) ? noteField(`workout:${workoutItem.id}`, "Нотатки тренування", "Додати нотатку до тренування", workoutItem.notes, `data-action="update-workout-notes"`, readonly) : ""}
             </section>
-            ${readonly ? "" : supersetEntryRow(workoutItem)}
             ${workoutItem.exercises.length ? `<div class="workout-exercise-list"${readonly ? "" : ` data-reorder="1" data-workout-id="${workoutItem.id}"`}>${workoutBlocks(workoutItem.exercises).map((block, blockIndex) => block.kind === "superset"
                 ? supersetBlockEditor(workoutItem, block, readonly)
                 : workoutExerciseEditor(workoutItem, block.exercise, readonly, blockIndex === 0)).join("")}</div>` : `${readonly ? "" : repeatSuggestionCard(workoutItem)}${emptyInline("Вправ ще немає", "Натисни «Вправа», щоб зібрати сесію.")}`}
-            ${cardioBlock(workoutItem, readonly)}
+            ${(workoutItem.cardioSessions || []).length ? cardioBlock(workoutItem, readonly) : ""}
         `;
     }
 
@@ -3405,11 +3403,20 @@ import {
         // For a session being watched the owner's own previous performance comes from the
         // server — the client cannot compute it, because peers arrive as summaries with
         // no sets, which is exactly why historyUserId is null for anybody but you.
+        // Your own last time is the last FINISHED session (latestDoneSets) — the same source
+        // the chips fill from and new sets are pre-filled from.
         const lastSets = watchedPrevious(workoutItem, workoutExercise.exerciseId)
-            || lastExerciseSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
+            || latestDoneSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
+        const editable = !readonly && workoutItem.userId === currentUser().id;
         const lastNote = lastExerciseNote(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const lastResults = lastSets && lastSets.sets.length
-            ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => `<span class="chip" data-set-index="${setIndex}">${isTimedSet(set) ? `${number(set.weight) ? `${number(set.weight)}×` : ""}${formatDuration(set.durationSeconds)}` : `${number(set.weight)}×${set.repetitions}`}</span>`).join("")}</div></div>`
+            ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => {
+                const text = isTimedSet(set) ? `${number(set.weight) ? `${number(set.weight)}×` : ""}${formatDuration(set.durationSeconds)}` : `${number(set.weight)}×${set.repetitions}`;
+                // Tap a chip and that set takes last time's numbers.
+                return editable
+                    ? `<button class="chip last-chip" type="button" data-action="fill-from-last" data-workout-exercise-id="${workoutExercise.id}" data-set-index="${setIndex}" title="Заповнити підхід ${setIndex + 1} як минулого разу">${text}</button>`
+                    : `<span class="chip" data-set-index="${setIndex}">${text}</span>`;
+            }).join("")}</div></div>`
             : "";
         const previousNote = lastNote
             ? `<div class="previous-note"><span class="previous-note-label"><i data-lucide="sticky-note"></i>Остання нотатка · ${formatDate(lastNote.date)}</span><p>${escapeHtml(lastNote.notes)}</p></div>`
@@ -3434,7 +3441,11 @@ import {
         // at once, because mixing seconds and reps inside one exercise is almost always
         // a mistake rather than an intent.
         const blockTimed = (workoutExercise.sets || []).some(isTimedSet);
-        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div><div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div></div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise))).join("") : `<p class="card-caption set-empty">Підходів ще немає. Додай перший кнопкою «+» вище.</p>`}</div><div class="note-slot">${previousNote}${noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly)}</div></div></div></article>`;
+        return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header${editable ? " is-compact" : ""}"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div>${editable
+            ? `<div class="inline-actions we-actions-compact">${collapseToggle}<button class="icon-button we-menu-btn" type="button" title="Дії з вправою" aria-label="Дії з вправою: фокус, заміна, час, нотатка, відпочинок, видалення" data-action="ux2-ex-menu" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="more-vertical"></i></button></div>`
+            : `<div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div>`}</div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => (editable
+                ? setRowV2(workoutExercise, set, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise))
+                : setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise)))).join("") : `<p class="card-caption set-empty">${editable ? "Підходів ще немає." : "Підходів ще немає. Додай перший кнопкою «+» вище."}</p>`}</div>${editable ? `<button class="set-add" type="button" data-action="ux2-add-set" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="plus"></i>Підхід</button>` : ""}<div class="note-slot">${previousNote}${!editable || workoutExercise.notes || state.openNotes.has(`exercise:${workoutExercise.id}`) ? noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly) : ""}</div></div></div></article>`;
     }
 
     // Small "+N кг" / "−N кг" tag showing the weight change from the previous set.
@@ -3511,6 +3522,72 @@ import {
                 <label class="set-field"><span class="set-field-label">Відпочинок, с</span><input type="number" inputmode="numeric" step="15" min="0" value="${set.restSeconds}" data-action="set-field" ${target} data-field="restSeconds" ${lock}></label>
             </div>
         </div>`;
+    }
+
+    function setRowV2(workoutExercise, set, index, showSetHint, prevWeight, bodyweight = false) {
+        const target = `data-workout-exercise-id="${workoutExercise.id}" data-set-id="${set.id}"`;
+        const hintOn = Boolean(showSetHint) && index === 1 && !set.isCompleted;
+        const hintChip = hintOn
+            ? `<div class="setdone-hint" role="status"><span>Тисни кружечок, щоб завершити</span><span class="setdone-hint-caret" aria-hidden="true"></span></div>`
+            : "";
+        const timed = isTimedSet(set);
+        const measureField = timed ? "durationSeconds" : "repetitions";
+        const rest = Math.max(0, Math.round(Number(set.restSeconds) || 0));
+        const stepper = (field, value, inputMode, step) => `<div class="set-stepper">
+                <button class="set-step" type="button" data-action="set-step" data-field="${field}" data-dir="-1" ${target} aria-label="Менше">−</button>
+                <input type="number" inputmode="${inputMode}" step="${step}" min="0" value="${value}" data-action="set-field" ${target} data-field="${field}">
+                <button class="set-step" type="button" data-action="set-step" data-field="${field}" data-dir="1" ${target} aria-label="Більше">+</button>
+            </div>`;
+        return `<div class="set-row v2 kind-${escapeHtml(set.type || "working")}${set.isCompleted ? " completed" : ""}${hintOn ? " has-hint" : ""}">
+            <div class="set-row-head">${hintChip}
+                <span class="set-index">${index}</span>
+                <button class="set-type-chip" type="button" data-action="ux2-set-menu" ${target} aria-label="Тип підходу: ${escapeHtml(setTypeLabel(set.type))}. Змінити або видалити"><span>${escapeHtml(setTypeLabel(set.type))}</span><i data-lucide="chevron-down"></i></button>
+                <button class="set-rest-chip" type="button" data-action="ux2-rest-line" ${target} aria-label="Відпочинок після підходу: ${formatRest(rest)}. Змінити"><i data-lucide="timer"></i><span>${formatRest(rest)}</span></button>
+                <div class="set-row-actions">
+                    <button class="icon-button set-done ${set.isCompleted ? "is-done" : ""}${hintOn ? " hinting" : ""}" type="button" title="${set.isCompleted ? "Виконано" : "Позначити виконаним"}" data-action="toggle-set" ${target}><i data-lucide="${set.isCompleted ? "check-circle-2" : "circle"}"></i></button>
+                </div>
+            </div>
+            <div class="set-fields v2${timed ? " is-timed" : ""}">
+                <div class="set-field" title="${timed || bodyweight ? "Вага понад власну — 0, якщо без обтяження" : "Робоча вага"}"><span class="set-field-label">${weightFieldLabel({ timed, bodyweight })}${weightDeltaBadge(prevWeight, set.weight)}</span>${stepper("weight", set.weight, "decimal", "0.5")}</div>
+                <div class="set-field"><span class="set-field-label">${timed ? "Час, с" : "Повтори"}</span>${stepper(measureField, timed ? set.durationSeconds : set.repetitions, "numeric", timed ? "5" : "1")}</div>
+            </div>
+        </div>`;
+    }
+
+    /** −/+ on a set field: by the plate step for weight, 1 rep, 5 s — straight into the input. */
+    function stepSetField(workoutExerciseId, setId, field, direction) {
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        const set = workoutExercise ? workoutExercise.sets.find((item) => item.id === setId) : null;
+        if (!set || !["weight", "repetitions", "durationSeconds"].includes(field)) {
+            return;
+        }
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const value = stepValue(Number(set[field]) || 0, direction * fieldStep(field, exercise.equipment), field);
+        set[field] = value;
+        schedulePersistWorkout(editWorkout());
+        const input = document.querySelector(`input[data-set-id="${CSS.escape(setId)}"][data-field="${field}"]`);
+        if (input) {
+            input.value = String(value);
+            if (field === "weight") {
+                liveUpdateWeightDeltas(input);
+            }
+        }
+    }
+
+    /** A «Минулого разу» chip fills its set; the chip one past the last set adds that set. */
+    async function fillSetFromLast(workoutExerciseId, index) {
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        if (!workoutExercise || index < 0) {
+            return;
+        }
+        if (index === workoutExercise.sets.length) {
+            await addSet(workoutExerciseId);
+        }
+        const set = workoutExercise.sets[index];
+        if (!set) {
+            return;
+        }
+        ux2ApplyLast(workoutExerciseId, set.id);
     }
 
     function calendar() {
@@ -5380,6 +5457,8 @@ import {
             "ux2-ex-info": () => openExercise(actionElement.dataset.exerciseId),
             "ux2-ex-remove": () => { closeOverlay(); return removeWorkoutExercise(actionElement.dataset.workoutExerciseId); },
             "ux2-fill-last": () => ux2FillFromLast(actionElement.dataset.workoutExerciseId || null),
+            "set-step": () => stepSetField(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field, Number(actionElement.dataset.dir) || 0),
+            "fill-from-last": () => fillSetFromLast(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.setIndex)),
             "ux2-reorder": () => ux2OpenReorderSheet(actionElement.dataset.workoutExerciseId || null),
             "ux2-reorder-move": () => ux2MoveBlockBy(actionElement.dataset.key, Number(actionElement.dataset.dir) || 0),
             "ux2-ex-rest": () => ux2ExerciseRest(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.seconds) || 0),
@@ -5587,7 +5666,7 @@ import {
     function actionNeedsLoader(action) {
         // The new workout screen paints every result itself, immediately: a spinner swapped
         // into a 46px tick or into the big button would read as lag, not progress.
-        if (action.startsWith("ux2-") || action.startsWith("pcal-")) {
+        if (action.startsWith("ux2-") || action.startsWith("pcal-") || action === "set-step" || action === "fill-from-last") {
             return false;
         }
         return !new Set([
@@ -12307,7 +12386,7 @@ import {
         const last = workoutExercise.supersetGroupId ? null : ux2LastSets(editWorkout(), workoutExercise.exerciseId);
         ux2Sheet(exercise.name, `<div class="ux2-menu">
                 ${last ? ux2MenuItem("ux2-fill-last", "history", "Як минулого разу", id, { hint: last.sets.map((set) => ux2SetText(set)).join(" · ") }) : ""}
-                ${ux2MenuItem("ux2-ex-focus", "crosshair", "Фокус на цій вправі", id, { hint: "Один підхід на весь екран" })}
+                ${editWorkout()?.status === "active" ? ux2MenuItem("ux2-ex-focus", "crosshair", "Фокус на цій вправі", id, { hint: "Один підхід на весь екран" }) : ""}
                 ${ux2MenuItem("ux2-ex-replace", "repeat", "Замінити вправу", id)}
                 ${workoutBlocks(editWorkout().exercises).length > 1 ? ux2MenuItem("ux2-reorder", "arrow-up-down", "Перемістити", id, { hint: "Змінити порядок вправ" }) : ""}
                 ${ux2MenuItem("ux2-ex-timed", timed ? "repeat-2" : "timer", timed ? "Рахувати повтори" : "Рахувати час", id, { hint: timed ? "Замість секунд" : "Планка, віс, утримання" })}
@@ -12330,6 +12409,7 @@ import {
             set.restSeconds = seconds;
         });
         schedulePersistWorkout(editWorkout());
+        renderSection(); // the rest chips / lines under the sheet show the new value
         ux2OpenExerciseMenu(workoutExerciseId);
         showSyncIndicator("success", `Відпочинок ${formatRest(seconds)}`);
     }
@@ -12342,9 +12422,11 @@ import {
         const id = ` data-workout-id="${workoutItem.id}"`;
         const progress = sessionProgress(workoutItem.exercises);
         const durationValue = workoutItem.durationOverride == null ? `авто · ${autoDuration(workoutItem)} хв` : formatDurationLabel(Number(workoutItem.durationOverride));
-        ux2Sheet(ux2Title(workoutItem), `<div class="ux2-menu">
+        // The classic editor has «Завершити» in its own action bar and is the classic view.
+        const inSession = document.body.classList.contains("ux2-in-session");
+        ux2Sheet(ux2Title(workoutItem), `${inSession ? `<div class="ux2-menu">
                 ${ux2MenuItem("ux2-finish", "flag", "Завершити тренування", "", { primary: true, hint: progress.total ? `${progress.done} з ${progress.total} ${pluralUk(progress.total, "підходу", "підходів", "підходів")} виконано` : "" })}
-            </div>
+            </div>` : ""}
             <div class="ux2-menu">
                 ${workoutItem.exercises.length ? ux2MenuItem("ux2-fill-last", "history", "Усе як минулого разу", "", { hint: "Невиконані підходи — останніми результатами" }) : ""}
                 ${workoutBlocks(workoutItem.exercises).length > 1 ? ux2MenuItem("ux2-reorder", "arrow-up-down", "Порядок вправ", "", { hint: "Перетягнути або стрілками" }) : ""}
@@ -12356,7 +12438,7 @@ import {
                 ${workoutItem.exercises.length ? ux2MenuItem("ux2-template", "bookmark-plus", "Зберегти як шаблон", id) : ""}
             </div>
             <div class="ux2-menu">
-                ${ux2MenuItem("ux2-classic", "layout-list", "Класичний вигляд", "", { hint: "Повернути старий екран тренування" })}
+                ${inSession ? ux2MenuItem("ux2-classic", "layout-list", "Класичний вигляд", "", { hint: "Повернути старий екран тренування" }) : ""}
                 ${ux2MenuItem("ux2-delete-workout", "trash-2", "Видалити тренування", id, { danger: true })}
             </div>`, { caption: `${workoutLabel(workoutItem)} · ${formatDate(workoutItem.date)}` });
     }

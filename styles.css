@@ -14967,3 +14967,224 @@ body.ux2-kp-open .ux2-dock {
         inset: -12px -6px;
     }
 }
+
+/* =====================================================================================
+   Classic workout editor, quicker (0.69.0)
+   The owner's own screen — same cards, set boxes, «Минулого разу» strip, ✓ circles —
+   with the friction taken out: the workout card's date / duration / template / delete
+   and each exercise's five icons moved into bottom sheets (⋯ and ⋮), weight and reps
+   got −/+ by the plate step, rest is a chip in the set's head instead of a third input,
+   delete moved away from ✓ into the set's sheet, and a «Минулого разу» chip fills its set.
+   ===================================================================================== */
+
+/* ⋯ on the workout card, ⋮ on each exercise — a header row even on a phone. */
+.workout-head > .card-header {
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+.workout-menu-btn,
+.we-menu-btn {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+}
+
+.exercise-header.is-compact {
+    flex-direction: row;
+    align-items: center;
+}
+
+.we-actions-compact {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+}
+
+/* «Минулого разу» chips are buttons now: a tap fills that set. */
+.last-results-chips .last-chip {
+    font: inherit;
+    font-size: 11.5px;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.last-results-chips .last-chip:active {
+    border-color: var(--color-accent-border);
+    color: var(--color-accent-strong);
+    background: var(--color-accent-dim);
+}
+
+@media (max-width: 920px) {
+    .last-results-chips .last-chip {
+        min-height: 34px;
+        padding: 6px 11px;
+        font-size: 13px;
+    }
+}
+
+/* ---- Set row v2 ---------------------------------------------------------------- */
+.set-row.v2 .set-row-head {
+    gap: 8px;
+}
+
+.set-row.v2.kind-warmup:not(.completed) .set-index {
+    border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
+    color: var(--color-warning);
+}
+
+.set-type-chip,
+.set-rest-chip {
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.set-type-chip {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 0 12px;
+    color: var(--color-text);
+    font-size: 14px;
+}
+
+.set-type-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.set-type-chip svg {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    color: var(--color-faint);
+}
+
+.set-rest-chip {
+    flex: 0 0 auto;
+    gap: 5px;
+    padding: 0 10px;
+    color: var(--color-muted);
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.set-rest-chip svg {
+    width: 15px;
+    height: 15px;
+}
+
+.set-row.v2 .set-row-actions .icon-button {
+    width: 44px;
+    height: 44px;
+}
+
+/* the coach-mark's caret: ✓ is the last control in the head now (44 / 2) */
+.set-row.v2 .setdone-hint-caret {
+    right: 22px;
+}
+
+.set-fields.v2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.set-stepper {
+    height: 46px;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+    align-items: stretch;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+}
+
+.set-stepper:focus-within {
+    border-color: var(--color-accent-border);
+}
+
+.set-step {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-muted);
+    font: 600 20px/1 var(--font-body);
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.set-step:active {
+    background: var(--color-elevated);
+    color: var(--color-text);
+}
+
+.set-row.v2 .set-field input {
+    height: 100%;
+    min-width: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 18px;
+    font-weight: 700;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.set-row.v2 .set-field input::-webkit-outer-spin-button,
+.set-row.v2 .set-field input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.set-row.v2.completed .set-stepper {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+}
+
+.set-add {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.set-add svg {
+    width: 16px;
+    height: 16px;
+}
+
+@media (max-width: 380px) {
+    .set-rest-chip {
+        padding: 0 8px;
+    }
+
+    .set-stepper {
+        grid-template-columns: 34px minmax(0, 1fr) 34px;
+    }
+}
