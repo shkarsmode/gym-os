@@ -20,7 +20,7 @@ import {
     keypadPress, draftNumber, numberDraft, digitsFromDuration, durationFromDigits, durationDigitsPress, durationDigitsLabel,
     percentChange, sessionLengthLabel, suggestExercises
 } from "./lib/session.js";
-import { planWarmup, isWarmupEligible, warmupPrefill, muscleAlreadyWarm, warmupStillUseful, applyWarmupSets } from "./lib/warmup.js";
+import { planWarmup, isWarmupEligible, warmupPrefill, muscleAlreadyWarm, warmupStillUseful, applyWarmupSets, minWorkingRest } from "./lib/warmup.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
@@ -3599,6 +3599,7 @@ import {
                 liveUpdateWeightDeltas(input);
             }
         }
+        refreshWarmupRow(workoutExerciseId);
     }
 
     /** A «Минулого разу» chip fills its set; the chip one past the last set adds that set. */
@@ -3673,6 +3674,34 @@ import {
         </button>`;
     }
 
+    /**
+     * Repaints one exercise's warm-up row in place. A set's numbers change without a
+     * re-render (−/+ and typing keep the caret and the scroll), so without this the row
+     * kept saying «до 115 кг» after the working set had been raised to 120.
+     */
+    function refreshWarmupRow(workoutExerciseId) {
+        const card = document.querySelector(`.workout-exercise[data-workout-exercise-id="${CSS.escape(String(workoutExerciseId))}"]`);
+        const workoutItem = editWorkout();
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        if (!card || !workoutItem || !workoutExercise || workoutItem.userId !== currentUser().id) {
+            return;
+        }
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const lastSets = watchedPrevious(workoutItem, workoutExercise.exerciseId) || latestDoneSets(workoutItem.userId, workoutExercise.exerciseId, workoutItem.id);
+        const html = warmupInlineRow(workoutItem, workoutExercise, exercise, lastSets);
+        const current = card.querySelector(".warmup-cta");
+        if (current) {
+            if (html) {
+                current.outerHTML = html;
+            } else {
+                current.remove();
+            }
+        } else if (html) {
+            card.querySelector(".set-list")?.insertAdjacentHTML("beforebegin", html);
+        }
+        icons();
+    }
+
     function openWarmupSheet(workoutExerciseId) {
         const workoutItem = editWorkout();
         const workoutExercise = editWorkoutExercise(workoutExerciseId);
@@ -3707,7 +3736,11 @@ import {
         const done = workoutExercise.sets.filter((set) => set.type === "warmup" && set.isCompleted);
         const covered = done.length ? Math.max(...done.map((set) => Number(set.weight) || 0)) : -Infinity;
         const ready = warmupDraft.reps > 0 && (bodyweight || warmupDraft.weight > 0);
+        // What the working set will rest: its own rest, raised to the minimum for a big lift.
+        const firstWork = workoutExercise.sets.find((set) => set.type !== "warmup" && !set.isCompleted);
+        const workRest = Math.max(Number(firstWork ? firstWork.restSeconds : getPref("defaultRest")) || 90, minWorkingRest(exercise));
         return {
+            workRest,
             workoutExercise,
             exercise,
             bodyweight,
@@ -3734,11 +3767,11 @@ import {
                 <span class="warmup-rest">${rest ? `<i data-lucide="timer"></i>${formatRest(rest)}` : ""}</span>
             </li>`;
         const rows = draft.shown.map((set, index) => row(draft.done + index + 1, warmupLoadText(set.weight, draft.bodyweight), set.reps, set.note || (set.pct ? `${set.pct}%` : ""), set.restSeconds)).join("");
-        const work = row(draft.done + draft.shown.length + 1, warmupLoadText(warmupDraft.weight, draft.bodyweight), warmupDraft.reps, "робочий", 0, true);
+        const work = row(draft.done + draft.shown.length + 1, warmupLoadText(warmupDraft.weight, draft.bodyweight), warmupDraft.reps, "робочий", draft.workRest, true);
         const last = draft.shown.at(-1);
         const why = last.pct
-            ? `Останній підхід розминки — ${last.pct}% робочої ваги: мʼязи готові, а сил на робочий не меншає. Кожен підхід легкий — далеко від відмови.`
-            : "Розминка легка — далеко від відмови, щоб сил на робочий не меншало.";
+            ? `Останній підхід розминки — ${last.pct}% робочої ваги, після нього ${formatRest(last.restSeconds)} відпочинку: мʼязи готові, а втома встигає зійти. Кожен підхід легкий — далеко від відмови.`
+            : `Розминка легка, далеко від відмови, а перед робочим — ${formatRest(last.restSeconds)} відпочинку.`;
         return `<ol class="warmup-list">${rows}${work}</ol><p class="warmup-why">${escapeHtml(why)}</p>`;
     }
 
@@ -3848,7 +3881,8 @@ import {
         const next = applyWarmupSets(workoutExercise.sets, draft.plan, {
             weight: warmupDraft.weight,
             reps: warmupDraft.reps,
-            restSeconds: Number(getPref("defaultRest")) || 90
+            restSeconds: Number(getPref("defaultRest")) || 90,
+            minRest: minWorkingRest(draft.exercise)
         }, (type, weight, reps, restSeconds) => createSet(type, weight, reps, null, restSeconds, false));
         const added = next.filter((set) => !before.has(set) && set.type === "warmup").length;
         workoutExercise.sets.splice(0, workoutExercise.sets.length, ...next);
@@ -7729,6 +7763,9 @@ import {
         renderSection();
     }
 
+    // Sets the person said «no» to closing along with a later one (see toggleSet).
+    const skippedEarlierSets = new Set();
+
     async function toggleSet(workoutExerciseId, setId) {
         const workoutExercise = editWorkoutExercise(workoutExerciseId);
         const set = workoutExercise ? workoutExercise.sets.find((item) => item.id === setId) : null;
@@ -7750,23 +7787,37 @@ import {
                 startTimer(roundRest);
             }
         }
-        // Ticking the LAST set while earlier data-bearing ones aren't done → offer to
-        // mark them all (the common "forgot to tap each circle" case). Never inside a
-        // superset: earlier rounds there are deliberately left open until their own turn.
+        // Ticking a set while EARLIER ones that carry numbers are still open → offer to
+        // close them too, right away (the "did the warm-ups, forgot to tap them" case).
+        // It used to ask only on the last set, by which time the timer and the session
+        // clock had already run on the wrong picture. A «no» is remembered for those sets,
+        // so one skipped on purpose is not brought up again with every later tick. Never
+        // inside a superset: earlier rounds there stay open until their own turn.
         if (completing && !workoutExercise.supersetGroupId) {
             const idx = workoutExercise.sets.findIndex((item) => item.id === setId);
-            const earlierPending = workoutExercise.sets.slice(0, idx).filter((item) => !item.isCompleted && (Number(item.weight) > 0 || Number(item.repetitions) > 0));
-            if (idx === workoutExercise.sets.length - 1 && earlierPending.length > 0) {
+            const earlierPending = workoutExercise.sets.slice(0, idx).filter((item) => !item.isCompleted
+                && !skippedEarlierSets.has(item.id)
+                && (Number(item.weight) > 0 || Number(item.repetitions) > 0 || Number(item.durationSeconds) > 0));
+            if (earlierPending.length > 0) {
                 await persistWorkout(editWorkout());
                 renderSection();
-                const choice = await choiceDialog(`Познач ще ${earlierPending.length} попередніх підходів виконаними?`, {
-                    title: "Позначити всі виконаними?",
+                const count = earlierPending.length;
+                const numbers = earlierPending.map((item) => workoutExercise.sets.indexOf(item) + 1).join(", ");
+                const choice = await choiceDialog(count === 1
+                    ? `Підхід ${numbers} ще не позначений. Позначити його теж виконаним?`
+                    : `Підходи ${numbers} ще не позначені. Позначити їх теж виконаними?`, {
+                    title: count === 1 ? "Закрити попередній підхід?" : "Закрити попередні підходи?",
                     closable: true,
-                    choices: [{ label: "Так, усі", value: "all", variant: "primary" }]
+                    choices: [
+                        { label: count === 1 ? "Так, позначити" : "Так, усі", value: "all", variant: "primary" },
+                        { label: "Ні, лише цей", value: "one" }
+                    ]
                 });
                 if (choice === "all") {
                     earlierPending.forEach((item) => { item.isCompleted = true; });
                     touchGymClock(editWorkout());
+                } else {
+                    earlierPending.forEach((item) => skippedEarlierSets.add(item.id));
                 }
             }
         }
@@ -7843,6 +7894,9 @@ import {
         }
         set[field] = ["weight", "repetitions", "rpe", "restSeconds", "durationSeconds"].includes(field) ? Number(value) || 0 : value;
         schedulePersistWorkout(editWorkout());
+        if (["weight", "repetitions", "durationSeconds", "type"].includes(field)) {
+            refreshWarmupRow(workoutExerciseId);
+        }
     }
 
     async function updateWorkoutMeta(workoutId, field, value) {
