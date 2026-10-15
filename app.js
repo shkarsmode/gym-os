@@ -2,23 +2,21 @@
 import "./components/datepicker.js";
 import { muscleIcons } from "./lib/muscle-icons.js";
 import { escapeHtml, number, dateInput, formatDate, shortDate, seconds, splitCsv, unique, imageUrl } from "./lib/format.js";
-import { sectionItems, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, genderLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
+import { sectionItems, rankedExerciseNames, rankOrder, statusLabels, setTypeLabels, workoutTypeLabels, dataModeLabels, muscles, patterns, equipment } from "./lib/constants.js";
 import { APP_VERSION, CHANGELOG, changelogTagLabels, changelogTagIcons } from "./lib/changelog.js";
 import { levelForXp, XP_REWARDS, LEVEL_COUNT } from "./lib/levels.js";
 import { frameForLevel, nextFrameForLevel, FRAME_TIERS, FRAME_TIER_SIZE, FRAME_TIER_COUNT } from "./lib/frames.js";
 // evaluateAchievements is no longer called here — the kernel owns that. ACHIEVEMENTS
 // is still needed for rendering the full badge list, including locked ones.
 import { ACHIEVEMENTS } from "./lib/achievements.js";
-import { isTimedSet, formatDuration, setLoadText, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
-import { effectiveWorkoutStatus, hasRecordedWork, workoutNeedsDetail } from "./lib/workout-status.js";
+import { isTimedSet, formatDuration, describeSet, toTimedSet, toRepSet, timedTotals, weightFieldLabel, isBodyweightExercise, DEFAULT_HOLD_SECONDS } from "./lib/set-format.js";
+import { effectiveWorkoutStatus, workoutNeedsDetail } from "./lib/workout-status.js";
 import { SUPERSET_MIN_MEMBERS, SUPERSET_MAX_MEMBERS, SUPERSET_DEFAULT_ROUNDS, SUPERSET_DEFAULT_REST, positionLabel, workoutBlocks, roundCount, roundSets, isRoundComplete, currentRoundIndex, nextMemberInRound, missingSetCount, mergeProblem, roundSummary } from "./lib/superset.js";
-import { ONBOARDING_STEPS, ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
+import { ONBOARDING_QUESTIONS, missingOnboarding, needsOnboarding, validBirthDate, ageFromBirthDate, birthDateBounds, stepBlocker } from "./lib/onboarding.js";
 import { timeAgo, notificationBucket, threadComments, urlBase64ToUint8Array, NOTIFICATION_ICONS, REPORT_REASON_LABELS, FEED_SCOPE_TABS, PUSH_CATEGORIES, REPORT_TARGET_LABELS } from "./lib/feed-ui.js";
-import { gymClockState, nextGymClockMarks, formatClock, formatDurationLabel, timeOfDay } from "./lib/gym-clock.js";
+import { gymClockState, nextGymClockMarks, formatClock, formatDurationLabel } from "./lib/gym-clock.js";
 import {
-    FIELD_LIMITS, sessionSetLabels, nextSessionSet, sessionProgress, pairedLast, previousSetDelta, fieldStep, stepValue,
-    keypadPress, draftNumber, numberDraft, digitsFromDuration, durationFromDigits, durationDigitsPress, durationDigitsLabel,
-    percentChange, sessionLengthLabel, suggestExercises
+    FIELD_LIMITS, sessionSetLabels, sessionProgress, pairedLast, fieldStep, stepValue, numberDraft, suggestExercises
 } from "./lib/session.js";
 import { liveSetRecords } from "./lib/live-records.js";
 import { planWarmup, isWarmupEligible, warmupPrefill, muscleAlreadyWarm, warmupStillUseful, applyWarmupSets, minWorkingRest } from "./lib/warmup.js";
@@ -27,12 +25,7 @@ import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseS
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
 // See lib/scoring.js for the two order/timezone hazards documented at the top.
 import {
-    oneRepMax, workoutVolume, exerciseVolume, exerciseOneRepMax, topMap, exerciseUsageMap,
-    muscleSetMap as kernelMuscleSetMap, streak as kernelStreak,
-    duration as kernelDuration, autoDuration as kernelAutoDuration,
-    recordsFor as kernelRecordsFor, userStats as kernelUserStats, teamStats as kernelTeamStats,
-    userAchievements as kernelUserAchievements, xpEvents as kernelXpEvents,
-    userXp as kernelUserXp, userLevel as kernelUserLevel, dayDiff as kernelDayDiff
+    oneRepMax, workoutVolume, exerciseVolume, exerciseOneRepMax, topMap, exerciseUsageMap, muscleSetMap as kernelMuscleSetMap, streak as kernelStreak, duration as kernelDuration, autoDuration as kernelAutoDuration, recordsFor as kernelRecordsFor, userStats as kernelUserStats, teamStats as kernelTeamStats, userAchievements as kernelUserAchievements, xpEvents as kernelXpEvents, dayDiff as kernelDayDiff
 } from "./lib/scoring.js";
 
 (() => {
@@ -1192,10 +1185,6 @@ import {
         autoStartRest: "1",       // "1" = auto-start rest timer on set completion
         useSupersets: "1",        // "1" = offer merging 2–3 exercises into rounds
         keepAwake: "1",           // "1" = hold a screen wake lock while a workout is active
-        // New workout screen, opt-in ("1"). A fresh key on purpose: the old `newUi` could hold
-        // a "1" left over from testing the beta, which kept that screen on after the classic one
-        // was made the default again — and prefs sync across devices, so it followed you.
-        newWorkoutScreen: "0"
     };
 
     function getPref(key) {
@@ -1814,10 +1803,6 @@ import {
             .filter((group) => group.items.length);
     }
 
-    function sidebarNavItems() {
-        return sidebarNavGroups().flatMap((group) => group.items);
-    }
-
     function renderShell() {
         renderImpersonationBar();
         renderNavigation("sidebarNavigation", sidebarNavGroups());
@@ -2075,12 +2060,6 @@ import {
      */
     function stickyTopOffset(node) {
         let offset = topbarHeight();
-        // The session screen's own header is the sticky layer there (on a phone the topbar
-        // is hidden altogether).
-        const sessionHead = document.querySelector(".ux2-head");
-        if (sessionHead) {
-            offset = Math.max(offset, sessionHead.getBoundingClientRect().bottom);
-        }
         const bar = document.querySelector(".workout-actionbar");
         if (bar) {
             offset += bar.offsetHeight;
@@ -2206,13 +2185,6 @@ import {
         if ((state.section === "admin" || state.section === "moderation" || state.section === "aistats") && !isAdmin()) {
             state.section = defaultSection();
         }
-        // workout() puts it back when it draws the session; every other screen must not
-        // inherit the session's full-screen chrome.
-        document.body.classList.remove("ux2-in-session");
-        document.documentElement.classList.toggle("ux2", ux2Enabled());
-        if (state.section !== "workout") {
-            ux2ReturnSection = state.section;
-        }
         renderShell();
         // Detail routes ("post", "user") are reachable but are not nav entries, so they
         // have no sectionItems row — without this they would inherit "Панель".
@@ -2282,18 +2254,6 @@ import {
         }
         updateTopbarContext();
         syncGymClockTicker();
-        renderUx2Mini();
-        ux2AfterRender();
-        syncUx2Clock();
-        syncUx2Timer();
-        // Hand the running timer to (or back from) the dock / mini-player — only when that
-        // ownership actually changes, so the classic floating timer is not rebuilt on every
-        // tap.
-        const ux2OwnsNow = ux2OwnsTimer();
-        if (state.timer.running && ux2OwnsNow !== renderSection.ux2OwnedTimer) {
-            renderFloatingTimer();
-        }
-        renderSection.ux2OwnedTimer = ux2OwnsNow;
 
         if (pendingNoteFocus) {
             const key = pendingNoteFocus;
@@ -2358,10 +2318,6 @@ import {
         const hour = new Date().getHours();
         const hello = hour < 5 ? "Доброї ночі" : hour < 12 ? "Доброго ранку" : hour < 18 ? "Доброго дня" : "Доброго вечора";
         if (active) {
-            // On the new screen the session is already one tap away in the mini-player.
-            if (ux2Enabled()) {
-                return "";
-            }
             const progress = sessionProgress(active.exercises || []);
             return `<section class="card span-12 today-hero"><div class="today-hero-text"><span class="today-hello">${hello}, ${name}</span><strong>Тренування йде</strong><span>${escapeHtml(ux2Title(active))}${progress.total ? ` · ${progress.done} з ${progress.total} підходів` : ""}</span></div><div class="today-hero-actions"><button class="button button-primary" type="button" data-action="edit-workout" data-workout-id="${active.id}"><i data-lucide="activity"></i>Продовжити тренування</button></div></section>`;
         }
@@ -2477,17 +2433,6 @@ import {
 
     function workout() {
         const workoutItem = editWorkout();
-        // Your own active session gets the new screen when it is switched on; everything
-        // else — a finished session, a planned one, somebody else's — stays the classic
-        // editor, which is built for reviewing and correcting rather than doing.
-        if (ux2ShowsSession(workoutItem)) {
-            document.body.classList.add("ux2-in-session");
-            content(ux2Session(workoutItem));
-            renderPartnerPanel();
-            loadPartnerState().then(renderPartnerPanel);
-            loadPresence();
-            return;
-        }
         content(`<div class="workout-stack"><div id="partnerPanel"></div>${workoutItem ? workoutEditor(workoutItem) : workoutStarter()}</div>`);
         // Painted from whatever is already held, then refreshed in the background, so
         // switching to this screen never flashes an empty panel.
@@ -4508,7 +4453,6 @@ import {
         ]);
 
         const workoutGroup = settingsGroup("Тренування за замовчуванням", [
-            settingsRow("Новий екран тренування", settingsSwitch("newWorkoutScreen", "Новий екран тренування", ux2Enabled()), { hint: "Експериментальний: компактні підходи й велика кнопка «підхід виконано»" }),
             settingsRow("Відпочинок між підходами", `<gym-select data-action="set-pref-select" data-pref="defaultRest">${restOptions}</gym-select>`),
             settingsRow("Тип тренування", `<gym-select data-action="set-pref-select" data-pref="defaultWorkoutType">${workoutTypeOptions}</gym-select>`),
             settingsRow("Тип першого підходу", `<gym-select data-action="set-pref-select" data-pref="defaultSetType">${setTypeOptions}</gym-select>`),
@@ -4729,10 +4673,6 @@ import {
         document.addEventListener("click", handleClick);
         document.addEventListener("change", handleChange);
         document.addEventListener("input", handleInput);
-        // The new workout screen's keypad: capture phase, so a tap elsewhere closes it before
-        // that tap's own action runs, and its keys win over the global Escape handling.
-        document.addEventListener("click", ux2KeypadOutside, true);
-        document.addEventListener("keydown", ux2KeypadKeydown, true);
         /*
          * The «Минулого разу» strip steps aside while a set field is being edited.
          *
@@ -5113,8 +5053,7 @@ import {
         // Screens where a pull is never a refresh.
         const blocked = () => scrollLocked
             || state.section === "workout"
-            || Boolean(state.focus)
-            || ux2Pad.open;
+            || Boolean(state.focus);
 
         // PTR must NOT hijack a drag that belongs to an inner scrollable region
         // (a list, a portaled dropdown panel, any overflow:auto box). If the touch
@@ -5181,7 +5120,7 @@ import {
             if (refreshing || event.touches.length !== 1 || blocked()) {
                 return;
             }
-            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .focus-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, .we-drag-handle, .ux2-kp, .ux2-mini, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
+            if (event.target.closest(".toast, .drawer-layer, .modal-layer, .focus-layer, .mobile-navigation, .floating-timer, .gselect-panel, .gdate-panel, .we-drag-handle, gym-select, gym-date, input, textarea, select, [contenteditable]")) {
                 return;
             }
             if (insideScrollable(event.target) || !atTop()) {
@@ -5754,29 +5693,13 @@ import {
             "open-workout-type": () => openWorkoutTypePicker(actionElement.dataset.workoutId),
             "dismiss-update": dismissUpdateBanner,
             "close-sheet": closeSheet,
-            // ---- new workout screen (ux2) ----
-            "ux2-minimize": ux2Minimize,
-            "ux2-complete-next": () => ux2CompleteSet(actionElement.dataset.ux2We, actionElement.dataset.ux2Set),
-            "ux2-cta-edit": () => ux2OpenKeypad(actionElement.dataset.ux2We, actionElement.dataset.ux2Set, actionElement.dataset.field),
-            "ux2-toggle-set": () => ux2ToggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
-            "ux2-add-set": () => ux2AddSet(actionElement.dataset.workoutExerciseId),
-            "ux2-apply-last": () => ux2ApplyLast(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId),
-            "ux2-edit": () => ux2OpenKeypad(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field),
+            // ---- workout sheets (the bottom sheets of the workout screen) ----
+            "ux2-add-set": () => addSet(actionElement.dataset.workoutExerciseId),
             "ux2-set-menu": () => ux2OpenSetMenu(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.superset === "1"),
             "ux2-set-type": () => ux2SetType(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.type, actionElement.dataset.superset === "1"),
             "ux2-set-rest": () => ux2SetRest(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, Number(actionElement.dataset.delta) || 0, actionElement.dataset.superset === "1"),
-            "ux2-sheet-toggle-set": () => { closeOverlay(); return ux2ToggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId); },
+            "ux2-sheet-toggle-set": () => { closeOverlay(); return toggleSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId); },
             "ux2-delete-set": () => { closeOverlay(); return deleteSet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, { skipConfirm: true }); },
-            "ux2-toggle-ex": () => {
-                const id = actionElement.dataset.workoutExerciseId;
-                state.expandedExercises = state.expandedExercises || new Set();
-                if (state.expandedExercises.has(id)) {
-                    state.expandedExercises.delete(id);
-                } else {
-                    state.expandedExercises.add(id);
-                }
-                renderSection();
-            },
             "ux2-ex-menu": () => ux2OpenExerciseMenu(actionElement.dataset.workoutExerciseId),
             "ux2-ex-focus": () => { closeOverlay(); openFocusMode(actionElement.dataset.workoutExerciseId || null); },
             "ux2-ex-replace": () => { state.replaceExerciseTarget = actionElement.dataset.workoutExerciseId; openAddExerciseModal(); },
@@ -5800,14 +5723,7 @@ import {
             "ux2-superset": () => { closeOverlay(); return openSupersetBuilder(actionElement.dataset.workoutId); },
             "ux2-template": () => openSaveTemplateModal(actionElement.dataset.workoutId),
             "ux2-delete-workout": () => { closeOverlay(); return deleteWorkout(actionElement.dataset.workoutId); },
-            "ux2-classic": ux2SwitchToClassic,
-            "ux2-finish": ux2Finish,
-            "ux2-summary-done": ux2SummaryDone,
-            "ux2-summary-undo": () => ux2UndoFinish(actionElement.dataset.workoutId),
-            "ux2-timer": ux2OpenTimerSheet,
-            "ux2-rest-line": () => (state.timer.running && ux2TimerSetId && actionElement.dataset.setId === ux2TimerSetId
-                ? ux2OpenTimerSheet()
-                : ux2OpenRestSheet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.supersetId || null)),
+            "ux2-rest-line": () => ux2OpenRestSheet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.supersetId || null),
             "ux2-rest-set": () => ux2ApplyRest(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.supersetId || null, Number(actionElement.dataset.seconds), false),
             "ux2-rest-step": () => {
                 const workoutItem = editWorkout();
@@ -5821,10 +5737,6 @@ import {
                 ux2RestScope = actionElement.dataset.scope === "one" ? "one" : "all";
                 ux2OpenRestSheet(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.supersetId || null);
             },
-            "ux2-timer-start": () => { ux2TimerSetId = null; startTimer(Number(actionElement.dataset.seconds) || 90); closeOverlay(); },
-            "ux2-timer-add": () => addTimerTime(Number(actionElement.dataset.delta) || 0),
-            "ux2-timer-pause": () => { toggleTimerPause(); ux2OpenTimerSheet(); },
-            "ux2-timer-skip": () => { stopTimer(); closeOverlay(); }
         };
 
         if (actions[action]) {
@@ -6549,10 +6461,6 @@ import {
             return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${number(workoutVolumeOf(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions"><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="list"></i>Деталі</button>${manage ? `<button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : ""}</div></article>`;
         }).join("");
         openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div><div class="day-sheet-action">${startWorkoutButton(date, { label: isToday ? "Почати тренування" : "Додати тренування", buttonClass: "button button-primary" })}</div>`);
-    }
-
-    function openStartWorkoutModal() {
-        startNewWorkout();
     }
 
     function openCardioModal(workoutId, cardioId = null) {
@@ -9633,36 +9541,11 @@ import {
     // The container carries aria-busy, so screen readers hear "busy" instead of
     // reading out a fake structure. The shapes themselves are decorative.
 
-    function skeletonMetric(span = "span-3") {
-        return `<section class="metric-card ${span} sk-wrap"><span class="sk sk-avatar"></span><div class="metric-body"><span class="sk sk-number"></span><span class="sk sk-line short" style="margin-top:8px;"></span></div></section>`;
-    }
-
-    function skeletonChartCard(span = "span-6") {
-        return `<section class="card ${span} chart-card sk-wrap"><div class="card-header"><div><span class="sk sk-title"></span><span class="sk sk-line half"></span></div></div><div class="chart-box"><span class="sk sk-chart"></span></div></section>`;
-    }
-
-    // `rows` fade progressively (see .sk-row:nth-child in the stylesheet) so a list
-    // reads as continuing below the fold rather than as a wall of bars.
-    function skeletonList(rows = 4, span = "span-12", withAvatar = true) {
-        const row = `<div class="sk-row">${withAvatar ? `<span class="sk sk-avatar"></span>` : ""}<div class="sk-row-main"><span class="sk sk-line wide"></span><span class="sk sk-line short"></span></div><span class="sk sk-chip"></span></div>`;
-        return `<section class="card ${span} sk-wrap"><span class="sk sk-title"></span>${row.repeat(rows)}</section>`;
-    }
-
     // Appended below an existing list while the next page is in flight, so the rows
     // already on screen stay put and readable.
     function skeletonMore(rows = 2) {
         const row = `<div class="sk-row"><span class="sk sk-avatar"></span><div class="sk-row-main"><span class="sk sk-line wide"></span><span class="sk sk-line short"></span></div></div>`;
         return `<div class="sk-wrap sk-more" aria-busy="true">${row.repeat(rows)}</div>`;
-    }
-
-    // Whole-section placeholder: a metric strip over two charts, which is the shape
-    // most tabs in this app actually have.
-    function skeletonSection({ metrics = 4, charts = 2, list = 0 } = {}) {
-        return `<div class="grid dashboard-grid sk-wrap" aria-busy="true">`
-            + Array.from({ length: metrics }, () => skeletonMetric()).join("")
-            + Array.from({ length: charts }, () => skeletonChartCard()).join("")
-            + (list ? skeletonList(list) : "")
-            + `</div>`;
     }
 
     function metric(title, value, icon, caption, span = "span-3", tip = "") {
@@ -9693,10 +9576,6 @@ import {
     // and the detail drawer — replaces the oversized KPI blocks there.
     function workoutStatStrip(items) {
         return `<div class="wstat-strip">${items.map((item) => `<span class="wstat"><i data-lucide="${item.icon}"></i><strong>${escapeHtml(String(item.value))}</strong>${item.label ? `<span class="wstat-lbl">${escapeHtml(item.label)}</span>` : ""}</span>`).join("")}</div>`;
-    }
-
-    function insightCard(item) {
-        return `<article class="insight-card"><strong>${escapeHtml(item.title)}</strong><p class="card-caption">${escapeHtml(item.caption)}</p></article>`;
     }
 
     function recordCard(record) {
@@ -9978,23 +9857,6 @@ import {
         return `<div class="empty-state"><i data-lucide="sparkles"></i><h3>${escapeHtml(title)}</h3><p>${escapeHtml(caption)}</p></div>`;
     }
 
-    function activityFeed() {
-        const scope = state.filters.activityScope === "all" ? "all" : "mine";
-        const me = currentUser();
-        let items = state.database.workouts.filter((item) => item.status === "completed");
-        if (scope === "mine" && me) {
-            items = items.filter((item) => item.userId === me.id);
-        }
-        items = items.sort(byDateDesc).slice(0, 8);
-        if (!items.length) {
-            return emptyInline(
-                scope === "mine" ? "У тебе ще немає завершених тренувань" : "Немає завершених тренувань",
-                scope === "mine" ? "Заверши тренування — і воно з'явиться тут." : "Стрічка оновиться, коли команда завершить тренування."
-            );
-        }
-        return items.map((workoutItem) => historyRow(workoutItem, { showOwner: scope === "all" })).join("");
-    }
-
     // One row shape for every history list (dashboard feed, calendar, stats, profile).
     // Leads with a calendar tile + weekday + workout TYPE instead of the meaningless
     // "Тренування #N" title; the number survives as a muted tag. Reads only the
@@ -10234,12 +10096,6 @@ import {
         }
     }
 
-    function weeklyVolumeChart(id, userId) {
-        const labels = Array.from({ length: 7 }, (_, index) => dateInput(addDays(startWeek(new Date()), index)));
-        const data = labels.map((label) => workoutsFor(userId).filter((item) => item.status === "completed" && item.date === label).reduce((sum, item) => sum + workoutVolume(item), 0));
-        barChart(id, labels.map(shortDate), data, "Обсяг, кг");
-    }
-
     function volumeChart(id, userId) {
         const workouts = (userId ? workoutsFor(userId) : state.database.workouts).filter((item) => item.status === "completed").sort(byDateAsc).slice(-14);
         barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map(workoutVolume), "Обсяг, кг");
@@ -10259,11 +10115,6 @@ import {
             ? { beginAtZero: false, suggestedMin: Math.max(0, Math.floor(Math.min(...values) - 10)), suggestedMax: Math.ceil(Math.max(...values) + 10) }
             : null;
         lineChart(id, entries.map((item) => shortDate(item.date)), entries.map((item) => item.bodyweight), "Вага тіла, кг", yScale);
-    }
-
-    function cardioChart(id, userId = currentUser().id) {
-        const workouts = workoutsFor(userId).filter((item) => item.status === "completed").sort(byDateAsc).slice(-10);
-        barChart(id, workouts.map((item) => shortDate(item.date)), workouts.map((item) => workoutCardioMinutes(item)), "Кардіо, хв");
     }
 
     function progressChart(id, userId) {
@@ -10357,10 +10208,6 @@ import {
         return block && block.users ? block.users[userId] || null : null;
     }
 
-    function usingServerScoring() {
-        return Boolean(state.database?.scoring);
-    }
-
     function userStats(userId) {
         const fromServer = serverScoring(userId);
         const stats = fromServer
@@ -10450,22 +10297,6 @@ import {
             const info = userLevel(user.id, records);
             return { user, completedWorkouts: summary.completedWorkouts, totalVolume: summary.totalVolume, bestLift: bestLiftByMuscle(user.id, muscle, records), level: info.level, xp: info.xp };
         }).sort((left, right) => right.xp - left.xp);
-    }
-
-    function insights(userId) {
-        const summary = userStats(userId);
-        const bench = exerciseByName("Жим лежачи");
-        const lastBench = lastUsed(bench.id, userId);
-        const days = lastBench ? dayDiff(new Date(), new Date(lastBench)) : null;
-        const bestLift = recordsFor(userId)[0] || null;
-        const chestSets = workoutsFor(userId).filter((item) => item.status === "completed" && isHydratedWorkout(item) && new Date(item.date) >= startWeek(new Date())).flatMap((item) => item.exercises).filter((item) => exerciseById(item.exerciseId).primaryMuscleGroup === "Груди").flatMap((item) => item.sets).filter((set) => set.isCompleted).length;
-        return [
-            { title: `Робота на груди: ${chestSets} підходів`, caption: chestSets ? "Груди вже тренувалися цього тижня." : "Груди ще не тренувалися цього тижня." },
-            { title: days === null ? "Жим ще не логували" : `Жим був ${days} дн. тому`, caption: "Корисно для частоти і відновлення." },
-            { title: bestLift ? `Найкращий 1ПМ: ${number(bestLift.estimatedOneRepMax)} кг` : "Особистих рекордів ще немає", caption: bestLift ? `${escapeHtml(bestLift.exercise.name)} · продовжуй прогрес.` : "Заверши робочі підходи, щоб зафіксувати PR." },
-            { title: summary.weekVolume ? "Обсяг рухається" : "Почни тиждень", caption: `${number(summary.weekVolume)} кг завершено цього тижня.` },
-            { title: summary.warmupSets >= 10 ? "Дисципліна розминки" : "Підказка для розминки", caption: summary.warmupSets >= 10 ? "Звичка розминки вже помітна в логах." : "Додавай розминкові підходи перед основними рухами." }
-        ];
     }
 
     function suggestedSets(exercise) {
@@ -10563,43 +10394,6 @@ import {
 
     function duration(workoutItem) {
         return kernelDuration(workoutItem, new Date());
-    }
-
-    /**
-     * Where a superset is created from.
-     *
-     * Deliberately NOT in the action bar: that row is already three buttons wide and has
-     * to stay one line on a 390px phone. And deliberately not an unlabelled icon on the
-     * exercise card, which already carries six.
-     *
-     * It sits ABOVE the exercise list rather than below it. Below, it fell past the fold
-     * the moment a session had more than a couple of exercises — you had to scroll to the
-     * bottom, past everything, to find it, which read as an afterthought. Above the list
-     * it is next to the exercises it acts on and reachable without scrolling, while
-     * «+ Вправа» in the action bar keeps working untouched for everybody who never uses
-     * supersets.
-     *
-     * Hidden entirely unless the account says it uses supersets. A free account still
-     * sees it, with a PRO mark, and meets the paywall only on the tap.
-     */
-    function supersetEntryRow(workoutItem) {
-        if (!supersetsEnabled()) {
-            return "";
-        }
-        const loose = workoutBlocks(workoutItem.exercises).filter((block) => block.kind === "exercise").length;
-        // Offered even with nothing to pair yet. Hiding it until two exercises existed
-        // meant the feature was invisible at exactly the moment somebody is deciding how
-        // to build the session — the tap now explains what is missing instead.
-        const missing = Math.max(0, SUPERSET_MIN_MEMBERS - loose);
-        const locked = !hasUnlimited();
-        return `<div class="ss-entry">
-            <button class="button button-secondary compact" type="button" data-action="open-superset-builder" data-workout-id="${workoutItem.id}">
-                <i data-lucide="repeat-2"></i><span>Створити суперсет</span>${locked ? `<span class="ss-pro">PRO</span>` : ""}
-            </button>
-            <span class="ss-entry-hint">${missing
-                ? `Додай ${missing === 1 ? "ще одну вправу" : "дві вправи"} — і зможеш обʼєднати їх в один блок.`
-                : "2–3 вправи поспіль, один відпочинок після раунду."} Не користуєшся? Вимкни в <button class="ss-entry-link" type="button" data-action="navigate" data-section="settings">Налаштуваннях</button>.</span>
-        </div>`;
     }
 
     // ---- Creating a superset --------------------------------------------------------------
@@ -11366,19 +11160,6 @@ import {
         return Boolean(workoutItem) && Array.isArray(workoutItem.exercises);
     }
 
-    function previousPerformance(userId, exerciseId, excludedWorkoutId = null) {
-        if (!userId) {
-            return null;
-        }
-        const entries = workoutsFor(userId).filter((item) => item.status === "completed" && item.id !== excludedWorkoutId && isHydratedWorkout(item)).sort(byDateDesc).flatMap((workoutItem) => workoutItem.exercises.map((workoutExercise) => ({ workoutItem, workoutExercise }))).filter((item) => item.workoutExercise.exerciseId === exerciseId);
-        const latest = entries[0];
-        if (!latest) {
-            return null;
-        }
-        const bestSet = latest.workoutExercise.sets.filter((set) => set.isCompleted && set.type !== "warmup").sort((left, right) => oneRepMax(right.weight, right.repetitions) - oneRepMax(left.weight, left.repetitions))[0];
-        return bestSet ? { date: latest.workoutItem.date, weight: bestSet.weight, repetitions: bestSet.repetitions } : null;
-    }
-
     // All prior instances of an exercise for a user (most recent first), excluding a workout.
     function exerciseInstances(userId, exerciseId, excludedWorkoutId = null) {
         if (!userId) {
@@ -11438,17 +11219,6 @@ import {
     function relatedExercises(exerciseId) {
         const source = exerciseById(exerciseId);
         return state.database.exercises.filter((item) => item.id !== exerciseId).map((item) => ({ item, score: (item.primaryMuscleGroup === source.primaryMuscleGroup ? 4 : 0) + (item.movementPattern === source.movementPattern ? 3 : 0) + (item.equipment === source.equipment ? 1 : 0) })).filter((row) => row.score > 0).sort((left, right) => right.score - left.score).map((row) => row.item);
-    }
-
-    function usersForExercise(exerciseId) {
-        // state.database.workouts mixes own rows with PEER summaries that carry no
-        // exercises array — a summary simply cannot answer "did it contain this exercise".
-        return [...new Set(state.database.workouts.filter((item) => (item.exercises || []).some((exercise) => exercise.exerciseId === exerciseId)).map((item) => item.userId))].map(userById);
-    }
-
-    function lastUsed(exerciseId, userId = null) {
-        const items = userId ? workoutsFor(userId) : state.database.workouts;
-        return items.filter((item) => (item.exercises || []).some((exercise) => exercise.exerciseId === exerciseId)).sort(byDateDesc)[0]?.date || null;
     }
 
     // exerciseUsageMap and topMap come straight from the kernel — identical signatures.
@@ -11739,10 +11509,8 @@ import {
 
     function renderFloatingTimer() {
         let node = document.getElementById("floatingTimer");
-        syncUx2Timer();
-        // Focus mode renders the timer inside its own layer — hide the floating one. So does
-        // the new workout screen: its dock (or the mini-player) carries the ring.
-        if (!state.timer.running || state.focus || ux2OwnsTimer()) {
+        // Focus mode renders the timer inside its own layer — hide the floating one.
+        if (!state.timer.running || state.focus) {
             if (node) {
                 node.classList.remove("visible");
             }
@@ -11786,7 +11554,6 @@ import {
     }
 
     function updateFloatingTimer() {
-        syncUx2Timer();
         const node = document.getElementById("floatingTimer");
         if (!node || !node.classList.contains("visible")) {
             return;
@@ -11809,44 +11576,14 @@ import {
         renderFloatingTimer();
     }
 
-    // ===== Новий інтерфейс тренування (ux2, бета) ===========================================
+    // ===== Workout sheets ======================================================================
     //
-    // The active session as a screen built for one job — doing the next set — rather than a
-    // form to fill in: one compact row per set with last time beside it, a thumb-sized button
-    // at the bottom that ticks the next set, a keypad of our own instead of the phone's, the
-    // session shrinking into a mini-player while you look at anything else, and a summary
-    // after «Завершити» instead of a toast.
-    //
-    // Opt-in through the `newWorkoutScreen` preference (Settings → Тренування). It was an
-    // admins-only beta, then briefly everyone's default (0.68.7), and is opt-in again since
-    // the owner chose the classic screen. Every change goes through the same mutations as the classic editor (toggleSet,
-    // addSet, deleteSet, persistWorkout), so switching views mid-session loses nothing. The
-    // pure decisions — next set, numbering, keypad input, deltas — live in lib/session.js.
-
-    // Opt-in. It was the default for everybody in 0.68.7; the owner trained on it and asked
-    // for the classic workout screen back (2026-10-15), keeping everything else. Only an
-    // explicit "1" from the Settings switch turns it on now.
-    function ux2Enabled() {
-        if (!state.database) {
-            return false;
-        }
-        return getPref("newWorkoutScreen") === "1";
-    }
-
-    /** Your own active workout with its sets loaded — the only thing the session shows. */
-    function ux2SessionWorkout() {
-        if (!ux2Enabled()) {
-            return null;
-        }
-        const me = currentUser();
-        const active = me ? activeWorkoutFor(me.id) : null;
-        return active && isHydratedWorkout(active) ? active : null;
-    }
-
-    function ux2ShowsSession(workoutItem) {
-        const session = ux2SessionWorkout();
-        return Boolean(session && workoutItem && session.id === workoutItem.id);
-    }
+    // The bottom sheets of the workout screen: the ⋯ menu of a workout, the ⋮ menu of an
+    // exercise, a set's type / rest / delete, the rest picker, the exercise order and «як
+    // минулого разу». They came from the experimental full-screen session view (0.67–0.68),
+    // which the owner tried and replaced with his classic screen; that view was removed in
+    // 0.73.1 and only these sheets, which the classic screen uses, remain. The `ux2` prefix
+    // on their names and data-actions is that history, nothing more.
 
     function ux2Title(workoutItem) {
         const type = workoutItem.workoutType;
@@ -11873,20 +11610,6 @@ import {
         return weight ? `${numberDraft(weight)} × ${reps}` : `${reps} повт`;
     }
 
-    /** The load with its unit, as the big button says it: 17,5 кг × 5 · 12 повт · 20 кг × 0:45. */
-    function ux2LoadText(set) {
-        if (!set) {
-            return "";
-        }
-        const weight = Number(set.weight) || 0;
-        if (isTimedSet(set)) {
-            const time = ux2Clock(set.durationSeconds);
-            return weight ? `${numberDraft(weight)} кг × ${time}` : time;
-        }
-        const reps = Math.max(0, Math.round(Number(set.repetitions) || 0));
-        return weight ? `${numberDraft(weight)} кг × ${reps}` : `${reps} повт`;
-    }
-
     /**
      * Last time this exercise was actually DONE: finished sessions, completed sets.
      *
@@ -11906,176 +11629,6 @@ import {
 
     // ---- The session screen ------------------------------------------------------------------
 
-    function ux2Session(workoutItem) {
-        const exercises = workoutItem.exercises;
-        const progress = sessionProgress(exercises);
-        const next = nextSessionSet(exercises);
-        const blocks = workoutBlocks(exercises);
-        const list = blocks.map((block) => block.kind === "superset"
-            ? ux2SupersetBlock(workoutItem, block, next)
-            : ux2ExerciseCard(workoutItem, block.exercise, next)).join("");
-        const empty = blocks.length
-            ? ""
-            : `${repeatSuggestionCard(workoutItem)}<div class="ux2-empty"><span class="ux2-empty-icon"><i data-lucide="dumbbell"></i></span><strong>Почнімо з першої вправи</strong><span>Минулі результати підтягнуться самі.</span></div>`;
-        const noteKey = `workout:${workoutItem.id}`;
-        const note = workoutItem.notes || state.openNotes.has(noteKey)
-            ? `<label class="ux2-note"><i data-lucide="sticky-note"></i><textarea rows="2" data-action="update-workout-notes" data-note-key="${escapeHtml(noteKey)}" placeholder="Нотатка до тренування">${escapeHtml(workoutItem.notes || "")}</textarea></label>`
-            : "";
-        return `<div class="ux2-session" data-workout-id="${workoutItem.id}">
-            ${ux2Header(workoutItem, progress)}
-            <div id="partnerPanel"></div>
-            ${note}
-            ${empty}
-            ${blocks.length ? `<div class="ux2-list">${list}</div>` : ""}
-            ${ux2CardioList(workoutItem)}
-            ${blocks.length ? `<button class="ux2-add-exercise" type="button" data-action="open-add-exercise-modal"><i data-lucide="plus"></i>Додати вправу</button>` : ""}
-            <div class="ux2-dock">${ux2RestButton("", ux2UpcomingRest(workoutItem, next))}${ux2Cta(workoutItem, next, progress)}</div>
-        </div>`;
-    }
-
-    function ux2Header(workoutItem, progress) {
-        const clock = gymClockState(workoutItem);
-        const volume = workoutVolume(workoutItem);
-        const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
-        const parts = [
-            clock
-                ? `<span class="ux2-clock${clock.live ? " is-live" : ""}" data-ux2-clock>${clock.overflow ? `з ${escapeHtml(clock.startLabel)}` : formatClock(clock.ms)}</span>`
-                : `<span>ще не почато</span>`,
-            progress.total ? `<span>${progress.done} з ${progress.total}</span>` : "",
-            volume ? `<span>${number(volume)} кг</span>` : ""
-        ].filter(Boolean);
-        return `<header class="ux2-head">
-            <button class="ux2-icon-btn" type="button" data-action="ux2-minimize" title="Згорнути" aria-label="Згорнути тренування"><i data-lucide="chevron-down"></i></button>
-            <div class="ux2-head-main">
-                <h2 class="ux2-head-title">${escapeHtml(ux2Title(workoutItem))}</h2>
-                <div class="ux2-head-meta">${parts.join(`<span class="ux2-dot" aria-hidden="true">·</span>`)}</div>
-            </div>
-            ${workoutItem.exercises.length ? `<button class="ux2-icon-btn" type="button" data-action="open-focus" title="Фокус-режим" aria-label="Фокус-режим: одна вправа, один підхід"><i data-lucide="crosshair"></i></button>` : ""}
-            <button class="ux2-icon-btn" type="button" data-action="ux2-session-menu" title="Ще" aria-label="Меню тренування"><i data-lucide="more-horizontal"></i></button>
-            <div class="ux2-head-progress" aria-hidden="true"><span style="width:${pct}%"></span></div>
-            <div class="ux2-sync" id="ux2Sync" role="status" aria-live="polite"></div>
-        </header>`;
-    }
-
-    function ux2ExerciseCard(workoutItem, workoutExercise, next) {
-        const exercise = exerciseById(workoutExercise.exerciseId);
-        const sets = workoutExercise.sets || [];
-        const last = ux2LastSets(workoutItem, workoutExercise.exerciseId);
-        const timed = sets.length ? sets.some(isTimedSet) : Boolean(exercise.isTimed);
-        const bodyweight = isBodyweightExercise(exercise);
-        const doneCount = sets.filter((set) => set.isCompleted).length;
-        const done = sets.length > 0 && doneCount === sets.length;
-        state.expandedExercises = state.expandedExercises || new Set();
-        const collapsed = done && !state.expandedExercises.has(workoutExercise.id);
-        const labels = sessionSetLabels(sets);
-        const caption = done
-            ? `${doneCount} ${pluralUk(doneCount, "підхід", "підходи", "підходів")} · ${timed ? formatDuration(sets.reduce((sum, set) => sum + (Number(set.durationSeconds) || 0), 0)) : `${number(exerciseVolume(workoutExercise))} кг`}`
-            : `${escapeHtml(exercise.primaryMuscleGroup)}${last ? ` · минулого разу ${escapeHtml(shortDate(last.date))}` : " · вперше"}`;
-        const title = `<strong>${escapeHtml(exercise.name)}</strong><span>${caption}</span>`;
-        const head = done
-            ? `<button class="ux2-ex-title" type="button" data-action="ux2-toggle-ex" data-workout-exercise-id="${workoutExercise.id}" aria-expanded="${collapsed ? "false" : "true"}">${title}</button><span class="ux2-ex-done" title="Виконано"><i data-lucide="check"></i></span>`
-            : `<div class="ux2-ex-title">${title}</div>`;
-        const rows = sets.map((set, index) => ux2SetRow(workoutExercise, set, labels[index], pairedLast(last, index), Boolean(next && next.setId === set.id), { delta: previousSetDelta(sets, index) })
-            + ux2RestLine(workoutExercise, set, ux2RestSeconds(workoutItem, workoutExercise, set))).join("");
-        const columns = `<div class="ux2-row ux2-row-head" aria-hidden="true"><span>#</span><span>Минулий раз</span><span>${timed || bodyweight ? "+кг" : "кг"}</span><span>${timed ? "час" : "повт"}</span><span></span></div>`;
-        const noteKey = `exercise:${workoutExercise.id}`;
-        const note = workoutExercise.notes || state.openNotes.has(noteKey)
-            ? `<label class="ux2-note is-inline"><i data-lucide="sticky-note"></i><textarea rows="2" data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}" data-note-key="${escapeHtml(noteKey)}" placeholder="Нотатка до вправи">${escapeHtml(workoutExercise.notes || "")}</textarea></label>`
-            : "";
-        return `<article class="ux2-ex${done ? " is-done" : ""}${collapsed ? " is-collapsed" : ""}" data-workout-exercise-id="${workoutExercise.id}">
-            <div class="ux2-ex-head">${ux2Thumb(exercise)}${head}<button class="ux2-icon-btn is-ghost" type="button" data-action="ux2-ex-menu" data-workout-exercise-id="${workoutExercise.id}" aria-label="Дії з вправою"><i data-lucide="more-vertical"></i></button></div>
-            ${collapsed ? "" : `${ux2PreviousNote(workoutItem, workoutExercise.exerciseId)}<div class="ux2-sets">${sets.length ? columns + rows : `<p class="ux2-sets-empty">Підходів ще немає</p>`}</div>
-            <button class="ux2-add-set" type="button" data-action="ux2-add-set" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="plus"></i>Підхід</button>
-            ${note}`}
-        </article>`;
-    }
-
-    /**
-     * The note left on this exercise in an earlier session («хват ширше», «наступного разу
-     * 55»). It is advice for the sets about to be done, so it sits above them, not under.
-     */
-    function ux2PreviousNote(workoutItem, exerciseId, compact = false) {
-        const last = lastExerciseNote(workoutItem.userId, exerciseId, workoutItem.id);
-        if (!last) {
-            return "";
-        }
-        return `<div class="ux2-prev-note${compact ? " is-compact" : ""}"><i data-lucide="sticky-note"></i><div><span class="ux2-prev-note-label">Остання нотатка · ${escapeHtml(shortDate(last.date))}</span><p>${escapeHtml(last.notes)}</p></div></div>`;
-    }
-
-    function ux2DeltaBadge(value, text) {
-        return value === null ? "" : `<span class="ux2-delta ${value > 0 ? "up" : "down"}">${value > 0 ? "+" : "−"}${text}</span>`;
-    }
-
-    function ux2SetRow(workoutExercise, set, label, lastSet, isNext, options = {}) {
-        const target = `data-workout-exercise-id="${workoutExercise.id}" data-set-id="${set.id}"`;
-        const timed = isTimedSet(set);
-        const measureField = timed ? "durationSeconds" : "repetitions";
-        const weight = Number(set.weight) || 0;
-        const measure = Math.round(Number(timed ? set.durationSeconds : set.repetitions) || 0);
-        const measureText = timed ? ux2Clock(measure) : String(measure);
-        // The badge is the step from the set BEFORE — "+10" while ramping 60 → 70 → 80 —
-        // which is the number a lifter actually counts between sets. Last time is already
-        // its own column.
-        const weightBadge = options.delta ? ux2DeltaBadge(options.delta, numberDraft(Math.abs(options.delta))) : "";
-        const kind = label.kind || "working";
-        const superset = options.superset ? ` data-superset="1"` : "";
-        const last = lastSet
-            ? `<button class="ux2-last" type="button" data-action="ux2-apply-last" ${target}${superset} title="Заповнити як минулого разу"><span>${escapeHtml(ux2SetText(lastSet))}</span>${isNext && !set.isCompleted ? `<i data-lucide="corner-down-left"></i>` : ""}</button>`
-            : `<span class="ux2-last is-empty">—</span>`;
-        return `<div class="ux2-row kind-${escapeHtml(kind)}${set.isCompleted ? " is-done" : ""}${isNext ? " is-next" : ""}" ${target}>
-            <button class="ux2-num" type="button" data-action="ux2-set-menu" ${target}${superset} aria-label="${escapeHtml(`${label.label}: ${setTypeLabel(set.type)}. Тип, відпочинок, видалення`)}">${escapeHtml(label.label)}</button>
-            ${last}
-            <button class="ux2-val${weight ? "" : " is-zero"}" type="button" data-action="ux2-edit" data-field="weight" ${target} aria-label="Вага: ${numberDraft(weight)} кг">${weightBadge}<span class="ux2-val-num">${numberDraft(weight)}</span></button>
-            <button class="ux2-val${measure ? "" : " is-zero"}" type="button" data-action="ux2-edit" data-field="${measureField}" ${target} aria-label="${timed ? "Час" : "Повтори"}: ${measureText}"><span class="ux2-val-num">${measureText}</span></button>
-            <button class="ux2-check${set.isCompleted ? " is-on" : ""}" type="button" data-action="ux2-toggle-set" ${target} aria-pressed="${set.isCompleted ? "true" : "false"}" aria-label="${set.isCompleted ? "Зняти позначку" : "Позначити виконаним"}"><i data-lucide="check"></i></button>
-        </div>`;
-    }
-
-    /**
-     * A superset is still a list of ROUNDS, as in the classic card — A1, A2, rest — but the
-     * rows are the same compact rows as everywhere else, so nothing has to be relearned.
-     */
-    function ux2SupersetBlock(workoutItem, block, next) {
-        const { groupId, members } = block;
-        const rounds = roundCount(members);
-        const current = currentRoundIndex(members);
-        const finished = rounds > 0 && current >= rounds;
-        const rest = supersetRestSeconds(workoutItem, groupId);
-        const lasts = members.map((member) => ux2LastSets(workoutItem, member.exerciseId));
-        const anyTimed = members.some((member) => (member.sets || []).some(isTimedSet));
-        const status = finished ? "Усі раунди виконано" : rounds ? `Раунд ${Math.min(current + 1, rounds)} з ${rounds}` : "Раундів ще немає";
-        const gid = escapeHtml(groupId);
-        const names = members.map((member, index) => `<span class="ux2-ss-name"><b>${positionLabel(index)}</b>${escapeHtml(exerciseById(member.exerciseId).name)}</span>${finished ? "" : ux2PreviousNote(workoutItem, member.exerciseId, true)}`).join("");
-        const roundRows = Array.from({ length: rounds }, (_, roundIndex) => {
-            const done = isRoundComplete(members, roundIndex);
-            if (done && !state.supersetOpenRounds[`${groupId}:${roundIndex}`]) {
-                const summary = roundSets(members, roundIndex).map((set) => (set ? ux2SetText(set) : "—")).join(" · ");
-                return `<button class="ux2-ss-round is-collapsed" type="button" data-action="superset-open-round" data-superset-id="${gid}" data-round="${roundIndex}"><span class="ux2-ss-round-no"><i data-lucide="check"></i></span><span class="ux2-ss-round-sum">${escapeHtml(summary)}</span><i data-lucide="chevron-down"></i></button>`;
-            }
-            const rows = members.map((member, memberIndex) => {
-                const set = (member.sets || [])[roundIndex];
-                if (!set) {
-                    return `<div class="ux2-row is-missing"><span class="ux2-num">${positionLabel(memberIndex)}</span><span class="ux2-last is-empty">немає підходу</span></div>`;
-                }
-                return ux2SetRow(member, set, { label: positionLabel(memberIndex), kind: set.type || "working" }, pairedLast(lasts[memberIndex], roundIndex), Boolean(next && next.setId === set.id), { superset: true, delta: previousSetDelta(member.sets || [], roundIndex) });
-            }).join("");
-            // The rest belongs to the round: one line after its last member.
-            const closer = [...members].reverse().map((member) => (member.sets || [])[roundIndex]).find(Boolean);
-            const restLine = closer ? ux2RestLine(members[members.length - 1], closer, rest, groupId) : "";
-            return `<div class="ux2-ss-round${done ? " is-done" : ""}"><div class="ux2-ss-round-head"><span>Раунд ${roundIndex + 1}</span>${done ? `<button class="ux2-ss-fold" type="button" data-action="superset-close-round" data-superset-id="${gid}" data-round="${roundIndex}" aria-label="Згорнути раунд"><i data-lucide="chevron-up"></i></button>` : ""}</div>${rows}${restLine}</div>`;
-        }).join("");
-        return `<article class="ux2-ex ux2-ss${finished ? " is-done" : ""}" data-superset-id="${gid}">
-            <div class="ux2-ss-head">
-                <span class="ux2-ss-badge"><i data-lucide="repeat-2"></i>Суперсет</span>
-                <span class="ux2-ss-status">${escapeHtml(status)} · відпочинок ${formatRest(rest)}</span>
-                <button class="ux2-icon-btn is-ghost" type="button" data-action="open-superset-menu" data-superset-id="${gid}" data-workout-id="${workoutItem.id}" aria-label="Керування суперсетом"><i data-lucide="more-vertical"></i></button>
-            </div>
-            <div class="ux2-ss-names">${names}</div>
-            ${rounds ? `<div class="ux2-sets"><div class="ux2-row ux2-row-head" aria-hidden="true"><span></span><span>Минулий раз</span><span>кг</span><span>${anyTimed ? "повт/час" : "повт"}</span><span></span></div>${roundRows}</div>` : ""}
-            <button class="ux2-add-set" type="button" data-action="superset-add-round" data-superset-id="${gid}" data-workout-id="${workoutItem.id}"><i data-lucide="plus"></i>Раунд</button>
-        </article>`;
-    }
-
     /** The rest that starts after a set: its own value, or the round's inside a superset. */
     function ux2RestSeconds(workoutItem, workoutExercise, set) {
         if (workoutExercise.supersetGroupId) {
@@ -12086,16 +11639,6 @@ import {
     }
 
     // The set whose tick started the running rest, so its line can show the countdown.
-    let ux2TimerSetId = null;
-
-    /**
-     * Rest BETWEEN sets, drawn between them: a quiet divider with the time on it. Tapping it
-     * changes that rest; while it is the rest running right now it is the countdown itself.
-     */
-    function ux2RestLine(workoutExercise, set, seconds, groupId = null) {
-        const label = formatRest(seconds);
-        return `<button class="ux2-rest-line" type="button" data-action="ux2-rest-line" data-workout-exercise-id="${workoutExercise.id}" data-set-id="${set.id}"${groupId ? ` data-superset-id="${escapeHtml(groupId)}"` : ""} data-ux2-rest-line="${set.id}" data-rest-label="${label}" aria-label="Відпочинок після підходу: ${label}. Змінити"><span class="ux2-rest-line-pill"><i data-lucide="timer"></i><span class="ux2-rest-line-value">${label}</span></span></button>`;
-    }
 
     // Which sets a change applies to: the whole exercise (what people usually mean) or one.
     let ux2RestScope = "all";
@@ -12158,298 +11701,16 @@ import {
         showSyncIndicator("success", `Відпочинок ${formatRest(value)}`);
     }
 
-    function ux2CardioList(workoutItem) {
-        const sessions = workoutItem.cardioSessions || [];
-        if (!sessions.length) {
-            return "";
-        }
-        return `<section class="ux2-cardio"><h3><i data-lucide="heart-pulse"></i>Кардіо</h3>${sessions.map((session) => {
-            const details = [session.distance ? `${session.distance} км` : "", session.calories ? `${session.calories} ккал` : "", session.averageHeartRate ? `${session.averageHeartRate} уд/хв` : ""].filter(Boolean).join(" · ") || "Без деталей";
-            return `<div class="ux2-cardio-row"><button class="ux2-cardio-main" type="button" data-action="open-cardio-modal" data-workout-id="${workoutItem.id}" data-cardio-id="${session.id}"><span class="ux2-cardio-ico"><i data-lucide="${cardioIcon(session.type)}"></i></span><span class="ux2-cardio-text"><strong>${escapeHtml(cardioTypeLabel(session.type))} · ${session.durationMinutes} хв</strong><span>${escapeHtml(details)}</span></span></button><button class="ux2-icon-btn is-ghost" type="button" data-action="delete-cardio" data-workout-id="${workoutItem.id}" data-cardio-id="${session.id}" aria-label="Видалити кардіо"><i data-lucide="trash-2"></i></button></div>`;
-        }).join("")}</section>`;
-    }
-
-    /**
-     * The one button that matters, sized for a thumb and labelled with exactly what it will
-     * do: which set, of what, at what load. When there is nothing left to tick it becomes
-     * «Завершити»; before the first exercise it adds one.
-     */
-    function ux2Cta(workoutItem, next, progress) {
-        // `subHtml` is built from escaped parts by the callers below.
-        const button = (action, icon, title, subHtml, extra = "", cls = "") => `<button class="ux2-cta${cls}" type="button" data-action="${action}"${extra}><span class="ux2-cta-icon"><i data-lucide="${icon}"></i></span><span class="ux2-cta-text"><strong>${escapeHtml(title)}</strong>${subHtml ? `<span>${subHtml}</span>` : ""}</span></button>`;
-        if (!workoutItem.exercises.length) {
-            return button("open-add-exercise-modal", "plus", "Додати вправу", "З каталогу або власну");
-        }
-        if (!next) {
-            const sub = progress.total ? `Усі ${progress.total} ${pluralUk(progress.total, "підхід", "підходи", "підходів")} виконано` : "";
-            return button("ux2-finish", "flag", "Завершити тренування", escapeHtml(sub), "", " is-finish");
-        }
-        const workoutExercise = workoutItem.exercises.find((item) => item.id === next.workoutExerciseId);
-        const set = workoutExercise.sets[next.index];
-        const exercise = exerciseById(workoutExercise.exerciseId);
-        const labels = sessionSetLabels(workoutExercise.sets);
-        const label = labels[next.index];
-        const name = next.superset ? `${positionLabel(next.superset.memberIndex)} · ${exercise.name}` : exercise.name;
-        const timed = isTimedSet(set);
-        const ids = ` data-ux2-we="${workoutExercise.id}" data-ux2-set="${set.id}"`;
-        // Which set it is comes last and small: what you are about to do is the exercise and
-        // the load, and the tick icon already says what the button does.
-        let position;
-        if (next.superset) {
-            const members = workoutItem.exercises.filter((item) => item.supersetGroupId === next.superset.groupId);
-            position = `раунд ${next.superset.round + 1}/${roundCount(members)}`;
-        } else {
-            position = `підхід ${label.label}/${labels.length}`;
-        }
-        // A set with no reps (or no time) is not something to tick yet — the button asks for
-        // the number instead of recording an empty set.
-        if (!(Number(timed ? set.durationSeconds : set.repetitions) > 0)) {
-            return button("ux2-cta-edit", "pencil", name, `<b>введи ${timed ? "час" : "повтори"}</b> · ${escapeHtml(position)}`, `${ids} data-field="${timed ? "durationSeconds" : "repetitions"}"`, " is-input");
-        }
-        return button("ux2-complete-next", "check", name, `<b>${escapeHtml(ux2LoadText(set))}</b> · ${escapeHtml(position)}`, ids);
-    }
-
-    function ux2RestButton(extra = "", upcoming = null) {
-        return `<button class="ux2-rest${extra}" type="button" data-action="ux2-timer" data-ux2-timer aria-label="Таймер відпочинку${upcoming ? `: далі ${formatRest(upcoming)}` : ""}"><svg viewBox="0 0 52 52" aria-hidden="true"><circle class="ux2-rest-track" cx="26" cy="26" r="23"></circle><circle class="ux2-rest-arc" cx="26" cy="26" r="23" pathLength="100"></circle></svg><span class="ux2-rest-value" data-ux2-timer-value></span><span class="ux2-rest-idle"><i data-lucide="timer"></i>${upcoming ? `<small>${formatRest(upcoming)}</small>` : ""}</span></button>`;
-    }
-
-    /** The rest the next tick will start — for the idle ring. */
-    function ux2UpcomingRest(workoutItem, next) {
-        if (!next) {
-            return null;
-        }
-        const workoutExercise = workoutItem.exercises.find((item) => item.id === next.workoutExerciseId);
-        return workoutExercise ? ux2RestSeconds(workoutItem, workoutExercise, workoutExercise.sets[next.index]) : null;
-    }
-
     // ---- Rest timer: the ring in the dock and the mini-player ------------------------------------
-
-    /** Paints every ring from state.timer. Called from the timer's own tick and transitions. */
-    function syncUx2Timer() {
-        const nodes = document.querySelectorAll("[data-ux2-timer]");
-        const big = document.querySelector("[data-ux2-timer-big]");
-        if (!nodes.length && !big && !document.querySelector("[data-ux2-rest-line]")) {
-            return;
-        }
-        const timer = state.timer;
-        const running = Boolean(timer.running);
-        const ratio = !running ? 0 : timer.overtime ? 1 : timer.duration > 0 ? Math.max(0, Math.min(1, timer.remaining / timer.duration)) : 0;
-        const text = running ? timerDisplayValue() : "";
-        nodes.forEach((node) => {
-            node.classList.toggle("is-running", running);
-            node.classList.toggle("is-over", running && timer.overtime);
-            node.classList.toggle("is-paused", running && timer.paused);
-            const value = node.querySelector("[data-ux2-timer-value]");
-            if (value && value.textContent !== text) {
-                value.textContent = text;
-            }
-            const arc = node.querySelector(".ux2-rest-arc");
-            if (arc) {
-                arc.style.strokeDashoffset = String(100 - ratio * 100);
-            }
-        });
-        if (big) {
-            big.textContent = running ? timerDisplayValue() : "—";
-            big.classList.toggle("is-over", running && timer.overtime);
-            big.classList.toggle("is-idle", !running);
-        }
-        document.querySelectorAll("[data-ux2-rest-line]").forEach((line) => {
-            const live = running && line.dataset.ux2RestLine === ux2TimerSetId;
-            line.classList.toggle("is-running", live);
-            line.classList.toggle("is-over", live && timer.overtime);
-            line.style.setProperty("--ux2-rest-p", live ? String(1 - ratio) : "0");
-            const value = line.querySelector(".ux2-rest-line-value");
-            const want = live ? timerDisplayValue() : line.dataset.restLabel;
-            if (value && value.textContent !== want) {
-                value.textContent = want;
-            }
-        });
-    }
-
-    /** While the dock or the mini-player is on screen it is the timer; the floating one hides. */
-    function ux2OwnsTimer() {
-        return Boolean(document.querySelector(".ux2-dock, .ux2-mini"));
-    }
-
-    function ux2OpenTimerSheet() {
-        const timer = state.timer;
-        const running = Boolean(timer.running);
-        const presets = [45, 60, 90, 120, 180];
-        const controls = running
-            ? `<div class="ux2-timer-controls">
-                    <button class="ux2-round-btn" type="button" data-action="ux2-timer-add" data-delta="-15" aria-label="Мінус 15 секунд">−15</button>
-                    <button class="ux2-round-btn is-main" type="button" data-action="ux2-timer-pause" aria-label="${timer.paused ? "Продовжити" : "Пауза"}"><i data-lucide="${timer.paused ? "play" : "pause"}"></i></button>
-                    <button class="ux2-round-btn" type="button" data-action="ux2-timer-add" data-delta="15" aria-label="Плюс 15 секунд">+15</button>
-                </div>
-                <button class="button button-secondary ux2-wide" type="button" data-action="ux2-timer-skip"><i data-lucide="skip-forward"></i>Завершити відпочинок</button>`
-            : `<p class="ux2-sheet-hint">Стартує сам, щойно позначиш підхід. Час між підходами — тап на «⏱» між ними. Або запусти вручну:</p>`;
-        ux2Sheet("Відпочинок", `<div class="ux2-timer-big${running ? "" : " is-idle"}" data-ux2-timer-big>${running ? timerDisplayValue() : "—"}</div>
-            ${controls}
-            <div class="ux2-sheet-block"><span class="ux2-sheet-label">${running ? "Почати заново" : "Запустити"}</span><div class="ux2-chip-row">${presets.map((value) => `<button class="ux2-chip" type="button" data-action="ux2-timer-start" data-seconds="${value}">${formatRest(value)}</button>`).join("")}</div></div>
-            <div class="ux2-switch-row"><span><strong>Авто-старт</strong><span>Після кожного виконаного підходу</span></span>${settingsSwitch("autoStartRest", "Авто-старт таймера відпочинку")}</div>`);
-        syncUx2Timer();
-    }
 
     // ---- Mini-player and the session clock --------------------------------------------------------
 
-    /**
-     * The session, shrunk. While you read the feed or check the calendar the workout keeps
-     * going: its clock, the rest ring, and what comes next sit above the tab bar, one tap
-     * from the full screen.
-     */
-    function renderUx2Mini() {
-        const workoutItem = state.database ? ux2SessionWorkout() : null;
-        const show = Boolean(workoutItem) && !document.body.classList.contains("ux2-in-session") && !state.focus;
-        document.body.classList.toggle("ux2-has-mini", show);
-        let node = document.getElementById("ux2Mini");
-        if (!show) {
-            if (node) {
-                node.remove();
-            }
-            return;
-        }
-        if (!node) {
-            node = document.createElement("div");
-            node.id = "ux2Mini";
-            node.className = "ux2-mini";
-            document.body.appendChild(node);
-        }
-        const next = nextSessionSet(workoutItem.exercises);
-        const progress = sessionProgress(workoutItem.exercises);
-        const clock = gymClockState(workoutItem);
-        let line = "Додай першу вправу";
-        if (next) {
-            const workoutExercise = workoutItem.exercises.find((item) => item.id === next.workoutExerciseId);
-            line = `Далі: ${exerciseById(workoutExercise.exerciseId).name} · ${ux2LoadText(workoutExercise.sets[next.index])}`;
-        } else if (progress.total) {
-            line = "Усе виконано — можна завершувати";
-        }
-        const open = `data-action="edit-workout" data-workout-id="${workoutItem.id}"`;
-        node.innerHTML = `${ux2RestButton(" is-mini")}<button class="ux2-mini-main" type="button" ${open}><strong><span class="ux2-mini-title">${escapeHtml(ux2Title(workoutItem))}</span>${clock ? `<span class="ux2-clock" data-ux2-clock>${clock.overflow ? `з ${escapeHtml(clock.startLabel)}` : formatClock(clock.ms)}</span>` : ""}</strong><span class="ux2-mini-line">${escapeHtml(line)}</span></button><button class="ux2-mini-open" type="button" ${open} aria-label="Відкрити тренування"><i data-lucide="chevron-up"></i></button>`;
-        iconsIn(node);
-        syncUx2Timer();
-    }
-
     // Its own one-second tick, independent of the classic clock chip: that ticker follows
     // editWorkout(), which on another screen may be a finished session, and stops itself.
-    let ux2ClockTimer = null;
-
-    function ux2PaintClock() {
-        const nodes = document.querySelectorAll("[data-ux2-clock]");
-        const clock = nodes.length ? gymClockState(ux2SessionWorkout()) : null;
-        if (clock) {
-            const text = clock.overflow ? `з ${clock.startLabel}` : formatClock(clock.ms);
-            nodes.forEach((node) => {
-                if (node.textContent !== text) {
-                    node.textContent = text;
-                }
-            });
-        }
-        return Boolean(clock && clock.live);
-    }
-
-    function syncUx2Clock() {
-        let live = false;
-        try {
-            live = ux2PaintClock();
-        } catch (error) {
-            live = false;
-        }
-        if (!live) {
-            clearInterval(ux2ClockTimer);
-            ux2ClockTimer = null;
-            return;
-        }
-        if (ux2ClockTimer) {
-            return;
-        }
-        ux2ClockTimer = setInterval(() => {
-            let still = false;
-            try {
-                still = ux2PaintClock();
-            } catch (error) {
-                still = false;
-            }
-            if (!still) {
-                clearInterval(ux2ClockTimer);
-                ux2ClockTimer = null;
-            }
-        }, 1000);
-    }
 
     // Where «згорнути» goes back to: the last screen that was not the workout.
-    let ux2ReturnSection = null;
-
-    function ux2Minimize() {
-        const target = ux2ReturnSection && ux2ReturnSection !== "workout" && routableSections.has(ux2ReturnSection) && !["user", "post"].includes(ux2ReturnSection)
-            ? ux2ReturnSection
-            : defaultSection();
-        navigate(target);
-    }
 
     // ---- Doing sets ----------------------------------------------------------------------------
-
-    /**
-     * After a tick, bring the next set into view — but only when it is not already
-     * comfortably visible. Moving the page under somebody who can already see the row is
-     * worse than not helping.
-     */
-    function ux2ScrollToNext() {
-        const row = document.querySelector(".ux2-row.is-next");
-        if (!row) {
-            return;
-        }
-        const rect = row.getBoundingClientRect();
-        const head = document.querySelector(".ux2-head");
-        const dock = document.querySelector(".ux2-dock");
-        const top = head ? head.getBoundingClientRect().bottom : 0;
-        const bottom = dock ? dock.getBoundingClientRect().top : window.innerHeight;
-        if (rect.top >= top + 8 && rect.bottom <= bottom - 24) {
-            return;
-        }
-        const target = window.scrollY + rect.top - (top + (bottom - top) * 0.3);
-        window.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
-    }
-
-    async function ux2ToggleSet(workoutExerciseId, setId) {
-        const set = editSetByIds(workoutExerciseId, setId);
-        if (!set) {
-            return;
-        }
-        const completing = !set.isCompleted;
-        if (completing && navigator.vibrate) {
-            navigator.vibrate(12);
-        }
-        const startedBefore = state.timer.startedAt;
-        await toggleSet(workoutExerciseId, setId);
-        if (completing && state.timer.running && state.timer.startedAt !== startedBefore) {
-            ux2TimerSetId = setId;
-            syncUx2Timer();
-        }
-        if (completing) {
-            ux2ScrollToNext();
-        }
-    }
-
-    /** The big button. It ticks the set it was LABELLED with, if that one is still open. */
-    async function ux2CompleteSet(workoutExerciseId, setId) {
-        const set = editSetByIds(workoutExerciseId, setId);
-        if (!set || set.isCompleted) {
-            renderSection();
-            return;
-        }
-        await ux2ToggleSet(workoutExerciseId, setId);
-    }
-
-    async function ux2AddSet(workoutExerciseId) {
-        await addSet(workoutExerciseId);
-        const workoutExercise = editWorkoutExercise(workoutExerciseId);
-        const added = workoutExercise ? workoutExercise.sets.at(-1) : null;
-        const row = added ? document.querySelector(`.ux2-row[data-set-id="${CSS.escape(added.id)}"]`) : null;
-        if (row) {
-            row.classList.add("is-fresh");
-        }
-    }
 
     /** «Минулого разу» is a button: one tap copies last time's numbers into this set. */
     function ux2ApplyLast(workoutExerciseId, setId) {
@@ -12804,14 +12065,9 @@ import {
             return;
         }
         const id = ` data-workout-id="${workoutItem.id}"`;
-        const progress = sessionProgress(workoutItem.exercises);
         const durationValue = workoutItem.durationOverride == null ? `авто · ${autoDuration(workoutItem)} хв` : formatDurationLabel(Number(workoutItem.durationOverride));
-        // The classic editor has «Завершити» in its own action bar and is the classic view.
-        const inSession = document.body.classList.contains("ux2-in-session");
-        ux2Sheet(ux2Title(workoutItem), `${inSession ? `<div class="ux2-menu">
-                ${ux2MenuItem("ux2-finish", "flag", "Завершити тренування", "", { primary: true, hint: progress.total ? `${progress.done} з ${progress.total} ${pluralUk(progress.total, "підходу", "підходів", "підходів")} виконано` : "" })}
-            </div>` : ""}
-            <div class="ux2-menu">
+        // «Завершити» lives in the workout's own action bar, not in here.
+        ux2Sheet(ux2Title(workoutItem), `<div class="ux2-menu">
                 ${workoutItem.exercises.length ? ux2MenuItem("ux2-fill-last", "history", "Усе як минулого разу", "", { hint: "Невиконані підходи — останніми результатами" }) : ""}
                 ${workoutBlocks(workoutItem.exercises).length > 1 ? ux2MenuItem("ux2-reorder", "arrow-up-down", "Порядок вправ", "", { hint: "Перетягнути або стрілками" }) : ""}
                 ${ux2MenuItem("ux2-pick-type", "layers", "Тип тренування", id, { value: workoutTypeLabel(workoutItem.workoutType) })}
@@ -12822,7 +12078,6 @@ import {
                 ${workoutItem.exercises.length ? ux2MenuItem("ux2-template", "bookmark-plus", "Зберегти як шаблон", id) : ""}
             </div>
             <div class="ux2-menu">
-                ${inSession ? ux2MenuItem("ux2-classic", "layout-list", "Класичний вигляд", "", { hint: "Повернути старий екран тренування" }) : ""}
                 ${ux2MenuItem("ux2-delete-workout", "trash-2", "Видалити тренування", id, { danger: true })}
             </div>`, { caption: `${workoutLabel(workoutItem)} · ${formatDate(workoutItem.date)}` });
     }
@@ -12842,16 +12097,6 @@ import {
             <button class="button button-primary ux2-wide" type="button" data-action="close-overlay"><i data-lucide="check"></i>Готово</button>`);
     }
 
-    function ux2SwitchToClassic() {
-        closeOverlay();
-        ux2CloseKeypad({ silent: true });
-        setPref("newWorkoutScreen", "0");
-        applyPreferences();
-        renderSection();
-        renderFloatingTimer();
-        toast("Класичний вигляд", "Новий можна повернути в Налаштуваннях → Тренування.");
-    }
-
     // ---- Keypad -------------------------------------------------------------------------------
     //
     // The phone's own number keyboard covers half the screen, has no decimal comma on half
@@ -12860,520 +12105,9 @@ import {
     // ± by the plate step of the equipment, «як минулого разу», and «Далі» that walks
     // weight → reps → next set. The first key replaces the value, like a selected field.
 
-    const ux2Pad = { open: false, workoutExerciseId: null, setId: null, field: null, draft: "", fresh: true };
-
-    function ux2PadTarget() {
-        if (!ux2Pad.open) {
-            return null;
-        }
-        const workoutItem = editWorkout();
-        const workoutExercise = workoutItem ? workoutItem.exercises.find((item) => item.id === ux2Pad.workoutExerciseId) : null;
-        const set = workoutExercise ? workoutExercise.sets.find((item) => item.id === ux2Pad.setId) : null;
-        return set ? { workoutItem, workoutExercise, set, exercise: exerciseById(workoutExercise.exerciseId) } : null;
-    }
-
-    function ux2FieldText(set, field) {
-        if (ux2Pad.open && ux2Pad.setId === set.id && ux2Pad.field === field) {
-            if (field === "durationSeconds") {
-                return durationDigitsLabel(ux2Pad.draft);
-            }
-            return ux2Pad.draft === "" ? "0" : ux2Pad.draft;
-        }
-        if (field === "durationSeconds") {
-            return ux2Clock(set.durationSeconds);
-        }
-        if (field === "weight") {
-            return numberDraft(set.weight);
-        }
-        return String(Math.round(Number(set[field]) || 0));
-    }
-
-    function ux2OpenKeypad(workoutExerciseId, setId, field) {
-        const switching = ux2Pad.open && ux2Pad.setId !== setId;
-        Object.assign(ux2Pad, { open: true, workoutExerciseId, setId, field });
-        const target = ux2PadTarget();
-        if (!target || !["weight", "repetitions", "durationSeconds"].includes(field)) {
-            ux2CloseKeypad();
-            return;
-        }
-        ux2Pad.draft = field === "durationSeconds" ? digitsFromDuration(target.set.durationSeconds) : numberDraft(target.set[field]);
-        ux2Pad.fresh = true;
-        if (switching) {
-            // Moving to another set: repaint so the deltas and the big button catch up with
-            // what was just typed into the previous one.
-            renderSection();
-        }
-        ux2RenderKeypad();
-        ux2MarkEditing();
-        ux2RevealEditing();
-    }
-
-    function ux2NextField(target) {
-        const { workoutExercise, set } = target;
-        const measure = isTimedSet(set) ? "durationSeconds" : "repetitions";
-        if (ux2Pad.field === "weight") {
-            return { workoutExerciseId: workoutExercise.id, setId: set.id, field: measure };
-        }
-        const following = workoutExercise.sets[workoutExercise.sets.indexOf(set) + 1];
-        return following ? { workoutExerciseId: workoutExercise.id, setId: following.id, field: "weight" } : null;
-    }
-
-    function ux2RenderKeypad() {
-        const target = ux2PadTarget();
-        if (!target) {
-            ux2CloseKeypad({ silent: true });
-            return;
-        }
-        let node = document.getElementById("ux2Keypad");
-        if (!node) {
-            node = document.createElement("div");
-            node.id = "ux2Keypad";
-            node.className = "ux2-kp";
-            node.setAttribute("role", "dialog");
-            node.setAttribute("aria-label", "Введення значення");
-            node.addEventListener("click", ux2KeypadClick);
-            document.body.appendChild(node);
-        }
-        const { set, workoutExercise, exercise, workoutItem } = target;
-        const timed = isTimedSet(set);
-        const measure = timed ? "durationSeconds" : "repetitions";
-        const last = pairedLast(ux2LastSets(workoutItem, workoutExercise.exerciseId), workoutExercise.sets.indexOf(set));
-        const step = fieldStep(ux2Pad.field, exercise.equipment);
-        const stepText = ux2Pad.field === "durationSeconds" ? `${step} с` : numberDraft(step);
-        const decimals = (FIELD_LIMITS[ux2Pad.field] || {}).decimals > 0;
-        const chip = (field, label) => `<button class="ux2-kp-field${ux2Pad.field === field ? " is-active" : ""}" type="button" data-kp-field="${field}"><span>${label}</span><strong data-kp-out="${field}">${escapeHtml(ux2FieldText(set, field))}</strong></button>`;
-        const key = (value, label = value) => `<button class="ux2-kp-key" type="button" data-kp="${value}">${label}</button>`;
-        const nextLabel = ux2NextField(target) ? `Далі<i data-lucide="arrow-right"></i>` : `Готово<i data-lucide="check"></i>`;
-        node.innerHTML = `<div class="ux2-kp-top">
-                ${chip("weight", timed || isBodyweightExercise(exercise) ? "+кг" : "кг")}
-                ${chip(measure, timed ? "час" : "повт")}
-                ${last ? `<button class="ux2-kp-last" type="button" data-kp="last" title="Як минулого разу"><i data-lucide="corner-down-left"></i><span>${escapeHtml(ux2SetText(last))}</span></button>` : `<span class="ux2-kp-spacer"></span>`}
-                <button class="ux2-kp-close" type="button" data-kp="close" aria-label="Сховати клавіатуру"><i data-lucide="chevron-down"></i></button>
-            </div>
-            <div class="ux2-kp-keys">
-                ${key("1")}${key("2")}${key("3")}<button class="ux2-kp-key is-fn" type="button" data-kp="back" aria-label="Стерти"><i data-lucide="delete"></i></button>
-                ${key("4")}${key("5")}${key("6")}<button class="ux2-kp-key is-fn" type="button" data-kp="minus">−${escapeHtml(stepText)}</button>
-                ${key("7")}${key("8")}${key("9")}<button class="ux2-kp-key is-fn" type="button" data-kp="plus">+${escapeHtml(stepText)}</button>
-                <button class="ux2-kp-key" type="button" data-kp=","${decimals ? "" : " disabled"}>,</button>${key("0")}<button class="ux2-kp-key is-next" type="button" data-kp="next">${nextLabel}</button>
-            </div>`;
-        iconsIn(node);
-        // Opened on the next frame's style, so the slide-up actually animates the first time.
-        void node.offsetWidth;
-        node.classList.add("is-open");
-        document.body.classList.add("ux2-kp-open");
-    }
-
-    /** Re-draws the "+10" badges of one exercise from its live values (weight being typed). */
-    function ux2RefreshDeltas(workoutExercise) {
-        const sets = workoutExercise.sets || [];
-        sets.forEach((set, index) => {
-            const cell = document.querySelector(`.ux2-row[data-set-id="${CSS.escape(set.id)}"] .ux2-val[data-field="weight"]`);
-            if (!cell) {
-                return;
-            }
-            const old = cell.querySelector(".ux2-delta");
-            if (old) {
-                old.remove();
-            }
-            const delta = previousSetDelta(sets, index);
-            if (delta) {
-                cell.insertAdjacentHTML("afterbegin", ux2DeltaBadge(delta, numberDraft(Math.abs(delta))));
-            }
-        });
-    }
-
-    /** Paints the typed value into the keypad chips and the row above, without a re-render. */
-    function ux2PaintPad(target) {
-        const { set } = target;
-        if (ux2Pad.field === "weight") {
-            ux2RefreshDeltas(target.workoutExercise);
-        }
-        document.querySelectorAll("#ux2Keypad [data-kp-out]").forEach((node) => {
-            node.textContent = ux2FieldText(set, node.dataset.kpOut);
-        });
-        const cell = document.querySelector(`.ux2-row[data-set-id="${CSS.escape(set.id)}"] .ux2-val[data-field="${ux2Pad.field}"]`);
-        if (cell) {
-            const num = cell.querySelector(".ux2-val-num");
-            if (num) {
-                num.textContent = ux2FieldText(set, ux2Pad.field);
-            }
-            cell.classList.toggle("is-zero", !(Number(set[ux2Pad.field]) > 0));
-        }
-    }
-
-    function ux2CommitDraft() {
-        const target = ux2PadTarget();
-        if (!target) {
-            ux2CloseKeypad({ silent: true });
-            return;
-        }
-        const value = ux2Pad.field === "durationSeconds" ? durationFromDigits(ux2Pad.draft) : draftNumber(ux2Pad.draft);
-        target.set[ux2Pad.field] = value;
-        schedulePersistWorkout(target.workoutItem);
-        ux2PaintPad(target);
-    }
-
-    function ux2KeypadType(key) {
-        ux2Pad.draft = ux2Pad.field === "durationSeconds"
-            ? durationDigitsPress(ux2Pad.draft, key, ux2Pad.fresh)
-            : keypadPress(ux2Pad.draft, key, ux2Pad.field, ux2Pad.fresh);
-        ux2Pad.fresh = false;
-        ux2CommitDraft();
-    }
-
-    function ux2KeypadStep(direction) {
-        const target = ux2PadTarget();
-        if (!target) {
-            return;
-        }
-        const step = fieldStep(ux2Pad.field, target.exercise.equipment);
-        const value = stepValue(Number(target.set[ux2Pad.field]) || 0, direction * step, ux2Pad.field);
-        ux2Pad.draft = ux2Pad.field === "durationSeconds" ? digitsFromDuration(value) : numberDraft(value);
-        // A stepped value is a finished value: the next digit starts over rather than
-        // appending to it.
-        ux2Pad.fresh = true;
-        ux2CommitDraft();
-    }
-
-    function ux2KeypadApplyLast() {
-        const target = ux2PadTarget();
-        if (!target) {
-            return;
-        }
-        ux2ApplyLast(target.workoutExercise.id, target.set.id);
-        ux2Pad.draft = ux2Pad.field === "durationSeconds" ? digitsFromDuration(target.set.durationSeconds) : numberDraft(target.set[ux2Pad.field]);
-        ux2Pad.fresh = true;
-        ux2RenderKeypad();
-        ux2MarkEditing();
-    }
-
-    function ux2KeypadNext() {
-        const target = ux2PadTarget();
-        const next = target ? ux2NextField(target) : null;
-        if (!next) {
-            ux2CloseKeypad();
-            return;
-        }
-        ux2OpenKeypad(next.workoutExerciseId, next.setId, next.field);
-    }
-
-    function ux2KeypadClick(event) {
-        const button = event.target.closest("button");
-        if (!button || button.disabled) {
-            return;
-        }
-        if (button.dataset.kpField) {
-            ux2OpenKeypad(ux2Pad.workoutExerciseId, ux2Pad.setId, button.dataset.kpField);
-            return;
-        }
-        const key = button.dataset.kp;
-        if (key === "close") {
-            ux2CloseKeypad();
-        } else if (key === "next") {
-            ux2KeypadNext();
-        } else if (key === "last") {
-            ux2KeypadApplyLast();
-        } else if (key === "minus" || key === "plus") {
-            ux2KeypadStep(key === "plus" ? 1 : -1);
-        } else if (key) {
-            ux2KeypadType(key);
-        }
-    }
-
-    function ux2CloseKeypad(options = {}) {
-        const wasOpen = ux2Pad.open;
-        ux2Pad.open = false;
-        const node = document.getElementById("ux2Keypad");
-        if (node) {
-            node.classList.remove("is-open");
-        }
-        document.body.classList.remove("ux2-kp-open");
-        document.querySelectorAll(".ux2-row.is-editing, .ux2-val.is-editing").forEach((item) => item.classList.remove("is-editing"));
-        if (wasOpen && !options.silent) {
-            renderSection();
-        }
-    }
-
-    function ux2MarkEditing() {
-        document.querySelectorAll(".ux2-row.is-editing, .ux2-val.is-editing").forEach((item) => item.classList.remove("is-editing"));
-        if (!ux2Pad.open) {
-            return;
-        }
-        const row = document.querySelector(`.ux2-row[data-set-id="${CSS.escape(ux2Pad.setId)}"]`);
-        if (!row) {
-            return;
-        }
-        row.classList.add("is-editing");
-        const cell = row.querySelector(`.ux2-val[data-field="${ux2Pad.field}"]`);
-        if (cell) {
-            cell.classList.add("is-editing");
-        }
-    }
-
-    /** Keeps the row being typed into visible between the header and the keypad. */
-    function ux2RevealEditing() {
-        const row = document.querySelector(".ux2-row.is-editing");
-        const pad = document.getElementById("ux2Keypad");
-        if (!row || !pad) {
-            return;
-        }
-        const padTop = window.innerHeight - pad.offsetHeight;
-        const head = document.querySelector(".ux2-head");
-        const top = head ? head.getBoundingClientRect().bottom : 0;
-        const rect = row.getBoundingClientRect();
-        if (rect.bottom > padTop - 12) {
-            window.scrollBy({ top: rect.bottom - (padTop - 12) + 36, behavior: "smooth" });
-        } else if (rect.top < top + 8) {
-            window.scrollBy({ top: rect.top - top - 44, behavior: "smooth" });
-        }
-    }
-
-    /** A tap anywhere that is not the keypad or another value closes it. Taps, not scrolls. */
-    function ux2KeypadOutside(event) {
-        if (!ux2Pad.open) {
-            return;
-        }
-        const pad = document.getElementById("ux2Keypad");
-        if (pad && pad.contains(event.target)) {
-            return;
-        }
-        if (event.target.closest && event.target.closest('[data-action="ux2-edit"], [data-action="ux2-cta-edit"]')) {
-            return;
-        }
-        ux2CloseKeypad();
-    }
-
-    function ux2KeypadKeydown(event) {
-        if (!ux2Pad.open || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
-            return;
-        }
-        const tag = event.target && event.target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !element("modalBackdrop").classList.contains("hidden")) {
-            return;
-        }
-        const key = event.key;
-        let handled = true;
-        if (/^\d$/.test(key)) {
-            ux2KeypadType(key);
-        } else if (key === "," || key === ".") {
-            ux2KeypadType(",");
-        } else if (key === "Backspace") {
-            ux2KeypadType("back");
-        } else if (key === "Enter" || key === "Tab") {
-            ux2KeypadNext();
-        } else if (key === "Escape") {
-            ux2CloseKeypad();
-        } else if (key === "ArrowUp" || key === "ArrowDown") {
-            ux2KeypadStep(key === "ArrowUp" ? 1 : -1);
-        } else {
-            handled = false;
-        }
-        if (handled) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }
-
-    /** After every render: keep the keypad pointed at a row that still exists. */
-    function ux2AfterRender() {
-        if (!ux2Pad.open) {
-            return;
-        }
-        if (!document.body.classList.contains("ux2-in-session") || !ux2PadTarget()) {
-            ux2CloseKeypad({ silent: true });
-            return;
-        }
-        ux2MarkEditing();
-    }
 
     // ---- Finishing --------------------------------------------------------------------------------
 
-    let ux2LastFinish = null;
-
-    /**
-     * «Завершити» asks only when there is something to decide: sets that were never ticked.
-     * They used to be counted as done without a word; now the choice is spelled out — drop
-     * them, or count them — and either way the session can be reopened from the summary.
-     */
-    async function ux2Finish() {
-        const workoutItem = editWorkout();
-        const me = currentUser();
-        if (!workoutItem || workoutItem.status !== "active" || !me || workoutItem.userId !== me.id) {
-            closeOverlay();
-            return;
-        }
-        closeOverlay();
-        ux2CloseKeypad({ silent: true });
-        const sets = workoutItem.exercises.flatMap((item) => item.sets || []);
-        const pending = sets.filter((set) => !set.isCompleted);
-        const doneCount = sets.length - pending.length;
-        let mode = "complete";
-        if (pending.length && doneCount) {
-            const choice = await choiceDialog(`${pending.length} ${pluralUk(pending.length, "підхід", "підходи", "підходів")} ще не позначено.`, {
-                title: "Завершити тренування?",
-                closable: true,
-                choices: [
-                    { label: "Прибрати невиконані", value: "drop", variant: "primary" },
-                    { label: "Зарахувати їх теж", value: "complete" }
-                ]
-            });
-            if (!choice) {
-                return;
-            }
-            mode = choice;
-        } else if (pending.length) {
-            const confirmed = await confirmDialog("Жодного підходу ще не позначено.", {
-                title: "Завершити тренування?",
-                detail: "Усі заплановані підходи буде зараховано як виконані.",
-                confirmLabel: "Зарахувати і завершити",
-                danger: false
-            });
-            if (!confirmed) {
-                return;
-            }
-        }
-        const snapshot = {
-            workoutId: workoutItem.id,
-            exercises: JSON.parse(JSON.stringify(workoutItem.exercises)),
-            supersetGroups: JSON.parse(JSON.stringify(workoutItem.supersetGroups || [])),
-            lastSetAt: workoutItem.lastSetAt || null
-        };
-        const records = new Map(recordsFor(me.id).map((record) => [record.exerciseId, record]));
-        const before = { xp: userXp(me.id), records };
-        if (mode === "drop") {
-            workoutItem.exercises.forEach((item) => {
-                item.sets = (item.sets || []).filter((set) => set.isCompleted);
-            });
-            const emptied = workoutItem.exercises.filter((item) => !item.sets.length);
-            workoutItem.exercises = workoutItem.exercises.filter((item) => item.sets.length);
-            new Set(emptied.map((item) => item.supersetGroupId).filter(Boolean)).forEach((groupId) => dissolveLoneSuperset(workoutItem, groupId));
-        }
-        ux2LastFinish = snapshot;
-        await finishWorkout(workoutItem.id, { quiet: true });
-        ux2ShowSummary(workoutItem, before, checkAchievementUnlocks({ silent: true }));
-    }
-
-    function ux2XpGained(workoutItem, before, recordCount) {
-        if (!usingServerScoring()) {
-            return Math.max(0, userXp(workoutItem.userId) - before.xp);
-        }
-        // The server's scoring block is what XP is read from, and it is only refreshed by a
-        // reload — so the gain is worked out here by the kernel's own rules (workout + volume
-        // + streak + first result per exercise). Achievements are left to the server.
-        const volume = workoutVolume(workoutItem);
-        let gained = XP_REWARDS.workout + Math.min(XP_REWARDS.volumeCap, Math.floor(volume / XP_REWARDS.volumePerXp));
-        const previous = workoutsFor(workoutItem.userId)
-            .filter((item) => item.id !== workoutItem.id && item.status === "completed" && String(item.date) <= String(workoutItem.date))
-            .sort(byDateDesc)[0];
-        if (previous && kernelDayDiff(new Date(workoutItem.date), new Date(previous.date)) <= 2) {
-            gained += XP_REWARDS.streak;
-        }
-        return gained + recordCount * XP_REWARDS.record;
-    }
-
-    function ux2ShowSummary(workoutItem, before, achievements = []) {
-        const me = currentUser();
-        const sets = workoutItem.exercises.flatMap((item) => item.sets || []).filter((set) => set.isCompleted);
-        const volume = workoutVolume(workoutItem);
-        const previousSame = workoutsFor(me.id)
-            .filter((item) => item.id !== workoutItem.id && item.status === "completed" && isHydratedWorkout(item) && item.workoutType === workoutItem.workoutType)
-            .sort(byDateDesc)[0];
-        const pct = previousSame ? percentChange(volume, workoutVolume(previousSame)) : null;
-        const records = [];
-        let firstResults = 0;
-        workoutItem.exercises.forEach((item) => {
-            let best = null;
-            (item.sets || []).filter((set) => set.isCompleted && set.type !== "warmup").forEach((set) => {
-                const value = oneRepMax(set.weight, set.repetitions);
-                if (value > 0 && (!best || value > best.value)) {
-                    best = { value, set };
-                }
-            });
-            if (!best) {
-                return;
-            }
-            const previous = before.records.get(item.exerciseId);
-            if (!previous) {
-                firstResults += 1;
-            } else if (best.value > previous.estimatedOneRepMax) {
-                records.push({ exercise: exerciseById(item.exerciseId), best, previous });
-            }
-        });
-        const gained = ux2XpGained(workoutItem, before, firstResults);
-        const levelBefore = levelForXp(before.xp);
-        const levelAfter = levelForXp(before.xp + gained);
-        const frameBefore = frameForLevel(levelBefore.level);
-        const frameAfter = frameForLevel(levelAfter.level);
-        const spanMs = workoutItem.firstSetAt && workoutItem.lastSetAt ? new Date(workoutItem.lastSetAt) - new Date(workoutItem.firstSetAt) : 0;
-        const lengthLabel = spanMs > 0 ? sessionLengthLabel(spanMs) : sessionLengthLabel(duration(workoutItem) * 60000);
-        const when = workoutItem.firstSetAt && workoutItem.lastSetAt
-            ? `${weekdayLabel(workoutItem.date)} · ${timeOfDay(workoutItem.firstSetAt)} – ${timeOfDay(workoutItem.lastSetAt)}`
-            : `${weekdayLabel(workoutItem.date)} · ${formatDate(workoutItem.date)}`;
-        const kpi = (value, label, extra = "", index = 0) => `<div class="ux2-kpi" style="--i:${index}"><strong>${value}${extra}</strong><span>${escapeHtml(label)}</span></div>`;
-        const pctBadge = pct === null ? "" : `<em class="${pct >= 0 ? "up" : "down"}">${pct > 0 ? "+" : ""}${pct}%</em>`;
-        const recordRows = records.map((record) => `<div class="ux2-sum-rec"><span class="ux2-sum-rec-ico"><i data-lucide="flame"></i></span><div><strong>${escapeHtml(record.exercise.name)} · ${escapeHtml(ux2SetText(record.best.set))}</strong><span>1ПМ ≈ ${number(record.best.value)} кг · було ${number(record.previous.estimatedOneRepMax)}</span></div></div>`).join("");
-        const levelUp = levelAfter.level > levelBefore.level;
-        const progressLine = levelAfter.isMax
-            ? "Максимальний рівень"
-            : levelUp ? `Новий рівень! Ще ${number(levelAfter.xpToNext)} XP до ${levelAfter.level + 1}-го` : `${number(levelAfter.xpToNext)} XP до рівня ${levelAfter.level + 1}`;
-        openModal(`<div class="ux2-sum">
-            <div class="ux2-sum-top"><button class="icon-button" type="button" data-action="ux2-summary-done" aria-label="Закрити"><i data-lucide="x"></i></button></div>
-            <div class="ux2-sum-hero">
-                <span class="ux2-sum-kicker"><i data-lucide="sparkles"></i>${escapeHtml(workoutLabel(workoutItem))}</span>
-                <h2>${escapeHtml(ux2Title(workoutItem) === workoutLabel(workoutItem) ? "Тренування завершено" : ux2Title(workoutItem))}</h2>
-                <p>${escapeHtml(when)}</p>
-            </div>
-            <div class="ux2-sum-kpis">
-                ${kpi(escapeHtml(lengthLabel), "час", "", 0)}
-                ${kpi(number(volume), previousSame ? "кг · до минулого" : "кг обсягу", pctBadge, 1)}
-                ${kpi(String(sets.length), pluralUk(sets.length, "підхід", "підходи", "підходів"), "", 2)}
-                ${kpi(String(records.length), pluralUk(records.length, "рекорд", "рекорди", "рекордів"), "", 3)}
-            </div>
-            ${records.length ? `<section class="ux2-sum-card" style="--i:4"><h3>Рекорди</h3>${recordRows}</section>` : ""}
-            ${achievements.length ? `<section class="ux2-sum-card is-gold" style="--i:5"><h3>Досягнення</h3>${achievements.map((achievement) => `<div class="ux2-sum-rec"><span class="ux2-sum-rec-ico is-gold"><i data-lucide="${escapeHtml(achievement.icon || "trophy")}"></i></span><div><strong>«${escapeHtml(achievement.title)}»</strong><span>${escapeHtml(achievement.caption || "")} · +${number(achievement.xp)} XP</span></div></div>`).join("")}</section>` : ""}
-            <section class="ux2-sum-card" style="--i:6"><h3>Прогрес</h3>
-                <div class="ux2-sum-xp">${framedAvatar(me, "small", levelAfter.level)}<div class="ux2-sum-xp-text"><strong>+${number(gained)} XP · рівень ${levelAfter.level}</strong><span>${escapeHtml(progressLine)}${frameAfter.name !== frameBefore.name ? ` · нова рамка «${escapeHtml(frameAfter.name)}»` : ""}</span><div class="ux2-sum-bar"><span style="width:${Math.round(levelAfter.progress * 100)}%"></span></div></div></div>
-            </section>
-            <div class="ux2-sum-actions">
-                <button class="button button-primary ux2-wide" type="button" data-action="ux2-summary-done"><i data-lucide="check"></i>Готово</button>
-                <button class="ux2-link" type="button" data-action="ux2-summary-undo" data-workout-id="${workoutItem.id}"><i data-lucide="undo-2"></i>Повернутися до тренування</button>
-            </div>
-        </div>`, { fullscreen: true });
-    }
-
-    /** Undo for «Завершити»: the session comes back exactly as it was, unticked sets included. */
-    async function ux2UndoFinish(workoutId) {
-        const workoutItem = ownWorkout(workoutId);
-        const snapshot = ux2LastFinish && ux2LastFinish.workoutId === workoutId ? ux2LastFinish : null;
-        if (!workoutItem || !snapshot || workoutItem.status !== "completed") {
-            closeOverlay();
-            return;
-        }
-        const other = activeWorkoutFor(currentUser().id);
-        if (other && other.id !== workoutItem.id) {
-            toast("Уже є активне тренування", "Спершу заверши його.");
-            return;
-        }
-        workoutItem.exercises = snapshot.exercises;
-        workoutItem.supersetGroups = snapshot.supersetGroups;
-        workoutItem.lastSetAt = snapshot.lastSetAt;
-        workoutItem.status = "active";
-        workoutItem.finishedAt = null;
-        workoutItem.updatedAt = new Date().toISOString();
-        ux2LastFinish = null;
-        state.editingWorkoutId = workoutItem.id;
-        await persistWorkout(workoutItem);
-        invalidateFeed();
-        closeOverlay();
-        goToWorkoutEditor(workoutItem.id);
-        renderSection();
-    }
-
-    function ux2SummaryDone() {
-        ux2LastFinish = null;
-        closeOverlay();
-        navigate(defaultSection());
-    }
 
     // ===== Focus mode =====
     // A separate full-screen flow for the active workout: one exercise, one set at
@@ -14040,17 +12774,6 @@ import {
         return ({ free: "Free", premium: "PRO", admin: "Адмін" })[String(role || "free").toLowerCase()] || "Free";
     }
 
-    function roleBadge(role) {
-        const key = String(role || "free").toLowerCase();
-        if (key === "admin") {
-            return `<span class="role-badge admin"><i data-lucide="shield"></i>Адмін</span>`;
-        }
-        if (key === "premium") {
-            return `<span class="role-badge premium"><i data-lucide="crown"></i>PRO</span>`;
-        }
-        return `<span class="role-badge free">Free</span>`;
-    }
-
     function exerciseQuotaState(userId) {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -14321,10 +13044,6 @@ import {
         return templates.find((template) => template.id === id) || templates.at(-1);
     }
 
-    function templateByType(type) {
-        return templates.find((template) => template.type === type) || templateById("custom");
-    }
-
     function statusLabel(status) {
         return statusLabels[status] || capitalize(status);
     }
@@ -14346,10 +13065,6 @@ import {
 
     function workoutTypeLabel(type) {
         return workoutTypeLabels[type] || capitalize(type);
-    }
-
-    function genderLabel(gender) {
-        return genderLabels[gender] || gender;
     }
 
     function dataModeLabel(mode) {
@@ -14384,37 +13099,9 @@ import {
         return (workoutItem.cardioSessions || []).reduce((sum, session) => sum + session.durationMinutes, 0);
     }
 
-    function calendarOverview() {
-        const now = new Date();
-        const weekStart = startWeek(now);
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const weekItems = state.database.workouts.filter((item) => new Date(item.date) >= weekStart);
-        const monthItems = state.database.workouts.filter((item) => new Date(item.date) >= monthStart);
-        const completed = state.database.workouts.filter((item) => item.status === "completed");
-        return {
-            weekWorkouts: weekItems.length,
-            weekCompleted: weekItems.filter((item) => item.status === "completed").length,
-            weekPlanned: weekItems.filter((item) => item.status === "planned").length,
-            monthWorkouts: monthItems.length,
-            monthPlanned: monthItems.filter((item) => item.status === "planned").length,
-            cardioDays: new Set(weekItems.filter((item) => workoutCardioMinutes(item) > 0).map((item) => item.date)).size,
-            streak: streak(completed)
-        };
-    }
-
     function seedWeight(name, index) {
         const weights = { "Жим лежачи": 72, "Жим гантелей під кутом": 28, "Жим у тренажері": 78, "Зведення в кросовері": 18, "Підтягування": 78, "Тяга верхнього блока": 67, "Тяга штанги в нахилі": 72, "Горизонтальна тяга блока": 64, "Жим над головою": 45, "Підйом гантелей в сторони": 12, "Розведення на задню дельту": 10, "Присідання зі штангою": 92, "Жим ногами": 180, "Розгинання ніг": 56, "Румунська тяга": 82, "Згинання ніг": 48, "Підйом на литки": 72, "Згинання зі штангою": 32, "Згинання з гантелями": 16, "Молоткові згинання": 18, "Розгинання на блоці": 38, "Розгинання трицепса над головою": 32, "Планка": 0, "Підйом ніг у висі": 0 };
         return round((weights[name] || 25) + index * 0.7, 1);
-    }
-
-    function todayLabel(userId) {
-        const item = workoutsFor(userId).find((workoutItem) => workoutItem.date === dateInput(new Date()));
-        return item ? item.title : "Заплануй сьогодні";
-    }
-
-    function todayCaption(userId) {
-        const item = workoutsFor(userId).find((workoutItem) => workoutItem.date === dateInput(new Date()));
-        return item ? statusLabel(item.status) : "Тренувань сьогодні ще немає";
     }
 
     function avatar(user, size = "", options = {}) {
@@ -14485,10 +13172,6 @@ import {
 
     function ordered(items) {
         return `<ol>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>`;
-    }
-
-    function bullets(items) {
-        return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
     }
 
     function select(id, options, selected) {
@@ -15342,22 +14025,10 @@ import {
         if (status === "success") {
             iconsIn(chip);
         }
-        // The session screen hides the topbar the chip lives in, so it gets a copy under
-        // its own header — otherwise "saved" would quietly stop being said mid-workout.
-        // Only the outcome, not every "saving…": the session screen stays calm.
-        const sessionChip = status === "success" ? document.getElementById("ux2Sync") : null;
-        if (sessionChip) {
-            sessionChip.className = `ux2-sync visible ${status}`;
-            sessionChip.innerHTML = chip.innerHTML;
-        }
         clearTimeout(syncIndicatorTimeoutId);
         if (status !== "loading") {
             syncIndicatorTimeoutId = setTimeout(() => {
                 chip.classList.remove("visible");
-                const copy = document.getElementById("ux2Sync");
-                if (copy) {
-                    copy.classList.remove("visible");
-                }
             }, 1900);
         }
     }
