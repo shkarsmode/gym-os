@@ -15404,3 +15404,234 @@ body.ux2-kp-open .ux2-dock {
 body.is-impersonating .last-results {
     top: calc(var(--imp-offset, 48px) + var(--topbar-h, 64px) + var(--wab-h, 0px) + 14px);
 }
+
+/* =====================================================================================
+   Warm-up (0.72.0): the row above an exercise's sets and its sheet.
+   Amber, like the warm-up sets themselves (their numbers are amber), so the row reads as
+   "this is about warming up" before a word of it is read. Full width and 52px tall: it
+   has to be found with a thumb between sets, not hunted for.
+   ===================================================================================== */
+.warmup-cta {
+    width: 100%;
+    min-height: 52px;
+    margin: 10px 0 2px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px 8px 8px;
+    border: 1px solid color-mix(in srgb, var(--color-warning) 38%, transparent);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-warning) 9%, var(--color-surface));
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.warmup-cta:active {
+    background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+}
+
+.warmup-cta-ico {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+    color: var(--color-warning);
+}
+
+.warmup-cta-ico svg {
+    width: 18px;
+    height: 18px;
+}
+
+.warmup-cta-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+}
+
+.warmup-cta-text strong {
+    font-size: 14.5px;
+    font-weight: 700;
+}
+
+.warmup-cta-text span {
+    overflow: hidden;
+    color: var(--color-muted);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.warmup-cta-chev {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    color: var(--color-faint);
+}
+
+/* Warm-ups already there (copied from last time): still one tap away, just quieter. */
+.warmup-cta.is-quiet {
+    min-height: 46px;
+    border-style: dashed;
+    background: transparent;
+}
+
+.warmup-cta.is-quiet .warmup-cta-ico {
+    background: transparent;
+}
+
+/* ---- the sheet ---------------------------------------------------------------------- */
+.warmup-inputs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.warmup-inputs .set-stepper {
+    height: 50px;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+}
+
+.warmup-inputs .set-stepper input {
+    height: 100%;
+    min-width: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text);
+    font-size: 20px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.warmup-inputs .set-stepper input::-webkit-outer-spin-button,
+.warmup-inputs .set-stepper input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.warmup-source {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 12.5px;
+}
+
+.warmup-list {
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+    list-style: none;
+}
+
+.warmup-row {
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 6px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.warmup-num {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--color-warning) 50%, transparent);
+    border-radius: 50%;
+    color: var(--color-warning);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.warmup-load {
+    min-width: 0;
+    color: var(--color-text);
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.warmup-load b {
+    font-weight: 800;
+}
+
+.warmup-note {
+    color: var(--color-faint);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.warmup-rest {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--color-muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.warmup-rest svg {
+    width: 13px;
+    height: 13px;
+}
+
+.warmup-row.is-work {
+    border-color: var(--color-accent-border);
+    background: var(--color-accent-dim);
+}
+
+.warmup-row.is-work .warmup-num {
+    border-color: var(--color-accent-border);
+    color: var(--color-accent-strong);
+}
+
+.warmup-row.is-work .warmup-note {
+    color: var(--color-accent-strong);
+    font-weight: 600;
+}
+
+.warmup-why {
+    margin: 8px 2px 0;
+    color: var(--color-muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.warmup-empty {
+    margin: 0;
+    padding: 14px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: 12px;
+    color: var(--color-muted);
+    font-size: 13.5px;
+    text-align: center;
+}
+
+@media (max-width: 380px) {
+    .warmup-row {
+        gap: 8px;
+        padding-right: 10px;
+    }
+
+    .warmup-row:not(.is-work) .warmup-note {
+        display: none;
+    }
+}

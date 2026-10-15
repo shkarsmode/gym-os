@@ -20,6 +20,7 @@ import {
     keypadPress, draftNumber, numberDraft, digitsFromDuration, durationFromDigits, durationDigitsPress, durationDigitsLabel,
     percentChange, sessionLengthLabel, suggestExercises
 } from "./lib/session.js";
+import { planWarmup, isWarmupEligible, warmupPrefill, muscleAlreadyWarm, warmupStillUseful, applyWarmupSets } from "./lib/warmup.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
 // runs a byte-identical copy, so anything computed here must not be recomputed there.
@@ -3434,6 +3435,7 @@ import {
             || latestDoneSets(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const editable = !readonly && workoutItem.userId === currentUser().id;
         const lastNote = lastExerciseNote(historyUserId, workoutExercise.exerciseId, workoutItem.id);
+        const warmupRow = editable ? warmupInlineRow(workoutItem, workoutExercise, exercise, lastSets) : "";
         const lastResults = lastSets && lastSets.sets.length
             ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => {
                 const text = isTimedSet(set) ? `${number(set.weight) ? `${number(set.weight)}×` : ""}${formatDuration(set.durationSeconds)}` : `${number(set.weight)}×${set.repetitions}`;
@@ -3468,7 +3470,7 @@ import {
         const blockTimed = (workoutExercise.sets || []).some(isTimedSet);
         return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header${editable ? " is-compact" : ""}"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div>${editable
             ? `<div class="inline-actions we-actions-compact">${collapseToggle}<button class="icon-button we-menu-btn" type="button" title="Дії з вправою" aria-label="Дії з вправою: фокус, заміна, час, нотатка, відпочинок, видалення" data-action="ux2-ex-menu" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="more-vertical"></i></button></div>`
-            : `<div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div>`}</div><div class="we-body"><div class="we-body-inner">${lastResults}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => (editable
+            : `<div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div>`}</div><div class="we-body"><div class="we-body-inner">${lastResults}${warmupRow}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => (editable
                 ? setRowV2(workoutExercise, set, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise))
                 : setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise)))).join("") : `<p class="card-caption set-empty">${editable ? "Підходів ще немає." : "Підходів ще немає. Додай перший кнопкою «+» вище."}</p>`}</div>${editable ? `<button class="set-add" type="button" data-action="ux2-add-set" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="plus"></i>Підхід</button>` : ""}<div class="note-slot">${previousNote}${!editable || workoutExercise.notes || state.openNotes.has(`exercise:${workoutExercise.id}`) ? noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly) : ""}</div></div></div></article>`;
     }
@@ -3613,6 +3615,248 @@ import {
             return;
         }
         ux2ApplyLast(workoutExerciseId, set.id);
+    }
+
+    // ---- Warm-up: sets that climb to the working weight (formula: lib/warmup.js) ------------
+
+    // The sheet's numbers while it is open: the working set to warm up for, and whether the
+    // muscle is already warm — worked out from the session, but the person can say otherwise.
+    let warmupDraft = null;
+
+    /** Exercises before this one in the session that have sets: the ones that warmed it up. */
+    function warmupPreviousExercises(workoutItem, workoutExercise) {
+        const exercises = workoutItem?.exercises || [];
+        const index = exercises.findIndex((item) => item.id === workoutExercise.id);
+        return exercises.slice(0, Math.max(0, index))
+            .filter((item) => (item.sets || []).length > 0)
+            .map((item) => exerciseById(item.exerciseId))
+            .filter(Boolean);
+    }
+
+    /** Not for holds, core or cardio, not inside a superset (a round is the Nth set of
+     *  every member — extra sets on one of them would shift every round), and only until
+     *  the first working set is done. */
+    function warmupAvailable(workoutExercise, exercise) {
+        return isWarmupEligible(exercise) && !workoutExercise.supersetGroupId && warmupStillUseful(workoutExercise.sets);
+    }
+
+    function warmupLoadText(weight, bodyweight) {
+        if (bodyweight) {
+            return weight > 0 ? `+${number(weight)} кг` : "без ваги";
+        }
+        return `${number(weight)} кг`;
+    }
+
+    /** The visible way in: a row right above the sets, there until a working set is done. */
+    function warmupInlineRow(workoutItem, workoutExercise, exercise, lastSets) {
+        if (!warmupAvailable(workoutExercise, exercise)) {
+            return "";
+        }
+        const bodyweight = isBodyweightExercise(exercise);
+        const prefill = warmupPrefill(workoutExercise.sets, lastSets?.sets, bodyweight);
+        const hasWarmups = workoutExercise.sets.some((set) => set.type === "warmup");
+        let detail = "Вкажи робочу вагу — порахую підходи";
+        if (prefill) {
+            const warm = muscleAlreadyWarm(warmupPreviousExercises(workoutItem, workoutExercise), exercise);
+            const plan = planWarmup({ weight: prefill.weight, reps: prefill.reps, exercise, warm });
+            if (!plan.length) {
+                return "";
+            }
+            // Once warm-ups exist the count would only restate the default plan, which may not
+            // be the one that was picked (the «already warm» switch) — so just the target.
+            detail = `до ${warmupLoadText(prefill.weight, bodyweight)} × ${prefill.reps}${hasWarmups ? "" : ` · ${plan.length} ${pluralUk(plan.length, "підхід", "підходи", "підходів")}`}`;
+        }
+        return `<button class="warmup-cta${hasWarmups ? " is-quiet" : ""}" type="button" data-action="warmup-open" data-workout-exercise-id="${workoutExercise.id}">
+            <span class="warmup-cta-ico"><i data-lucide="flame"></i></span>
+            <span class="warmup-cta-text"><strong>${hasWarmups ? "Перерахувати розминку" : "Розминка"}</strong><span>${escapeHtml(detail)}</span></span>
+            <i data-lucide="chevron-right" class="warmup-cta-chev"></i>
+        </button>`;
+    }
+
+    function openWarmupSheet(workoutExerciseId) {
+        const workoutItem = editWorkout();
+        const workoutExercise = editWorkoutExercise(workoutExerciseId);
+        if (!workoutItem || !workoutExercise) {
+            closeOverlay();
+            return;
+        }
+        const exercise = exerciseById(workoutExercise.exerciseId);
+        const last = ux2LastSets(workoutItem, workoutExercise.exerciseId);
+        const prefill = warmupPrefill(workoutExercise.sets, last?.sets, isBodyweightExercise(exercise));
+        const warm = muscleAlreadyWarm(warmupPreviousExercises(workoutItem, workoutExercise), exercise);
+        warmupDraft = {
+            workoutExerciseId,
+            weight: prefill ? prefill.weight : 0,
+            reps: prefill ? prefill.reps : 8,
+            source: prefill ? prefill.source : null,
+            warm,
+            warmAuto: warm
+        };
+        renderWarmupSheet();
+    }
+
+    /** The draft's plan, minus what finished warm-ups already covered. */
+    function warmupDraftState() {
+        const workoutExercise = warmupDraft ? editWorkoutExercise(warmupDraft.workoutExerciseId) : null;
+        const exercise = workoutExercise ? exerciseById(workoutExercise.exerciseId) : null;
+        if (!exercise) {
+            return null;
+        }
+        const bodyweight = isBodyweightExercise(exercise);
+        const plan = planWarmup({ weight: warmupDraft.weight, reps: warmupDraft.reps, exercise, warm: warmupDraft.warm });
+        const done = workoutExercise.sets.filter((set) => set.type === "warmup" && set.isCompleted);
+        const covered = done.length ? Math.max(...done.map((set) => Number(set.weight) || 0)) : -Infinity;
+        const ready = warmupDraft.reps > 0 && (bodyweight || warmupDraft.weight > 0);
+        return {
+            workoutExercise,
+            exercise,
+            bodyweight,
+            plan,
+            ready,
+            done: done.length,
+            shown: ready ? plan.filter((set) => set.weight > covered) : [],
+            pending: workoutExercise.sets.filter((set) => set.type === "warmup" && !set.isCompleted).length,
+            hasWork: workoutExercise.sets.some((set) => set.type !== "warmup")
+        };
+    }
+
+    function warmupPreviewHtml(draft) {
+        if (!draft.ready) {
+            return `<p class="warmup-empty">Вкажи вагу й повтори робочого підходу — і тут з'являться підходи розминки.</p>`;
+        }
+        if (!draft.shown.length) {
+            return `<p class="warmup-empty">Для такої ваги окрема розминка не потрібна — можна одразу робочий підхід.</p>`;
+        }
+        const row = (position, load, reps, note, rest, work = false) => `<li class="warmup-row${work ? " is-work" : ""}">
+                <span class="warmup-num">${position}</span>
+                <span class="warmup-load">${escapeHtml(load)} <b>× ${reps}</b></span>
+                <span class="warmup-note">${escapeHtml(note)}</span>
+                <span class="warmup-rest">${rest ? `<i data-lucide="timer"></i>${formatRest(rest)}` : ""}</span>
+            </li>`;
+        const rows = draft.shown.map((set, index) => row(draft.done + index + 1, warmupLoadText(set.weight, draft.bodyweight), set.reps, set.note || (set.pct ? `${set.pct}%` : ""), set.restSeconds)).join("");
+        const work = row(draft.done + draft.shown.length + 1, warmupLoadText(warmupDraft.weight, draft.bodyweight), warmupDraft.reps, "робочий", 0, true);
+        const last = draft.shown.at(-1);
+        const why = last.pct
+            ? `Останній підхід розминки — ${last.pct}% робочої ваги: мʼязи готові, а сил на робочий не меншає. Кожен підхід легкий — далеко від відмови.`
+            : "Розминка легка — далеко від відмови, щоб сил на робочий не меншало.";
+        return `<ol class="warmup-list">${rows}${work}</ol><p class="warmup-why">${escapeHtml(why)}</p>`;
+    }
+
+    function warmupApplyLabel(draft) {
+        const count = draft.shown.length;
+        if (!count) {
+            return { text: draft.ready ? "Розминка не потрібна" : "Вкажи робочий підхід", disabled: true };
+        }
+        const what = `${count} ${pluralUk(count, "підхід", "підходи", "підходів")}`;
+        if (draft.pending) {
+            return { text: `Замінити розминку · ${what}`, disabled: false };
+        }
+        return { text: draft.hasWork ? `Додати розминку · ${what}` : `Додати розминку й робочий`, disabled: false };
+    }
+
+    function renderWarmupSheet() {
+        const draft = warmupDraftState();
+        if (!draft) {
+            closeOverlay();
+            return;
+        }
+        const field = (name, value, inputMode, step, label) => `<div class="set-field"><span class="set-field-label">${label}</span><div class="set-stepper">
+                <button class="set-step" type="button" data-action="warmup-step" data-field="${name}" data-dir="-1" aria-label="Менше">−</button>
+                <input id="warmup-${name}" type="number" inputmode="${inputMode}" step="${step}" min="0" value="${value}" data-action="warmup-field" data-field="${name}">
+                <button class="set-step" type="button" data-action="warmup-step" data-field="${name}" data-dir="1" aria-label="Більше">+</button>
+            </div></div>`;
+        const source = warmupDraft.source === "last"
+            ? "Як минулого разу — зміни, якщо сьогодні інакше"
+            : warmupDraft.source === "set" ? "З твого першого робочого підходу" : "Скільки плануєш у робочому підході";
+        const warmHint = warmupDraft.warmAuto
+            ? "Попередня вправа вже працювала на цей мʼяз — досить 1–2 підходів"
+            : "Увімкни, якщо мʼяз уже працював сьогодні — тоді 1–2 підходи";
+        const apply = warmupApplyLabel(draft);
+        ux2Sheet("Розминка", `<div class="ux2-sheet-block">
+                <span class="ux2-sheet-label">Робочий підхід</span>
+                <div class="warmup-inputs">${field("weight", warmupDraft.weight, "decimal", "0.5", draft.bodyweight ? "Дод. вага, кг" : "Вага, кг")}${field("reps", warmupDraft.reps, "numeric", "1", "Повтори")}</div>
+                <p class="warmup-source">${escapeHtml(source)}</p>
+            </div>
+            <div class="ux2-switch-row"><span><strong>Мʼяз уже розігрітий</strong><span>${escapeHtml(warmHint)}</span></span><label class="settings-switch"><input type="checkbox" data-action="warmup-warm" ${warmupDraft.warm ? "checked" : ""} aria-label="Мʼяз уже розігрітий"><span></span></label></div>
+            <div class="ux2-sheet-block"><span class="ux2-sheet-label">Підходи</span><div id="warmupPreview">${warmupPreviewHtml(draft)}</div></div>
+            <button class="button button-primary ux2-wide" type="button" data-action="warmup-apply" id="warmupApply" ${apply.disabled ? "disabled" : ""}><i data-lucide="flame"></i><span>${escapeHtml(apply.text)}</span></button>`, {
+            caption: draft.exercise.name,
+            lead: ux2Thumb(draft.exercise)
+        });
+    }
+
+    /** Typing or ± in the sheet repaints the plan only — the inputs keep focus and caret. */
+    function refreshWarmupPreview() {
+        const draft = warmupDraftState();
+        if (!draft) {
+            return;
+        }
+        const preview = element("warmupPreview");
+        if (preview) {
+            preview.innerHTML = warmupPreviewHtml(draft);
+        }
+        const button = element("warmupApply");
+        if (button) {
+            const apply = warmupApplyLabel(draft);
+            button.disabled = apply.disabled;
+            const label = button.querySelector("span");
+            if (label) {
+                label.textContent = apply.text;
+            }
+        }
+        icons();
+    }
+
+    function warmupStep(field, direction) {
+        const draft = warmupDraftState();
+        if (!draft || !direction) {
+            return;
+        }
+        if (field === "weight") {
+            warmupDraft.weight = stepValue(warmupDraft.weight, direction * fieldStep("weight", draft.exercise.equipment), "weight");
+        } else {
+            warmupDraft.reps = Math.max(1, Math.min(100, Math.round(Number(warmupDraft.reps) || 0) + direction));
+        }
+        const input = element(`warmup-${field}`);
+        if (input) {
+            input.value = String(field === "weight" ? warmupDraft.weight : warmupDraft.reps);
+        }
+        refreshWarmupPreview();
+    }
+
+    function warmupSetField(field, raw) {
+        if (!warmupDraft) {
+            return;
+        }
+        const value = Number(String(raw ?? "").replace(",", "."));
+        if (field === "weight") {
+            warmupDraft.weight = Number.isFinite(value) && value > 0 ? Math.min(value, FIELD_LIMITS.weight.max) : 0;
+        } else {
+            warmupDraft.reps = Number.isFinite(value) && value > 0 ? Math.min(100, Math.round(value)) : 0;
+        }
+        refreshWarmupPreview();
+    }
+
+    async function applyWarmup() {
+        const draft = warmupDraftState();
+        const workoutItem = editWorkout();
+        if (!draft || !workoutItem || !draft.shown.length) {
+            return;
+        }
+        const { workoutExercise } = draft;
+        const before = new Set(workoutExercise.sets);
+        const next = applyWarmupSets(workoutExercise.sets, draft.plan, {
+            weight: warmupDraft.weight,
+            reps: warmupDraft.reps,
+            restSeconds: Number(getPref("defaultRest")) || 90
+        }, (type, weight, reps, restSeconds) => createSet(type, weight, reps, null, restSeconds, false));
+        const added = next.filter((set) => !before.has(set) && set.type === "warmup").length;
+        workoutExercise.sets.splice(0, workoutExercise.sets.length, ...next);
+        warmupDraft = null;
+        closeOverlay();
+        await persistWorkout(workoutItem);
+        renderSection();
+        showSyncIndicator("success", `Розминка · ${added} ${pluralUk(added, "підхід", "підходи", "підходів")}`);
     }
 
     function calendar() {
@@ -5484,6 +5728,9 @@ import {
             "ux2-fill-last": () => ux2FillFromLast(actionElement.dataset.workoutExerciseId || null),
             "set-step": () => stepSetField(actionElement.dataset.workoutExerciseId, actionElement.dataset.setId, actionElement.dataset.field, Number(actionElement.dataset.dir) || 0),
             "fill-from-last": () => fillSetFromLast(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.setIndex)),
+            "warmup-open": () => openWarmupSheet(actionElement.dataset.workoutExerciseId),
+            "warmup-step": () => warmupStep(actionElement.dataset.field, Number(actionElement.dataset.dir) || 0),
+            "warmup-apply": () => applyWarmup(),
             "ux2-reorder": () => ux2OpenReorderSheet(actionElement.dataset.workoutExerciseId || null),
             "ux2-reorder-move": () => ux2MoveBlockBy(actionElement.dataset.key, Number(actionElement.dataset.dir) || 0),
             "ux2-ex-rest": () => ux2ExerciseRest(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.seconds) || 0),
@@ -5536,6 +5783,14 @@ import {
         // gym-date fires `change`, not `input`, so the birthday step is read here.
         if (actionElement.dataset.action === "onboarding-field") {
             setOnboardingField(actionElement.dataset.obField, actionElement.value);
+            return;
+        }
+
+        if (actionElement.dataset.action === "warmup-warm") {
+            if (warmupDraft) {
+                warmupDraft.warm = Boolean(actionElement.checked);
+                refreshWarmupPreview();
+            }
             return;
         }
 
@@ -5691,7 +5946,7 @@ import {
     function actionNeedsLoader(action) {
         // The new workout screen paints every result itself, immediately: a spinner swapped
         // into a 46px tick or into the big button would read as lag, not progress.
-        if (action.startsWith("ux2-") || action.startsWith("pcal-") || action === "set-step" || action === "fill-from-last") {
+        if (action.startsWith("ux2-") || action.startsWith("pcal-") || action.startsWith("warmup-") || action === "set-step" || action === "fill-from-last") {
             return false;
         }
         return !new Set([
@@ -5840,6 +6095,11 @@ import {
 
         if (actionElement.dataset.action === "onboarding-field") {
             setOnboardingField(actionElement.dataset.obField, actionElement.value);
+            return;
+        }
+
+        if (actionElement.dataset.action === "warmup-field") {
+            warmupSetField(actionElement.dataset.field, actionElement.value);
             return;
         }
 
@@ -12423,6 +12683,7 @@ import {
         const last = workoutExercise.supersetGroupId ? null : ux2LastSets(editWorkout(), workoutExercise.exerciseId);
         ux2Sheet(exercise.name, `<div class="ux2-menu">
                 ${last ? ux2MenuItem("ux2-fill-last", "history", "Як минулого разу", id, { hint: last.sets.map((set) => ux2SetText(set)).join(" · ") }) : ""}
+                ${warmupAvailable(workoutExercise, exercise) ? ux2MenuItem("warmup-open", "flame", sets.some((set) => set.type === "warmup") ? "Перерахувати розминку" : "Розминка", id, { hint: "Розминочні підходи до робочої ваги" }) : ""}
                 ${editWorkout()?.status === "active" ? ux2MenuItem("ux2-ex-focus", "crosshair", "Фокус на цій вправі", id, { hint: "Один підхід на весь екран" }) : ""}
                 ${ux2MenuItem("ux2-ex-replace", "repeat", "Замінити вправу", id)}
                 ${workoutBlocks(editWorkout().exercises).length > 1 ? ux2MenuItem("ux2-reorder", "arrow-up-down", "Перемістити", id, { hint: "Змінити порядок вправ" }) : ""}
