@@ -20,6 +20,7 @@ import {
     keypadPress, draftNumber, numberDraft, digitsFromDuration, durationFromDigits, durationDigitsPress, durationDigitsLabel,
     percentChange, sessionLengthLabel, suggestExercises
 } from "./lib/session.js";
+import { liveSetRecords } from "./lib/live-records.js";
 import { planWarmup, isWarmupEligible, warmupPrefill, muscleAlreadyWarm, warmupStillUseful, applyWarmupSets, minWorkingRest } from "./lib/warmup.js";
 import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, parseSseFrames, backoffDelay, shouldApplyRemote } from "./lib/realtime.js";
 // The scoring kernel. These are the ONLY implementations of these rules — the backend
@@ -3436,6 +3437,7 @@ import {
         const editable = !readonly && workoutItem.userId === currentUser().id;
         const lastNote = lastExerciseNote(historyUserId, workoutExercise.exerciseId, workoutItem.id);
         const warmupRow = editable ? warmupInlineRow(workoutItem, workoutExercise, exercise, lastSets) : "";
+        const records = editable ? liveSetRecords(workoutExercise.sets, previousBestOneRepMax(workoutItem, workoutExercise.exerciseId)) : null;
         const lastResults = lastSets && lastSets.sets.length
             ? `<div class="last-results"><span class="last-results-label"><i data-lucide="history"></i>Минулого разу · ${formatDate(lastSets.date)}</span><div class="last-results-chips">${lastSets.sets.map((set, setIndex) => {
                 const text = isTimedSet(set) ? `${number(set.weight) ? `${number(set.weight)}×` : ""}${formatDuration(set.durationSeconds)}` : `${number(set.weight)}×${set.repetitions}`;
@@ -3471,7 +3473,7 @@ import {
         return `<article class="${articleClass}" data-workout-exercise-id="${workoutExercise.id}"><div class="exercise-header${editable ? " is-compact" : ""}"><div class="we-head-main">${dragHandle}${thumb}<div class="we-head-text"><div class="exercise-title-line"><h3>${escapeHtml(exercise.name)}</h3><span class="chip">${exercise.primaryMuscleGroup}</span></div><p class="card-caption">${blockTimed ? timedBlockCaption(workoutExercise) : `${number(exerciseVolume(workoutExercise))} кг обсягу · 1ПМ ${number(exerciseOneRepMax(workoutExercise))} кг`}</p></div></div>${editable
             ? `<div class="inline-actions we-actions-compact">${collapseToggle}<button class="icon-button we-menu-btn" type="button" title="Дії з вправою" aria-label="Дії з вправою: фокус, заміна, час, нотатка, відпочинок, видалення" data-action="ux2-ex-menu" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="more-vertical"></i></button></div>`
             : `<div class="inline-actions">${collapseToggle}${!readonly && workoutItem.status === "active" ? `<button class="icon-button" type="button" title="Фокус на цій вправі" data-action="open-focus" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="crosshair"></i></button>` : ""}${readonly ? "" : `<button class="icon-button" type="button" title="Замінити вправу" data-action="replace-exercise" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="repeat"></i></button>`}${readonly ? "" : `<button class="icon-button${blockTimed ? " is-on" : ""}" type="button" title="${blockTimed ? "Рахувати повтори" : "Рахувати час (планка, віс, утримання)"}" data-action="toggle-timed-block" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="${blockTimed ? "repeat-2" : "timer"}"></i></button>`}<button class="icon-button" type="button" title="Додати підхід" data-action="add-set" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="plus"></i></button><button class="icon-button" type="button" title="Видалити вправу" data-action="remove-workout-exercise" data-workout-exercise-id="${workoutExercise.id}" ${readonly ? "disabled" : ""}><i data-lucide="trash-2"></i></button></div>`}</div><div class="we-body"><div class="we-body-inner">${lastResults}${warmupRow}<div class="set-list">${workoutExercise.sets.length ? workoutExercise.sets.map((set, index) => (editable
-                ? setRowV2(workoutExercise, set, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise))
+                ? setRowV2(workoutExercise, set, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise), records ? records.get(set.id) || null : null)
                 : setRow(workoutExercise.id, set, readonly, index + 1, showSetHint, index > 0 ? workoutExercise.sets[index - 1].weight : null, isBodyweightExercise(exercise)))).join("") : `<p class="card-caption set-empty">${editable ? "Підходів ще немає." : "Підходів ще немає. Додай перший кнопкою «+» вище."}</p>`}</div>${editable ? `<button class="set-add" type="button" data-action="ux2-add-set" data-workout-exercise-id="${workoutExercise.id}"><i data-lucide="plus"></i>Підхід</button>` : ""}<div class="note-slot">${previousNote}${!editable || workoutExercise.notes || state.openNotes.has(`exercise:${workoutExercise.id}`) ? noteField(`exercise:${workoutExercise.id}`, "Нотатки до вправи", "Додати нотатку до вправи", workoutExercise.notes, `data-action="update-exercise-notes" data-workout-exercise-id="${workoutExercise.id}"`, readonly) : ""}</div></div></div></article>`;
     }
 
@@ -3551,7 +3553,26 @@ import {
         </div>`;
     }
 
-    function setRowV2(workoutExercise, set, index, showSetHint, prevWeight, bodyweight = false) {
+    /**
+     * The person's best estimated 1RM for this exercise from OTHER sessions — the bar a set
+     * today has to clear to be a record. Server records cover the whole history; when the
+     * best one is this very session (it was finished and reopened) the loaded history
+     * without it decides instead.
+     */
+    function previousBestOneRepMax(workoutItem, exerciseId) {
+        const record = recordsFor(workoutItem.userId).find((item) => item.exerciseId === exerciseId);
+        if (record && record.workoutId !== workoutItem.id) {
+            return Number(record.estimatedOneRepMax) || 0;
+        }
+        const others = workoutsFor(workoutItem.userId).filter((item) => item.id !== workoutItem.id);
+        const local = kernelRecordsFor(workoutItem.userId, others, exerciseById).find((item) => item.exerciseId === exerciseId);
+        return local ? Number(local.estimatedOneRepMax) || 0 : 0;
+    }
+
+    // The set ticked a moment ago: its record badge animates in once, later renders don't.
+    let recordFlashSetId = null;
+
+    function setRowV2(workoutExercise, set, index, showSetHint, prevWeight, bodyweight = false, record = null) {
         const target = `data-workout-exercise-id="${workoutExercise.id}" data-set-id="${set.id}"`;
         const hintOn = Boolean(showSetHint) && index === 1 && !set.isCompleted;
         const hintChip = hintOn
@@ -3565,7 +3586,10 @@ import {
                 <input type="number" inputmode="${inputMode}" step="${step}" min="0" value="${value}" data-action="set-field" ${target} data-field="${field}">
                 <button class="set-step" type="button" data-action="set-step" data-field="${field}" data-dir="1" ${target} aria-label="Більше">+</button>
             </div>`;
-        return `<div class="set-row v2 kind-${escapeHtml(set.type || "working")}${set.isCompleted ? " completed" : ""}${hintOn ? " has-hint" : ""}">
+        const recordStrip = record
+            ? `<div class="set-record" role="status"><span class="set-record-ico" aria-hidden="true"><i data-lucide="trophy"></i></span><span class="set-record-text"><strong>Новий рекорд</strong><span>1ПМ ${number(record.e1rm)} кг · +${number(record.gain)} кг до попереднього</span></span></div>`
+            : "";
+        return `<div class="set-row v2 kind-${escapeHtml(set.type || "working")}${set.isCompleted ? " completed" : ""}${hintOn ? " has-hint" : ""}${record ? " is-record" : ""}${record && set.id === recordFlashSetId ? " is-new" : ""}">
             <div class="set-row-head">${hintChip}
                 <span class="set-index">${index}</span>
                 <button class="set-type-chip" type="button" data-action="ux2-set-menu" ${target} aria-label="Тип підходу: ${escapeHtml(setTypeLabel(set.type))}. Змінити або видалити"><span>${escapeHtml(setTypeLabel(set.type))}</span><i data-lucide="chevron-down"></i></button>
@@ -3577,7 +3601,7 @@ import {
             <div class="set-fields v2${timed ? " is-timed" : ""}">
                 <div class="set-field" title="${timed || bodyweight ? "Вага понад власну — 0, якщо без обтяження" : "Робоча вага"}"><span class="set-field-label">${weightFieldLabel({ timed, bodyweight })}${weightDeltaBadge(prevWeight, set.weight)}</span>${stepper("weight", set.weight, "decimal", "0.5")}</div>
                 <div class="set-field"><span class="set-field-label">${timed ? "Час, с" : "Повтори"}</span>${stepper(measureField, timed ? set.durationSeconds : set.repetitions, "numeric", timed ? "5" : "1")}</div>
-            </div>
+            </div>${recordStrip}
         </div>`;
     }
 
@@ -7775,6 +7799,14 @@ import {
         const completing = !set.isCompleted;
         set.isCompleted = completing;
         touchGymClock(editWorkout());
+        if (completing) {
+            recordFlashSetId = setId;
+            setTimeout(() => {
+                if (recordFlashSetId === setId) {
+                    recordFlashSetId = null;
+                }
+            }, 2500);
+        }
         // Inside a superset the rest belongs to the ROUND, not to the set: A1 is followed
         // by A2 immediately, and only the last exercise of the round earns a break. So the
         // per-set timer is suppressed for members and started once, with the group's own
