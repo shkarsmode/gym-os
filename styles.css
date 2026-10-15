@@ -15018,10 +15018,30 @@ body.ux2-kp-open .ux2-dock {
 
 @media (max-width: 920px) {
     .last-results-chips .last-chip {
-        min-height: 34px;
-        padding: 6px 11px;
-        font-size: 13px;
+        min-height: 32px;
+        padding: 6px 9px;
+        font-size: 12.5px;
     }
+}
+
+/* «Минулого разу» stays ONE line: a fifth chip wrapping made the sticky strip twice as
+   tall and covered the set it was meant to be read against. Five sets fit; more scroll
+   sideways, and the current one is scrolled into view (updateLastResultsFocus). */
+.last-results-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    padding: 2px 1px;
+    margin: -2px -1px;
+}
+
+.last-results-chips::-webkit-scrollbar {
+    display: none;
+}
+
+.last-results-chips .chip {
+    flex: 0 0 auto;
 }
 
 /* ---- Set row v2 ---------------------------------------------------------------- */
@@ -15187,4 +15207,200 @@ body.ux2-kp-open .ux2-dock {
     .set-stepper {
         grid-template-columns: 34px minmax(0, 1fr) 34px;
     }
+}
+
+/* The exercise body is a grid (for the collapse animation), and a grid item will not shrink
+   below its content: a one-line chip row would widen the whole card past the screen instead
+   of scrolling. Let it shrink. */
+.workout-exercise .we-body {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.workout-exercise .we-body-inner,
+.workout-exercise .last-results {
+    min-width: 0;
+}
+
+@media (max-width: 920px) {
+    .last-results-chips {
+        gap: 5px;
+    }
+
+    .last-results-chips .last-chip {
+        padding: 6px 8px;
+    }
+}
+
+/* ---- «Тисни кружечок» stays UNDER the sticky «Минулого разу» -------------------------
+   It sat at z-index 6, above the strip (4), so once the first set scrolled under the
+   stuck strip the hint was painted across its chips. Below it, the strip simply covers it. */
+.setdone-hint {
+    z-index: 3;
+}
+
+/* ---- Phone: the header keeps ONE height ------------------------------------------------
+   Showing the muscle line only while the header borrows an exercise's name (context mode)
+   made the header taller mid-scroll, and the sticky action bar — parked at the MEASURED
+   height — ended up tucked under it. The line stays hidden on a phone, context or not. */
+@media (max-width: 920px) {
+    .topbar .eyebrow {
+        display: none;
+    }
+}
+
+/* ---- Phone: a stricter tab bar -------------------------------------------------------
+   Same five places and the same centre «Тренування» — but docked to the bottom edge like
+   a system tab bar instead of a floating glass pill, a hairline instead of a shadow, no
+   bouncing or glowing, and the centre button inline with the others (a quiet accent tile,
+   not a raised glowing circle). An active workout is a small dot, not a pulse. */
+@media (max-width: 920px) {
+    :root {
+        --mobile-nav-height: 60px;
+    }
+
+    .mobile-navigation {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        align-items: center;
+        gap: 0;
+        padding: 5px calc(6px + env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left));
+        border: 0;
+        border-top: 1px solid var(--color-border);
+        border-radius: 0;
+        background: color-mix(in srgb, var(--color-page) 94%, transparent);
+        -webkit-backdrop-filter: blur(16px) saturate(1.2);
+        backdrop-filter: blur(16px) saturate(1.2);
+        box-shadow: none;
+    }
+
+    .mobile-navigation .mnav-item,
+    .mobile-navigation .mnav-center {
+        min-height: 50px;
+        justify-content: center;
+        gap: 3px;
+        padding: 0;
+        color: var(--color-faint);
+        transition: color 0.15s ease, opacity 0.15s ease;
+    }
+
+    .mobile-navigation .mnav-item:active,
+    .mobile-navigation .mnav-center:active {
+        transform: none;
+        opacity: 0.6;
+    }
+
+    .mobile-navigation .mnav-ico {
+        width: 30px;
+        height: 26px;
+        border-radius: 0;
+        background: none;
+        transform: none;
+        transition: color 0.15s ease;
+    }
+
+    .mobile-navigation .mnav-ico svg {
+        width: 22px;
+        height: 22px;
+        stroke-width: 1.8;
+    }
+
+    .mobile-navigation .mnav-label {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0;
+    }
+
+    .mobile-navigation .mnav-item.active,
+    .mobile-navigation .mnav-center.active {
+        color: var(--color-text);
+    }
+
+    .mobile-navigation .mnav-item.active .mnav-ico {
+        background: none;
+        color: var(--color-accent);
+        transform: none;
+    }
+
+    .mobile-navigation .mnav-item.active .mnav-ico::after {
+        display: none;
+    }
+
+    .mobile-navigation .mnav-center .mnav-center-btn {
+        width: 46px;
+        height: 28px;
+        margin-top: 0;
+        border: 0;
+        border-radius: 10px;
+        background: var(--color-accent);
+        color: #04150f;
+        box-shadow: none;
+        transform: none;
+    }
+
+    .mobile-navigation .mnav-center .mnav-center-btn svg {
+        width: 18px;
+        height: 18px;
+        stroke-width: 2.2;
+    }
+
+    .mobile-navigation .mnav-center.active .mnav-center-btn,
+    .mobile-navigation .mnav-center:active .mnav-center-btn {
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* A session in progress: a small dot on the tile instead of an endless pulse. */
+    .mobile-navigation .mnav-pulse {
+        inset: auto;
+        top: -3px;
+        right: -3px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--color-text);
+        box-shadow: 0 0 0 2px var(--color-page);
+        animation: none;
+    }
+
+    /* Everything that floats above the tab bar sits above its new height, safe area included. */
+    .floating-timer {
+        bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 10px);
+    }
+
+    .floating-timer.collapsed {
+        bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 14px);
+    }
+
+    .watch-fab {
+        bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 14px);
+    }
+
+    .update-banner {
+        bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 10px);
+    }
+
+    .ux2-mini {
+        bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 8px);
+    }
+
+    body.ux2-has-mini .update-banner {
+        bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 82px);
+    }
+}
+
+/* ---- The action bar floats BELOW the header, not tucked under it ----------------------
+   It was parked 6 px up inside the header's bottom fade, which on a phone read as the bar
+   being jammed into the header. A small clear gap instead — and the «Минулого разу» strip,
+   which sticks right under the bar, moves down by the same amount. */
+.workout-actionbar {
+    top: calc(var(--topbar-h, 64px) + 6px);
+}
+
+.last-results {
+    top: calc(var(--topbar-h, 64px) + var(--wab-h, 0px) + 14px);
+}
+
+body.is-impersonating .last-results {
+    top: calc(var(--imp-offset, 48px) + var(--topbar-h, 64px) + var(--wab-h, 0px) + 14px);
 }

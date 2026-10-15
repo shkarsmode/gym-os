@@ -6004,6 +6004,18 @@ import {
                 }
             });
             chips.forEach((chip, index) => chip.classList.toggle("is-current", index === best));
+            // The chips are one line that scrolls sideways when there are many sets, so the
+            // current one has to be brought into view — but only when it is actually out of
+            // it, or every scroll of the page would nudge the strip.
+            const strip = pill.querySelector(".last-results-chips");
+            const current = chips[best];
+            if (strip && current && strip.scrollWidth > strip.clientWidth) {
+                const left = current.offsetLeft - strip.offsetLeft;
+                const right = left + current.offsetWidth;
+                if (left < strip.scrollLeft || right > strip.scrollLeft + strip.clientWidth) {
+                    strip.scrollLeft = Math.max(0, left - (strip.clientWidth - current.offsetWidth) / 2);
+                }
+            }
             // Mark the ROW as well, so the pairing is visible at both ends: the chip up in
             // the sticky strip and the number down in the row are lit together, and you can
             // read "this set was 80x3 last time" without counting positions between them.
