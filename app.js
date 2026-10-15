@@ -185,6 +185,29 @@ import {
         }
     }
 
+    /**
+     * Keeps the Bearer copy of a session the server just slid forward.
+     *
+     * A sign-in lasts half a year and /auth/me renews it — at most once a day — by handing
+     * back `token`. It used to be minted once at login for 14 days and never renewed, so
+     * everyone was signed out a fortnight after their last login however often they
+     * trained. Stored only while the session that asked is still the one on this device:
+     * a logout or an impersonation switch made while the request was in flight must not be
+     * undone by its late answer.
+     */
+    function adoptRenewedSession(sentToken, renewedToken) {
+        if (!sentToken || !renewedToken || renewedToken === sentToken) {
+            return;
+        }
+        try {
+            if (localStorage.getItem("gymos-auth-token") === sentToken) {
+                localStorage.setItem("gymos-auth-token", renewedToken);
+            }
+        } catch (error) {
+            // The cookie half of the session was renewed by the same response.
+        }
+    }
+
     class ApiClient {
         constructor(baseUrl) {
             this.baseUrl = String(baseUrl || "").replace(/\/$/, "");
@@ -778,7 +801,9 @@ import {
 
         async refreshCurrentUser(shouldThrow = true) {
             try {
+                const sentToken = storedAuthToken();
                 const response = await this.apiClient.me();
+                adoptRenewedSession(sentToken, response?.token);
                 this.currentUser = response?.user || null;
                 // Session shape, not user data: whether this is an impersonation and
                 // whether this account may start one. Read from the server on every
@@ -17925,6 +17950,27 @@ import {
         }
     }
 
+    // A phone's app switcher or a desktop tab left open for weeks brings the app back
+    // without a fresh start, and the start is where the session slides forward. So coming
+    // back asks as well — at most every 6 hours (the server renews once a token is a day
+    // old anyway). Only the token is taken from the answer: who the user is was settled
+    // at boot and is not re-decided on a resume.
+    let lastSessionRenewalCheck = Date.now();
+    function renewSessionOnResume() {
+        if (storage.mode !== "api" || !storage.currentUser || storage.impersonation) {
+            return;
+        }
+        if (Date.now() - lastSessionRenewalCheck < 6 * 60 * 60 * 1000) {
+            return;
+        }
+        lastSessionRenewalCheck = Date.now();
+        const sentToken = storedAuthToken();
+        if (!sentToken) {
+            return;
+        }
+        storage.apiClient.me().then((response) => adoptRenewedSession(sentToken, response?.token)).catch(() => undefined);
+    }
+
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
             flushPendingWorkoutSaves();
@@ -17941,6 +17987,7 @@ import {
             // The OS released the lock when the tab went away and will not give it back on
             // its own, so coming back has to ask again.
             syncScreenWakeLock();
+            renewSessionOnResume();
         }
     });
     window.addEventListener("pagehide", () => {
@@ -17962,6 +18009,7 @@ import {
         startLiveStream();
         loadPresence(true);
         replayMissedCheers();
+        renewSessionOnResume();
     });
 })();
 
