@@ -13404,43 +13404,41 @@ html.compact-ui .chip {
     white-space: nowrap;
 }
 
-/* The chip opens the set's menu (type, rest, delete). A bare chevron did not say so —
-   the owner read it as a label — so it ends in a small pencil key that looks pressable. */
-.set-type-chip {
-    padding-right: 5px;
-}
-
-.set-type-chip .set-type-edit {
+/* The set's menu (type, rest, delete) has its own key beside the type, not tucked inside
+   it: a chevron did not say «you can change this», and a pencil inside the field read as
+   part of the field (owner, 0.75.1). The type chip still opens the same menu. */
+.set-edit-btn {
     flex: 0 0 auto;
-    width: 30px;
-    height: 30px;
+    width: 40px;
+    height: 40px;
     display: grid;
     place-items: center;
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--color-text) 8%, transparent);
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
     color: var(--color-muted);
-    transition: background 0.15s ease, color 0.15s ease;
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.set-type-chip .set-type-edit svg {
-    width: 15px;
-    height: 15px;
+.set-edit-btn svg {
+    width: 16px;
+    height: 16px;
 }
 
 @media (hover: hover) {
-    .set-type-chip:hover .set-type-edit {
-        background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    .set-edit-btn:hover {
+        border-color: var(--color-accent-border);
         color: var(--color-accent-strong);
     }
 }
 
-.set-type-chip:active .set-type-edit {
-    background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+.set-edit-btn:active {
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
     color: var(--color-accent-strong);
-}
-
-.set-row.completed .set-type-chip .set-type-edit {
-    background: transparent;
 }
 
 .set-rest-chip {
@@ -13555,6 +13553,20 @@ html.compact-ui .chip {
 @media (max-width: 380px) {
     .set-rest-chip {
         padding: 0 8px;
+    }
+
+    .set-edit-btn {
+        width: 36px;
+    }
+
+    /* 360 px (most Android phones): «Розминка» must still fit beside the pencil key. */
+    .set-row.v2 .set-row-head {
+        gap: 6px;
+    }
+
+    .set-type-chip {
+        padding: 0 8px;
+        font-size: 13.5px;
     }
 
     .set-stepper {
