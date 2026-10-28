@@ -2018,6 +2018,36 @@ body.is-impersonating .last-results {
     }
 }
 
+/* Under 375 px the three labels no longer fit beside the clock (15 px short at 360 —
+   most Android phones — 55 px at 320), and every one of them came out cut: «Фо…»,
+   «Впра…», «Заверш…». So the words go one at a time instead of all being clipped: first
+   «Вправа» — a «+» in a workout's bar says «add an exercise» by itself — and only on the
+   narrowest screens «Фокус» too. «Завершити» always stays a word. The bar keeps its one
+   height; only widths change, and only by viewport, never on scroll. */
+@media (max-width: 374px) {
+    .workout-actionbar .button.wab-add {
+        flex: 0 0 auto;
+        min-width: 42px;
+        padding-inline: 0;
+    }
+
+    .workout-actionbar .button.wab-add span {
+        display: none;
+    }
+}
+
+@media (max-width: 335px) {
+    .workout-actionbar .button.wab-focus {
+        flex: 0 0 auto;
+        min-width: 42px;
+        padding-inline: 0;
+    }
+
+    .workout-actionbar .button.wab-focus span {
+        display: none;
+    }
+}
+
 /* NO transitions anywhere in this bar. It is rebuilt on every set toggle, so anything
    that animates replays on every tap — which read as the whole header twitching. The two
    layouts are swapped instantly instead. */
@@ -13571,6 +13601,35 @@ html.compact-ui .chip {
 
     .set-stepper {
         grid-template-columns: 34px minmax(0, 1fr) 34px;
+    }
+}
+
+/* 320–340 px: the type chip came down to «Р…». The rest chip's stopwatch goes (a lone
+   «1:00» still reads as a time), the gaps and the pencil key shrink a little. */
+@media (max-width: 340px) {
+    .set-row.v2 .set-row-head {
+        gap: 4px;
+    }
+
+    .set-rest-chip {
+        padding: 0 7px;
+    }
+
+    .set-rest-chip svg {
+        display: none;
+    }
+
+    .set-edit-btn {
+        width: 32px;
+    }
+
+    .set-type-chip {
+        padding: 0 6px;
+        font-size: 12.5px;
+    }
+
+    .set-row.v2 .set-row-actions .icon-button {
+        width: 40px;
     }
 }
 
