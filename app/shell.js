@@ -397,7 +397,9 @@ let screenWakeLock = null;
 let wakeLockWanted = false;
 
 function wantsScreenAwake() {
-    if (getPref("keepAwake") !== "1") {
+    // Signed out (the sign-in gate) there is no database yet, and coming back to the tab
+    // runs this anyway.
+    if (getPref("keepAwake") !== "1" || !state.database) {
         return false;
     }
     if (state.focus) {

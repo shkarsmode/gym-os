@@ -443,7 +443,8 @@ export async function refreshPeerWorkouts() {
 }
 
 export async function replayMissedCheers() {
-    if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl()) {
+    // No database yet behind the sign-in gate; the tab coming back still calls this.
+    if (storage.mode !== "api" || !storage.apiClient.hasBaseUrl() || !state.database) {
         return;
     }
     // Not just the running session. A cheer sent in the last minutes of a workout
