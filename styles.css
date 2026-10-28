@@ -13404,11 +13404,43 @@ html.compact-ui .chip {
     white-space: nowrap;
 }
 
-.set-type-chip svg {
+/* The chip opens the set's menu (type, rest, delete). A bare chevron did not say so —
+   the owner read it as a label — so it ends in a small pencil key that looks pressable. */
+.set-type-chip {
+    padding-right: 5px;
+}
+
+.set-type-chip .set-type-edit {
     flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
-    color: var(--color-faint);
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--color-text) 8%, transparent);
+    color: var(--color-muted);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.set-type-chip .set-type-edit svg {
+    width: 15px;
+    height: 15px;
+}
+
+@media (hover: hover) {
+    .set-type-chip:hover .set-type-edit {
+        background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+        color: var(--color-accent-strong);
+    }
+}
+
+.set-type-chip:active .set-type-edit {
+    background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+    color: var(--color-accent-strong);
+}
+
+.set-row.completed .set-type-chip .set-type-edit {
+    background: transparent;
 }
 
 .set-rest-chip {
@@ -13921,6 +13953,54 @@ body.is-impersonating .last-results {
     font-weight: 600;
 }
 
+/* Done already, or another kind of set (drop, back-off): listed so the preview is the
+   whole exercise, but quiet — the sheet does not change them. */
+.warmup-row.is-done,
+.warmup-row.is-kept {
+    background: transparent;
+    opacity: 0.62;
+}
+
+.warmup-row.is-done .warmup-num {
+    border-color: var(--color-accent-border);
+    color: var(--color-accent-strong);
+}
+
+.warmup-num svg {
+    width: 14px;
+    height: 14px;
+}
+
+.warmup-row.is-kept .warmup-num {
+    border-color: var(--color-border-strong);
+    color: var(--color-muted);
+}
+
+/* «Робочих підходів  − 3 +» under the working set's numbers. */
+.warmup-count-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.warmup-count-row .ux2-stepper {
+    gap: 8px;
+}
+
+.warmup-count-row .ux2-round-btn {
+    width: 40px;
+    height: 40px;
+}
+
+.warmup-count-row .ux2-stepper strong {
+    min-width: 32px;
+}
+
 .warmup-why {
     margin: 8px 2px 0;
     color: var(--color-muted);
@@ -14058,4 +14138,467 @@ body.is-impersonating .last-results {
     .set-row.v2.is-record.is-new .set-record::after {
         animation: none;
     }
+}
+
+/* =====================================================================================
+   «Додати вправу» (0.75.0): a grid of compact cards instead of one huge card per row.
+   Two across on a phone — a square gif of ~170 px still reads — three or four where
+   the box is wider. The whole card adds the exercise; «i» opens a closer look over the
+   picker. The scroller itself stops being a grid: it stacks the sections now.
+   ===================================================================================== */
+.modal-layer.modal-list .exercise-picker-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 2px;
+    container-type: inline-size;
+}
+
+/* The title needs no caption under it any more («Замінити» still names the exercise),
+   so it sits close to the search. `:has(#…)` carries an id's weight, hence the repeat. */
+.modal-layer.modal-list:has(#exercisePickerBody) .modal-header.picker-header {
+    margin-bottom: 0;
+}
+
+.exercise-picker-grid .picker-suggest {
+    margin-bottom: 2px;
+}
+
+.picker-search-wrap {
+    position: relative;
+}
+
+.picker-search-wrap .picker-search-ico {
+    position: absolute;
+    left: 13px;
+    top: 50%;
+    width: 18px;
+    height: 18px;
+    color: var(--color-muted);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+/* 16 px: iOS zooms the whole page into any smaller field it focuses. */
+.picker-search-wrap .picker-search {
+    width: 100%;
+    height: 46px;
+    padding: 0 46px 0 41px;
+    border-radius: 14px;
+    font-size: 16px;
+}
+
+.picker-search::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    display: none;
+}
+
+.picker-search-clear {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--color-muted);
+    transform: translateY(-50%);
+    cursor: pointer;
+}
+
+.picker-search-clear[hidden] {
+    display: none;
+}
+
+.picker-search-clear svg {
+    width: 18px;
+    height: 18px;
+}
+
+.picker-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0 0;
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.picker-section-count {
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--color-text) 9%, transparent);
+    color: var(--color-text);
+    font-size: 11px;
+    letter-spacing: 0;
+}
+
+.pick-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+@container (min-width: 520px) {
+    .pick-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+}
+
+@container (min-width: 780px) {
+    .pick-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.pick-card {
+    position: relative;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    background: var(--color-surface-2);
+    overflow: hidden;
+    /* the long list: skip painting cards far off screen */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 240px;
+    transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.pick-card-main {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.pick-media {
+    position: relative;
+    display: block;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background: var(--color-elevated);
+}
+
+.pick-media .exercise-thumb-ph svg {
+    width: 56px;
+    height: 56px;
+}
+
+/* contain, never cover: a demo gif is never cropped (house rule, see .exercise-thumb) */
+.pick-media img {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #fff;
+    transition: transform 0.25s ease;
+}
+
+.pick-body {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 9px 10px 11px;
+}
+
+.pick-name {
+    display: -webkit-box;
+    min-height: calc(2 * 1.25em);
+    overflow: hidden;
+    color: var(--color-text);
+    font-size: 13.5px;
+    font-weight: 650;
+    line-height: 1.25;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.pick-meta {
+    overflow: hidden;
+    color: var(--color-muted);
+    font-size: 11.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.pick-add {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 2;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+    background: var(--color-accent);
+    color: var(--ux2-on-accent, #04150f);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.pick-add svg {
+    width: 19px;
+    height: 19px;
+}
+
+.pick-info {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 3;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(17, 19, 24, 0.55);
+    color: #fff;
+    cursor: pointer;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    touch-action: manipulation;
+}
+
+.pick-info svg {
+    width: 17px;
+    height: 17px;
+}
+
+.pick-tag,
+.pick-likes {
+    position: absolute;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    font-size: 11.5px;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.pick-tag {
+    top: 8px;
+    left: 8px;
+    background: var(--color-accent);
+    color: var(--ux2-on-accent, #04150f);
+}
+
+.pick-tag.is-current {
+    background: rgba(17, 19, 24, 0.7);
+    color: #fff;
+}
+
+.pick-likes {
+    left: 8px;
+    bottom: 8px;
+    background: rgba(17, 19, 24, 0.62);
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+.pick-likes.is-mine {
+    background: color-mix(in srgb, var(--color-accent) 85%, #000);
+    color: var(--ux2-on-accent, #04150f);
+}
+
+.pick-tag svg,
+.pick-likes svg {
+    width: 13px;
+    height: 13px;
+}
+
+.pick-card.is-in {
+    border-color: var(--color-accent-border);
+}
+
+.pick-card.is-current,
+.pick-card.is-disliked {
+    opacity: 0.55;
+}
+
+@media (hover: hover) {
+    .pick-card:hover {
+        border-color: var(--color-accent-border);
+    }
+
+    .pick-card:hover .pick-media img {
+        transform: scale(1.03);
+    }
+}
+
+.pick-card:has(.pick-card-main:active) {
+    transform: scale(0.98);
+}
+
+.pick-card-main:focus-visible {
+    outline: none;
+}
+
+.pick-card:has(.pick-card-main:focus-visible) {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--color-accent-border);
+}
+
+/* Adding: the «+» turns into a spinner until the picker closes. */
+.pick-card-main.is-loading .pick-add svg {
+    opacity: 0;
+}
+
+.pick-card-main.is-loading .pick-add::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: pick-spin 0.7s linear infinite;
+}
+
+@keyframes pick-spin {
+    to { transform: rotate(360deg); }
+}
+
+.button.picker-more {
+    align-self: center;
+    width: auto;
+    min-width: 220px;
+    margin: 2px auto 10px;
+}
+
+.picker-more span {
+    margin-left: 6px;
+    color: var(--color-muted);
+    font-weight: 500;
+}
+
+.picker-empty {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    padding: 18px 0 8px;
+}
+
+.picker-empty .button {
+    width: auto;
+}
+
+/* ---- the closer look («i») over the picker ---------------------------------------- */
+.pick-preview {
+    display: grid;
+    gap: 14px;
+}
+
+.pick-preview .modal-header {
+    margin-bottom: 0;
+}
+
+.pick-preview-media {
+    position: relative;
+    width: min(100%, 440px);
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 18px;
+    background: var(--color-elevated);
+}
+
+.pick-preview-media img {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #fff;
+}
+
+.pick-preview-muscles {
+    margin: 0;
+}
+
+.pick-preview .chip.pick-chip-main {
+    border-color: var(--color-accent-border);
+    background: var(--color-accent-dim);
+    color: var(--color-accent-strong);
+    font-weight: 700;
+}
+
+.pick-preview-history {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface-2));
+    color: var(--color-text);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.pick-preview-history svg {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    color: var(--color-accent-strong);
+}
+
+.pick-preview-steps h3 {
+    margin: 0 0 6px;
+    font-size: 14px;
+}
+
+.pick-preview-steps ol {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding-left: 20px;
+    color: var(--color-muted);
+    font-size: 13.5px;
+    line-height: 1.45;
+}
+
+.pick-preview .exercise-card-reactions {
+    justify-content: flex-start;
+    margin-top: 0;
+}
+
+.pick-preview-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 0 -2px;
+    padding: 10px 2px 2px;
+    background: linear-gradient(to bottom, transparent, var(--color-surface) 35%);
+}
+
+.pick-preview-actions .button {
+    width: 100%;
+    min-height: 50px;
 }

@@ -24,8 +24,9 @@ import { reactToExercise, setUserRole } from "./components.js";
 import { storage } from "./data.js";
 import { openExercise, openWorkout } from "./exercise-detail.js";
 import {
-    approveExerciseEntry, deleteExerciseEntry, editExercise, exercisePickerCards, openAddExerciseModal,
-    openCustomExercise, pickerBody, pickerMuscleContent, rejectExerciseEntry, saveCustomExercise, setPickerFilter,
+    approveExerciseEntry, clearPickerSearch, closePickerPreview, deleteExerciseEntry, editExercise,
+    openAddExerciseModal, openCustomExercise, openPickerPreview, pickerBody, pickerMuscleContent,
+    refreshPickerResults, rejectExerciseEntry, saveCustomExercise, setPickerFilter, showMorePickerCards,
     suggestExerciseMedia
 } from "./exercise-picker.js";
 import {
@@ -80,7 +81,7 @@ import {
 import { applyUpdate, dismissUpdateBanner, showUpdateBanner } from "./update-banner.js";
 import { icons, iconsIn } from "./util.js";
 import {
-    applyWarmup, openWarmupSheet, refreshWarmupPreview, warmupDraft, warmupSetField, warmupStep
+    applyWarmup, openWarmupSheet, refreshWarmupPreview, warmupCount, warmupDraft, warmupSetField, warmupStep
 } from "./warmup-ui.js";
 import { closeWatch, editWatchedSet, isWatchedTarget, openWatch, watchedSet } from "./watch.js";
 import {
@@ -973,9 +974,13 @@ async function handleClick(event) {
         "apply-frame-override": () => { state.frameOverride = Number(actionElement.dataset.tier); renderSection(); element("modalLayer").innerHTML = frameGallery(); iconsIn(element("modalLayer")); },
         "reset-frame-override": () => { state.frameOverride = null; renderSection(); element("modalLayer").innerHTML = frameGallery(); iconsIn(element("modalLayer")); },
         "picker-filter": () => setPickerFilter(actionElement.dataset.key, actionElement.dataset.value),
+        "picker-preview": () => openPickerPreview(actionElement.dataset.exerciseId),
+        "picker-preview-close": closePickerPreview,
+        "picker-more": showMorePickerCards,
+        "picker-search-clear": clearPickerSearch,
         "add-exercise": () => addExercise(actionElement.dataset.exerciseId),
         "remove-workout-exercise": () => removeWorkoutExercise(actionElement.dataset.workoutExerciseId),
-        "open-custom-exercise": () => openCustomExercise(),
+        "open-custom-exercise": () => openCustomExercise(null, { name: actionElement.dataset.name || "" }),
         "save-custom-exercise": saveCustomExercise,
         "suggest-exercise-media": suggestExerciseMedia,
         "edit-exercise": () => editExercise(actionElement.dataset.exerciseId),
@@ -1140,6 +1145,7 @@ async function handleClick(event) {
         "fill-from-last": () => fillSetFromLast(actionElement.dataset.workoutExerciseId, Number(actionElement.dataset.setIndex)),
         "warmup-open": () => openWarmupSheet(actionElement.dataset.workoutExerciseId),
         "warmup-step": () => warmupStep(actionElement.dataset.field, Number(actionElement.dataset.dir) || 0),
+        "warmup-count": () => warmupCount(Number(actionElement.dataset.delta) || 0),
         "warmup-apply": () => applyWarmup(),
         "ux2-reorder": () => ux2OpenReorderSheet(actionElement.dataset.workoutExerciseId || null),
         "ux2-reorder-move": () => ux2MoveBlockBy(actionElement.dataset.key, Number(actionElement.dataset.dir) || 0),
@@ -1345,7 +1351,7 @@ async function runChangeAction(actionElement, callback) {
 function actionNeedsLoader(action) {
     // The workout sheets, the warm-up and the steppers paint their result themselves,
     // immediately: a spinner swapped into a 46px tick would read as lag, not progress.
-    if (action.startsWith("ux2-") || action.startsWith("pcal-") || action.startsWith("warmup-") || action === "set-step" || action === "fill-from-last") {
+    if (action.startsWith("ux2-") || action.startsWith("pcal-") || action.startsWith("warmup-") || action.startsWith("picker-") || action === "set-step" || action === "fill-from-last") {
         return false;
     }
     return !new Set([
@@ -1512,10 +1518,7 @@ function handleInput(event) {
 
     if (actionElement.dataset.action === "exercise-picker-search") {
         state.filters.exerciseSearch = actionElement.value;
-        const pickerGrid = element("exercisePickerGrid");
-        if (pickerGrid) {
-            pickerGrid.innerHTML = exercisePickerCards();
-        }
+        refreshPickerResults();
     }
 
     if (actionElement.dataset.action === "set-field" && actionElement.dataset.field === "weight") {

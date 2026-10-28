@@ -1,13 +1,13 @@
 // The warm-up row and sheet (the formula is lib/warmup.js).
 import { escapeHtml, number } from "../lib/format.js";
-import { isBodyweightExercise } from "../lib/set-format.js";
+import { isBodyweightExercise, isTimedSet } from "../lib/set-format.js";
 import { FIELD_LIMITS, fieldStep, stepValue } from "../lib/session.js";
 import {
     planWarmup, isWarmupEligible, warmupPrefill, muscleAlreadyWarm, warmupStillUseful, applyWarmupSets,
-    minWorkingRest
+    minWorkingRest, openWorkingSets
 } from "../lib/warmup.js";
 import { latestDoneSets } from "./history.js";
-import { currentUser, editWorkout, editWorkoutExercise, exerciseById } from "./model.js";
+import { currentUser, editWorkout, editWorkoutExercise, exerciseById, setTypeLabel } from "./model.js";
 import { closeOverlay, element, showSyncIndicator } from "./overlays.js";
 import { persistWorkout } from "./persistence.js";
 import { getPref } from "./prefs.js";
@@ -21,8 +21,9 @@ import { pluralUk } from "./workout-screen.js";
 
 // ---- Warm-up: sets that climb to the working weight (formula: lib/warmup.js) ------------
 
-// The sheet's numbers while it is open: the working set to warm up for, and whether the
-// muscle is already warm — worked out from the session, but the person can say otherwise.
+// The sheet's numbers while it is open: the working set to warm up for, how many working
+// sets there are, and whether the muscle is already warm — worked out from the session,
+// but the person can say otherwise.
 export let warmupDraft = null;
 
 /** Exercises before this one in the session that have sets: the ones that warmed it up. */
@@ -103,6 +104,8 @@ export function refreshWarmupRow(workoutExerciseId) {
     icons();
 }
 
+const WARMUP_MAX_WORKING = 10;
+
 export function openWarmupSheet(workoutExerciseId) {
     const workoutItem = editWorkout();
     const workoutExercise = editWorkoutExercise(workoutExerciseId);
@@ -114,10 +117,13 @@ export function openWarmupSheet(workoutExerciseId) {
     const last = ux2LastSets(workoutItem, workoutExercise.exerciseId);
     const prefill = warmupPrefill(workoutExercise.sets, last?.sets, isBodyweightExercise(exercise));
     const warm = muscleAlreadyWarm(warmupPreviousExercises(workoutItem, workoutExercise), exercise);
+    // As many working sets as there are; with none yet, as many as last time; else one.
+    const lastWorking = (last?.sets || []).filter((set) => set.type === "working" && !isTimedSet(set)).length;
     warmupDraft = {
         workoutExerciseId,
         weight: prefill ? prefill.weight : 0,
         reps: prefill ? prefill.reps : 8,
+        count: Math.min(WARMUP_MAX_WORKING, openWorkingSets(workoutExercise.sets).length || lastWorking || 1),
         source: prefill ? prefill.source : null,
         warm,
         warmAuto: warm
@@ -125,7 +131,22 @@ export function openWarmupSheet(workoutExerciseId) {
     renderWarmupSheet();
 }
 
-/** The draft's plan, minus what finished warm-ups already covered. */
+/** What the working sets become — the preview and the button use the same numbers. */
+function warmupWorking(exercise) {
+    return {
+        weight: warmupDraft.weight,
+        reps: warmupDraft.reps,
+        count: warmupDraft.count,
+        restSeconds: Number(getPref("defaultRest")) || 90,
+        minRest: minWorkingRest(exercise)
+    };
+}
+
+/**
+ * The draft worked through: the plan, and the exercise's sets exactly as applying it
+ * would leave them. The preview IS that outcome — the same function run on a copy — so
+ * what the sheet shows is what the button does.
+ */
 function warmupDraftState() {
     const workoutExercise = warmupDraft ? editWorkoutExercise(warmupDraft.workoutExerciseId) : null;
     const exercise = workoutExercise ? exerciseById(workoutExercise.exerciseId) : null;
@@ -134,21 +155,25 @@ function warmupDraftState() {
     }
     const bodyweight = isBodyweightExercise(exercise);
     const plan = planWarmup({ weight: warmupDraft.weight, reps: warmupDraft.reps, exercise, warm: warmupDraft.warm });
-    const done = workoutExercise.sets.filter((set) => set.type === "warmup" && set.isCompleted);
-    const covered = done.length ? Math.max(...done.map((set) => Number(set.weight) || 0)) : -Infinity;
     const ready = warmupDraft.reps > 0 && (bodyweight || warmupDraft.weight > 0);
-    // What the working set will rest: its own rest, raised to the minimum for a big lift.
-    const firstWork = workoutExercise.sets.find((set) => set.type !== "warmup" && !set.isCompleted);
-    const workRest = Math.max(Number(firstWork ? firstWork.restSeconds : getPref("defaultRest")) || 90, minWorkingRest(exercise));
+    // A preview set remembers its step of the plan for the «%» beside it; plan weights
+    // only ever climb, so the weight finds it.
+    const previewSet = (type, weight, reps, restSeconds) => {
+        const step = type === "warmup" ? plan.find((item) => item.weight === weight) : null;
+        return { id: null, type, weight, repetitions: reps, restSeconds, isCompleted: false, durationSeconds: null, note: step?.note || null, pct: step?.pct ?? null };
+    };
+    const outcome = ready
+        ? applyWarmupSets(workoutExercise.sets.map((set) => ({ ...set })), plan, warmupWorking(exercise), previewSet)
+        : [];
     return {
-        workRest,
         workoutExercise,
         exercise,
         bodyweight,
         plan,
         ready,
-        done: done.length,
-        shown: ready ? plan.filter((set) => set.weight > covered) : [],
+        before: new Map(workoutExercise.sets.map((set) => [set.id, set])),
+        outcome,
+        shown: outcome.filter((set) => set.type === "warmup" && !set.id),
         pending: workoutExercise.sets.filter((set) => set.type === "warmup" && !set.isCompleted).length,
         hasWork: workoutExercise.sets.some((set) => set.type !== "warmup")
     };
@@ -161,19 +186,44 @@ function warmupPreviewHtml(draft) {
     if (!draft.shown.length) {
         return `<p class="warmup-empty">Для такої ваги окрема розминка не потрібна — можна одразу робочий підхід.</p>`;
     }
-    const row = (position, load, reps, note, rest, work = false) => `<li class="warmup-row${work ? " is-work" : ""}">
-                <span class="warmup-num">${position}</span>
-                <span class="warmup-load">${escapeHtml(load)} <b>× ${reps}</b></span>
+    const row = (position, set, note, kind = "") => `<li class="warmup-row${kind ? ` is-${kind}` : ""}">
+                <span class="warmup-num">${kind === "done" ? `<i data-lucide="check"></i>` : position}</span>
+                <span class="warmup-load">${warmupLoadHtml(set, draft.bodyweight)}</span>
                 <span class="warmup-note">${escapeHtml(note)}</span>
-                <span class="warmup-rest">${rest ? `<i data-lucide="timer"></i>${formatRest(rest)}` : ""}</span>
+                <span class="warmup-rest">${set.restSeconds && kind !== "done" ? `<i data-lucide="timer"></i>${formatRest(set.restSeconds)}` : ""}</span>
             </li>`;
-    const rows = draft.shown.map((set, index) => row(draft.done + index + 1, warmupLoadText(set.weight, draft.bodyweight), set.reps, set.note || (set.pct ? `${set.pct}%` : ""), set.restSeconds)).join("");
-    const work = row(draft.done + draft.shown.length + 1, warmupLoadText(warmupDraft.weight, draft.bodyweight), warmupDraft.reps, "робочий", draft.workRest, true);
+    // Every set the exercise will have, in order: what was done stays, the warm-ups, then
+    // the working sets — each saying whether its numbers change — then anything else.
+    const rows = draft.outcome.map((set, index) => {
+        if (set.isCompleted) {
+            return row(index + 1, set, "виконано", "done");
+        }
+        if (set.type === "warmup") {
+            return row(index + 1, set, set.note || (set.pct ? `${set.pct}%` : ""));
+        }
+        if (set.type === "working" && !isTimedSet(set)) {
+            const was = set.id ? draft.before.get(set.id) : null;
+            const changed = was && (Number(was.weight) !== Number(set.weight) || Number(was.repetitions) !== Number(set.repetitions));
+            return row(index + 1, set, !was ? "новий робочий" : changed ? `було ${warmupShortText(was, draft.bodyweight)}` : "робочий", "work");
+        }
+        return row(index + 1, set, setTypeLabel(set.type).toLowerCase(), "kept");
+    }).join("");
     const last = draft.shown.at(-1);
     const why = last.pct
         ? `Останній підхід розминки — ${last.pct}% робочої ваги, після нього ${formatRest(last.restSeconds)} відпочинку: мʼязи готові, а втома встигає зійти. Кожен підхід легкий — далеко від відмови.`
         : `Розминка легка, далеко від відмови, а перед робочим — ${formatRest(last.restSeconds)} відпочинку.`;
-    return `<ol class="warmup-list">${rows}${work}</ol><p class="warmup-why">${escapeHtml(why)}</p>`;
+    return `<ol class="warmup-list">${rows}</ol><p class="warmup-why">${escapeHtml(why)}</p>`;
+}
+
+function warmupLoadHtml(set, bodyweight) {
+    const load = escapeHtml(warmupLoadText(Number(set.weight) || 0, bodyweight));
+    return isTimedSet(set) ? `${load} <b>· ${Number(set.durationSeconds) || 0} с</b>` : `${load} <b>× ${Number(set.repetitions) || 0}</b>`;
+}
+
+/** «60 × 6» — what a working set held before, beside what it will hold. */
+function warmupShortText(set, bodyweight) {
+    const weight = Number(set.weight) || 0;
+    return `${bodyweight ? (weight > 0 ? `+${number(weight)}` : "0") : number(weight)} × ${Number(set.repetitions) || 0}`;
 }
 
 function warmupApplyLabel(draft) {
@@ -185,7 +235,7 @@ function warmupApplyLabel(draft) {
     if (draft.pending) {
         return { text: `Замінити розминку · ${what}`, disabled: false };
     }
-    return { text: draft.hasWork ? `Додати розминку · ${what}` : `Додати розминку й робочий`, disabled: false };
+    return { text: draft.hasWork ? `Додати розминку · ${what}` : `Додати розминку й ${warmupDraft.count > 1 ? "робочі" : "робочий"}`, disabled: false };
 }
 
 function renderWarmupSheet() {
@@ -210,6 +260,7 @@ function renderWarmupSheet() {
                 <span class="ux2-sheet-label">Робочий підхід</span>
                 <div class="warmup-inputs">${field("weight", warmupDraft.weight, "decimal", "0.5", draft.bodyweight ? "Дод. вага, кг" : "Вага, кг")}${field("reps", warmupDraft.reps, "numeric", "1", "Повтори")}</div>
                 <p class="warmup-source">${escapeHtml(source)}</p>
+                <div class="warmup-count-row"><span>Робочих підходів</span><div class="ux2-stepper"><button class="ux2-round-btn" type="button" data-action="warmup-count" data-delta="-1" aria-label="На один менше"><i data-lucide="minus"></i></button><strong id="warmupCount">${warmupDraft.count}</strong><button class="ux2-round-btn" type="button" data-action="warmup-count" data-delta="1" aria-label="На один більше"><i data-lucide="plus"></i></button></div></div>
             </div>
             <div class="ux2-switch-row"><span><strong>Мʼяз уже розігрітий</strong><span>${escapeHtml(warmHint)}</span></span><label class="settings-switch"><input type="checkbox" data-action="warmup-warm" ${warmupDraft.warm ? "checked" : ""} aria-label="Мʼяз уже розігрітий"><span></span></label></div>
             <div class="ux2-sheet-block"><span class="ux2-sheet-label">Підходи</span><div id="warmupPreview">${warmupPreviewHtml(draft)}</div></div>
@@ -258,6 +309,18 @@ export function warmupStep(field, direction) {
     refreshWarmupPreview();
 }
 
+export function warmupCount(delta) {
+    if (!warmupDraft || !delta) {
+        return;
+    }
+    warmupDraft.count = Math.max(1, Math.min(WARMUP_MAX_WORKING, warmupDraft.count + delta));
+    const shown = element("warmupCount");
+    if (shown) {
+        shown.textContent = String(warmupDraft.count);
+    }
+    refreshWarmupPreview();
+}
+
 export function warmupSetField(field, raw) {
     if (!warmupDraft) {
         return;
@@ -279,12 +342,7 @@ export async function applyWarmup() {
     }
     const { workoutExercise } = draft;
     const before = new Set(workoutExercise.sets);
-    const next = applyWarmupSets(workoutExercise.sets, draft.plan, {
-        weight: warmupDraft.weight,
-        reps: warmupDraft.reps,
-        restSeconds: Number(getPref("defaultRest")) || 90,
-        minRest: minWorkingRest(draft.exercise)
-    }, (type, weight, reps, restSeconds) => createSet(type, weight, reps, null, restSeconds, false));
+    const next = applyWarmupSets(workoutExercise.sets, draft.plan, warmupWorking(draft.exercise), (type, weight, reps, restSeconds) => createSet(type, weight, reps, null, restSeconds, false));
     const added = next.filter((set) => !before.has(set) && set.type === "warmup").length;
     workoutExercise.sets.splice(0, workoutExercise.sets.length, ...next);
     warmupDraft = null;

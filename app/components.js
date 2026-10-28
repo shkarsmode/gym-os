@@ -91,7 +91,7 @@ export function exerciseCard(exercise) {
 // Like / dislike controls + shared counts. Lives in its own bottom row so it
 // never collides with the admin edit/delete panel. Tapping a button is its own
 // action (data-action wins over the card's open-exercise via closest()).
-function reactionBar(exercise) {
+export function reactionBar(exercise) {
     const mine = exercise.myReaction || null;
     return `<div class="exercise-card-reactions">
             <button class="react-btn like${mine === "like" ? " active" : ""}" type="button" data-action="react-exercise" data-exercise-id="${exercise.id}" data-reaction="like" aria-pressed="${mine === "like"}" aria-label="Подобається"><i data-lucide="thumbs-up"></i><span class="react-count">${exercise.likeCount || 0}</span></button>

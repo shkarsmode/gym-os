@@ -1,11 +1,12 @@
 // Scoring bridge: stats, records, rankings, leaderboards, suggested sets, catalogue filtering and sorting.
+import { searchExercises } from "../lib/exercise-search.js";
 import { isTimedSet, DEFAULT_HOLD_SECONDS } from "../lib/set-format.js";
 import {
     duration as kernelDuration, autoDuration as kernelAutoDuration, recordsFor as kernelRecordsFor,
     userStats as kernelUserStats, teamStats as kernelTeamStats
 } from "../lib/scoring.js";
-import { bestResult, latestDoneSets } from "./history.js";
-import { editWorkout, exerciseById, isMyExercise, seedWeight, userById, workoutsFor } from "./model.js";
+import { bestResult, isHydratedWorkout, latestDoneSets } from "./history.js";
+import { editWorkout, exerciseById, seedWeight, userById, workoutsFor } from "./model.js";
 import { userLevel } from "./progression.js";
 import { createSet, createStandards } from "./seed.js";
 import { state } from "./state.js";
@@ -152,54 +153,36 @@ export function suggestedSets(exercise) {
     return [createSet("warmup", round(weight * 0.55, 1), 10, 5, 60, false), createSet("working", round(weight, 1), 8, 8, 105, false), createSet("working", round(weight, 1), 8, 8.5, 120, false)];
 }
 
+/** How often the current user did each exercise — finished sessions — and when last. */
+export function exerciseUsage() {
+    const uses = new Map();
+    const last = new Map();
+    const userId = state.database?.currentUserId;
+    if (!userId) {
+        return { uses, last };
+    }
+    workoutsFor(userId).filter((item) => isHydratedWorkout(item) && item.status === "completed").forEach((item) => {
+        new Set(item.exercises.map((entry) => entry.exerciseId)).forEach((id) => {
+            uses.set(id, (uses.get(id) || 0) + 1);
+            if (!last.has(id) || String(item.date) > String(last.get(id))) {
+                last.set(id, item.date);
+            }
+        });
+    });
+    return { uses, last };
+}
+
+/**
+ * The catalogue under the muscle / equipment filters and the search, in the same order
+ * as «Додати вправу» (lib/exercise-search.js): typed Ukrainian, Russian or English, in
+ * any word order, half a word or with a typo; without a search the team's most liked
+ * first, then what you do most — your own dislikes last.
+ */
 export function filteredExercises() {
-    const search = state.filters.exerciseSearch.trim().toLowerCase();
     const muscle = state.filters.pickerMuscle;
     const equip = state.filters.pickerEquipment;
-    const items = state.database.exercises.filter((exercise) => {
-        if (muscle !== "all" && exercise.primaryMuscleGroup !== muscle) {
-            return false;
-        }
-        if (equip !== "all" && exercise.equipment !== equip) {
-            return false;
-        }
-        if (!search) {
-            return true;
-        }
-        // Guarded: one row missing `aliases` threw here, and the throw happens INSIDE the
-        // input handler — so it did not break a single card, it silently switched the
-        // whole search off while the field carried on accepting text.
-        return [exercise.name, (exercise.aliases || []).join(" "), exercise.primaryMuscleGroup, (exercise.secondaryMuscleGroups || []).join(" "), exercise.movementPattern, exercise.equipment, exercise.category, exercise.difficulty].join(" ").toLowerCase().includes(search);
-    });
-    return sortExercisesByReaction(items);
-}
-
-// Liked-by-me first, then neutral, then disliked-by-me last; alphabetical within
-// each group. (Personal reaction, not global counts.)
-export function reactionRank(exercise) {
-    if (exercise.myReaction === "like") {
-        return 0;
-    }
-    if (exercise.myReaction === "dislike") {
-        return 2;
-    }
-    return 1;
-}
-
-function sortExercisesByReaction(list) {
-    return list.slice().sort((left, right) => {
-        const byReaction = reactionRank(left) - reactionRank(right);
-        if (byReaction) {
-            return byReaction;
-        }
-        // Surface the current user's own exercises first within a reaction tier
-        // (same as the add-exercise picker).
-        const byMine = (isMyExercise(right) ? 1 : 0) - (isMyExercise(left) ? 1 : 0);
-        if (byMine) {
-            return byMine;
-        }
-        return String(left.name || "").localeCompare(String(right.name || ""), "uk");
-    });
+    const items = state.database.exercises.filter((exercise) => (muscle === "all" || exercise.primaryMuscleGroup === muscle) && (equip === "all" || exercise.equipment === equip));
+    return searchExercises(items, state.filters.exerciseSearch, { uses: exerciseUsage().uses });
 }
 
 // oneRepMax, workoutVolume, exerciseVolume and exerciseOneRepMax now come straight

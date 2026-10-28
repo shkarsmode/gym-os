@@ -366,7 +366,7 @@ function setRowV2(workoutExercise, set, index, showSetHint, prevWeight, bodyweig
     return `<div class="set-row v2 kind-${escapeHtml(set.type || "working")}${set.isCompleted ? " completed" : ""}${hintOn ? " has-hint" : ""}${record ? " is-record" : ""}${record && set.id === recordFlashSetId ? " is-new" : ""}">
             <div class="set-row-head">${hintChip}
                 <span class="set-index">${index}</span>
-                <button class="set-type-chip" type="button" data-action="ux2-set-menu" ${target} aria-label="Тип підходу: ${escapeHtml(setTypeLabel(set.type))}. Змінити або видалити"><span>${escapeHtml(setTypeLabel(set.type))}</span><i data-lucide="chevron-down"></i></button>
+                <button class="set-type-chip" type="button" data-action="ux2-set-menu" ${target} aria-label="Підхід: ${escapeHtml(setTypeLabel(set.type))}. Редагувати — тип, відпочинок, видалити"><span>${escapeHtml(setTypeLabel(set.type))}</span><span class="set-type-edit" aria-hidden="true"><i data-lucide="pencil"></i></span></button>
                 <button class="set-rest-chip" type="button" data-action="ux2-rest-line" ${target} aria-label="Відпочинок після підходу: ${formatRest(rest)}. Змінити"><i data-lucide="timer"></i><span>${formatRest(rest)}</span></button>
                 <div class="set-row-actions">
                     <button class="icon-button set-done ${set.isCompleted ? "is-done" : ""}${hintOn ? " hinting" : ""}" type="button" title="${set.isCompleted ? "Виконано" : "Позначити виконаним"}" data-action="toggle-set" ${target}><i data-lucide="${set.isCompleted ? "check-circle-2" : "circle"}"></i></button>
