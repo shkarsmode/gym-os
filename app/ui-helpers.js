@@ -1,6 +1,7 @@
 // Workout-screen helpers: last-results focus, notes, topbar context, quick actions, day sheet, cardio modal.
 import { escapeHtml, number, dateInput, formatDate } from "../lib/format.js";
 import { workoutTypeLabels } from "../lib/constants.js";
+import { plannedSetCounts } from "../lib/workout-status.js";
 import { emptyInline } from "./components.js";
 import {
     avatar, canManage, currentUser, ownWorkout, startWorkoutButton, statusLabel, statusRank, userById,
@@ -12,6 +13,7 @@ import { state } from "./state.js";
 import { iconsIn } from "./util.js";
 import { updateWorkoutMeta } from "./workout-actions.js";
 import { workoutVolumeOf } from "./workout-history.js";
+import { pluralUk } from "./workout-screen.js";
 
 // Highlights the chip in «Минулого разу» that lines up with the set you are looking at.
 //
@@ -235,6 +237,22 @@ export function openQuickAction() {
     openModal(`<div class="modal-header"><div><h2>Швидка дія</h2><p class="card-caption">Почати тренування або перейти в потрібний розділ.</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="quick-grid">${startCard}<button class="quick-card" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i><h3>Календар</h3><p class="card-caption">Історія та керування тренуваннями.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="rankings"><i data-lucide="trophy"></i><h3>Рейтинги</h3><p class="card-caption">Поточний силовий рівень.</p></button><button class="quick-card" type="button" data-action="navigate" data-section="exercises"><i data-lucide="list-filter"></i><h3>Каталог вправ</h3><p class="card-caption">Техніка, помилки і безпека.</p></button></div>`);
 }
 
+// Done work for a finished session; for one not finished yet, what it is set up to do —
+// the row aggregates count ticked sets only, so a full plan read «0 кг · 0 підходів».
+function dayRowCaption(workoutItem) {
+    const done = `${number(workoutVolumeOf(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів`;
+    const planned = workoutItem.status === "completed" ? null : plannedSetCounts(workoutItem);
+    if (!planned || !(planned.working + planned.warmup)) {
+        return done;
+    }
+    const parts = [
+        `${planned.exercises} ${pluralUk(planned.exercises, "вправа", "вправи", "вправ")}`,
+        `${planned.working} ${pluralUk(planned.working, "робочий", "робочі", "робочих")}`,
+        planned.warmup ? `${planned.warmup} розминка` : ""
+    ].filter(Boolean);
+    return workoutSetCount(workoutItem) ? `${parts.join(" · ")} · виконано ${done}` : parts.join(" · ");
+}
+
 export function openDaySheet(date) {
     const meId = currentUser().id;
     // Own workouts first, then by status — so you spot yours instantly.
@@ -247,7 +265,7 @@ export function openDaySheet(date) {
         const owner = userById(workoutItem.userId);
         const own = workoutItem.userId === meId;
         const manage = canManage(workoutItem);
-        return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${number(workoutVolumeOf(workoutItem))} кг · ${workoutSetCount(workoutItem)} підходів${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions"><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="list"></i>Деталі</button>${manage ? `<button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : ""}</div></article>`;
+        return `<article class="day-row${own ? " own" : ""}"><div class="day-row-lead">${avatar(owner, "tiny")}</div><div class="day-row-main"><div class="tag-row"><span class="status-badge ${workoutStatusOf(workoutItem)}">${statusLabel(workoutStatusOf(workoutItem))}</span><span class="chip num-chip">#${workoutNumber(workoutItem)}</span><span class="chip">${workoutTypeLabel(workoutItem.workoutType)}</span>${own ? `<span class="chip mine-chip">Моє</span>` : ""}</div><strong>${escapeHtml(owner.displayName)}</strong><p class="card-caption">${dayRowCaption(workoutItem)}${workoutCardioMinutes(workoutItem) ? ` · ${workoutCardioMinutes(workoutItem)} хв кардіо` : ""}</p></div><div class="day-row-actions"><button class="button button-secondary compact" type="button" data-action="open-workout" data-workout-id="${workoutItem.id}"><i data-lucide="list"></i>Деталі</button>${manage ? `<button class="icon-button" type="button" title="Видалити" data-action="delete-workout" data-workout-id="${workoutItem.id}"><i data-lucide="trash-2"></i></button>` : ""}</div></article>`;
     }).join("");
     openModal(`<div class="modal-header"><div><h2>${formatDate(date)}</h2><p class="card-caption">${items.length ? `Тренувань цього дня: ${items.length}` : "Цього дня тренувань немає"}</p></div><button class="icon-button" type="button" data-action="close-overlay"><i data-lucide="x"></i></button></div><div class="day-list">${rows || emptyInline("Немає тренувань", isToday ? "Почни сьогоднішнє тренування." : "У цей день записів немає.")}</div><div class="day-sheet-action">${startWorkoutButton(date, { label: isToday ? "Почати тренування" : "Додати тренування", buttonClass: "button button-primary" })}</div>`);
 }

@@ -13049,9 +13049,17 @@ html.compact-ui .chip {
     font: 800 24px/1.15 var(--font-display);
 }
 
-.today-hero-text > span:last-child {
+.today-hero-text > span:last-child,
+.today-plan .today-hero-text > span:not(.today-hello) {
     color: var(--color-muted);
     font-size: 14px;
+}
+
+/* Today's plan: the exercises in order, under the set counts. */
+.today-plan .today-plan-list {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.45;
 }
 
 .today-hero-actions {

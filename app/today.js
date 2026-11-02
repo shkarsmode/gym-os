@@ -2,9 +2,10 @@
 import { escapeHtml, number, dateInput, formatDate, shortDate } from "../lib/format.js";
 import { sessionProgress, numberDraft } from "../lib/session.js";
 import { dayDiff as kernelDayDiff } from "../lib/scoring.js";
+import { plannedSetCounts } from "../lib/workout-status.js";
 import { compactKg, pendingExercises } from "./components.js";
 import { newFeedbackCount } from "./feedback.js";
-import { activeWorkoutFor, currentUser, hasUnlimited, isAdmin, startWorkoutButton, workoutsFor } from "./model.js";
+import { activeWorkoutFor, currentUser, exerciseById, hasUnlimited, isAdmin, startWorkoutButton, todayPlanFor, workoutsFor } from "./model.js";
 import { content } from "./overlays.js";
 import { firstName } from "./presence.js";
 import { recordsFor, userStats } from "./scoring-bridge.js";
@@ -38,6 +39,10 @@ function todayHero(user, active) {
         const progress = sessionProgress(active.exercises || []);
         return `<section class="card span-12 today-hero"><div class="today-hero-text"><span class="today-hello">${hello}, ${name}</span><strong>Тренування йде</strong><span>${escapeHtml(ux2Title(active))}${progress.total ? ` · ${progress.done} з ${progress.total} підходів` : ""}</span></div><div class="today-hero-actions"><button class="button button-primary" type="button" data-action="edit-workout" data-workout-id="${active.id}"><i data-lucide="activity"></i>Продовжити тренування</button></div></section>`;
     }
+    const plan = todayPlanFor(user.id);
+    if (plan) {
+        return todayPlanHero(plan, hello, name);
+    }
     const today = dateInput(new Date());
     const done = workoutsFor(user.id).filter((item) => item.status === "completed").sort(byDateDesc);
     const last = done[0] || null;
@@ -54,6 +59,27 @@ function todayHero(user, active) {
             <div class="today-hero-actions">
                 ${startWorkoutButton(null, { label: "Почати тренування", buttonClass: "button button-primary" })}
                 ${repeat ? `<button class="button button-secondary" type="button" data-action="copy-workout-start" data-workout-id="${repeat.id}"><i data-lucide="copy"></i>Повторити ${escapeHtml(ux2Title(repeat))} · ${escapeHtml(shortDate(repeat.date))}</button>` : ""}
+            </div>
+        </section>`;
+}
+
+// Today's plan IS today's session: shown the way a running one is (what it is, what is
+// in it) with one tap to start it — never an empty «Почати тренування» beside it.
+function todayPlanHero(plan, hello, name) {
+    const counts = plannedSetCounts(plan);
+    const label = plan.title && plan.title !== "Тренування" ? plan.title : ux2Title(plan);
+    const sets = [
+        `${counts.exercises} ${pluralUk(counts.exercises, "вправа", "вправи", "вправ")}`,
+        `${counts.working} ${pluralUk(counts.working, "робочий", "робочі", "робочих")}`,
+        counts.warmup ? `${counts.warmup} розминка` : ""
+    ].filter(Boolean).join(" · ");
+    const names = plan.exercises.slice().sort((left, right) => left.order - right.order)
+        .map((item) => exerciseById(item.exerciseId).name).join(" · ");
+    return `<section class="card span-12 today-hero today-plan">
+            <div class="today-hero-text"><span class="today-hello">${hello}, ${name}</span><strong>Сьогодні: ${escapeHtml(label)}</strong><span>${escapeHtml(sets)}</span>${names ? `<span class="today-plan-list">${escapeHtml(names)}</span>` : ""}</div>
+            <div class="today-hero-actions">
+                <button class="button button-primary" type="button" data-action="start-existing-workout" data-workout-id="${escapeHtml(plan.id)}"><i data-lucide="play"></i>Почати тренування</button>
+                <button class="button button-secondary" type="button" data-action="edit-workout" data-workout-id="${escapeHtml(plan.id)}"><i data-lucide="list"></i>Переглянути план</button>
             </div>
         </section>`;
 }
@@ -105,7 +131,7 @@ function todayRecords(user) {
 function todayNext(user) {
     const today = dateInput(new Date());
     const next = workoutsFor(user.id)
-        .filter((item) => item.status === "planned" && String(item.date || "").slice(0, 10) >= today)
+        .filter((item) => item.status === "planned" && String(item.date || "").slice(0, 10) >= today && item.id !== todayPlanFor(user.id)?.id)
         .sort((left, right) => String(left.date).localeCompare(String(right.date)))[0];
     if (!next) {
         return "";

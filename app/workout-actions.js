@@ -12,7 +12,7 @@ import { touchGymClock } from "./gym-clock-ui.js";
 import { isHydratedWorkout, latestDoneSets } from "./history.js";
 import {
     activeWorkoutFor, canManage, currentUser, editSetByIds, editWorkout, editWorkoutExercise, exerciseById,
-    ownWorkout, workoutLabel, workoutLimitState
+    ownWorkout, todayPlanFor, workoutLabel, workoutLimitState
 } from "./model.js";
 import { choiceDialog, closeOverlay, confirmDialog, friendlyError, showSyncIndicator, toast } from "./overlays.js";
 import {
@@ -39,6 +39,14 @@ export async function startNewWorkout(dateOverride) {
     const now = new Date();
     const targetDate = dateOverride ? String(dateOverride).slice(0, 10) : dateInput(now);
     const isToday = targetDate === dateInput(now);
+    // Today already has a plan: start THAT one. A button rendered before the plan arrived
+    // (another device, a stale screen) must not leave an empty session beside it.
+    const plan = isToday ? todayPlanFor(currentUser().id) : null;
+    if (plan) {
+        closeOverlay();
+        await startExistingWorkout(plan.id);
+        return;
+    }
     const limit = workoutLimitState(currentUser().id, targetDate);
     if (!limit.allowed) {
         closeOverlay();

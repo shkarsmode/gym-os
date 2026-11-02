@@ -11,7 +11,7 @@ import { gymClockChip, touchGymClock } from "./gym-clock-ui.js";
 import { isHydratedWorkout, lastExerciseNote, latestDoneSets } from "./history.js";
 import {
     activeWorkoutFor, canManage, cardioIcon, cardioTypeLabel, currentUser, editWorkout, editWorkoutExercise,
-    exerciseById, intensityLabel, setTypeLabel, startWorkoutButton, statusLabel, userById, workoutDateBounds,
+    exerciseById, intensityLabel, setTypeLabel, startWorkoutButton, statusLabel, todayPlanFor, userById, workoutDateBounds,
     workoutLabel, workoutSetCount, workoutStatusOf, workoutTypeLabel, workoutsFor
 } from "./model.js";
 import { content, toast } from "./overlays.js";
@@ -60,7 +60,13 @@ function workoutStarter() {
             aiBlock = `<div id="aiWorkoutBlock">${aiWorkoutBlock()}</div>`;
         }
     }
-    return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div><h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p><div class="workout-starter-actions">${startWorkoutButton(null)}${aiInlineButton}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
+    // A plan for today is today's session: the button below starts it (startWorkoutButton
+    // knows), so the copy must say so instead of «no session».
+    const plan = todayPlanFor(currentUser().id);
+    const heading = plan
+        ? `<h2>Сьогодні: ${escapeHtml(plan.title && plan.title !== "Тренування" ? plan.title : workoutLabel(plan))}</h2><p class="card-caption">Тренування заплановане на сьогодні. Почни його одним натиском — вправи й підходи вже на місці.</p>`
+        : `<h2>Немає активного тренування</h2><p class="card-caption">Почни нову сесію та додавай вправи, підходи й кардіо прямо в залі. Усе можна відредагувати або видалити пізніше.</p>`;
+    return `${aiBlock}<section class="card workout-starter"><div class="workout-starter-icon"><i data-lucide="dumbbell"></i></div>${heading}<div class="workout-starter-actions">${startWorkoutButton(null)}${aiInlineButton}<button class="button button-secondary large-workout-button" type="button" data-action="navigate" data-section="calendar"><i data-lucide="calendar-days"></i>Історія тренувань</button></div></section>${personalTemplatesSection()}`;
 }
 
 // ===== end AI статистика ====================================================
@@ -96,7 +102,7 @@ export function workoutEditor(workoutItem, options = {}) {
     const actionBar = readonly ? "" : `<div class="workout-actionbar${clockChip ? " has-clock" : ""}">
                 <div class="workout-actionbar-info"><strong class="workout-actionbar-title">${escapeHtml(workoutLabel(workoutItem))}</strong></div>
                 ${clockChip}
-                <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact wab-focus" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід" aria-label="Фокус-режим"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact wab-add" type="button" data-action="open-add-exercise-modal" title="Додати вправу" aria-label="Додати вправу"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
+                <div class="workout-actionbar-actions">${workoutItem.status === "active" && workoutItem.exercises.length ? `<button class="button button-secondary compact wab-focus" type="button" data-action="open-focus" title="Фокус-режим: одна вправа, один підхід" aria-label="Фокус-режим"><i data-lucide="crosshair"></i><span>Фокус</span></button>` : ""}<button class="button button-secondary compact wab-add" type="button" data-action="open-add-exercise-modal" title="Додати вправу" aria-label="Додати вправу"><i data-lucide="plus"></i><span>Вправа</span></button>${workoutItem.status === "active" ? `<button class="button button-primary compact" type="button" data-action="finish-workout" data-workout-id="${workoutItem.id}"><i data-lucide="flag"></i><span>Завершити</span></button>` : workoutItem.status === "planned" ? `<button class="button button-primary compact" type="button" data-action="start-existing-workout" data-workout-id="${workoutItem.id}"><i data-lucide="play"></i><span>Почати</span></button>` : `<button class="button button-primary compact" type="button" data-action="reopen-workout" data-workout-id="${workoutItem.id}"><i data-lucide="rotate-ccw"></i><span>Відновити</span></button>`}</div>
             </div>`;
     return `
             ${actionBar}

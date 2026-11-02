@@ -1,7 +1,7 @@
 // Users, roles, limits, workout lookups, labels, catalogue normalizers.
 import { escapeHtml, dateInput, imageUrl } from "../lib/format.js";
 import { statusLabels, setTypeLabels, workoutTypeLabels, dataModeLabels } from "../lib/constants.js";
-import { effectiveWorkoutStatus } from "../lib/workout-status.js";
+import { effectiveWorkoutStatus, todayPlannedWorkout } from "../lib/workout-status.js";
 import { skeletonMore } from "./components.js";
 import { storage } from "./data.js";
 import { friendlyError, showSyncIndicator } from "./overlays.js";
@@ -146,9 +146,25 @@ function workoutLimitBlock(state, compact = false) {
     return `<div class="workout-limit-block"><i data-lucide="${icon}"></i><div class="wlb-text"><strong>${escapeHtml(state.message)}</strong><span>${escapeHtml(state.summary)}</span></div>${upsell}</div>`;
 }
 
+// The current user's plan for today, when nothing is running yet — the session every
+// "start" on today should open instead of creating an empty one.
+export function todayPlanFor(userId) {
+    if (activeWorkoutFor(userId)) {
+        return null;
+    }
+    return todayPlannedWorkout(state.database.workouts, userId, dateInput(new Date()));
+}
+
 // A ready-to-place add/start-workout button, or the inline limit block when the current
 // user cannot add a workout on `dateOverride` (a "YYYY-MM-DD" string; default today).
+// On a day that already has a plan the button starts that plan: it exists, so no limit
+// applies, and an empty second session is never what the tap meant.
 export function startWorkoutButton(dateOverride, opts = {}) {
+    const plan = !dateOverride || String(dateOverride).slice(0, 10) === dateInput(new Date()) ? todayPlanFor(currentUser().id) : null;
+    if (plan) {
+        const cls = opts.buttonClass || (opts.compact ? "button button-primary compact" : "button button-primary large-workout-button");
+        return `<button class="${cls}" type="button" data-action="start-existing-workout" data-workout-id="${escapeHtml(plan.id)}"><i data-lucide="play"></i>${escapeHtml(opts.label || "Почати тренування")}</button>`;
+    }
     const state = workoutLimitState(currentUser().id, dateOverride);
     if (!state.allowed) {
         return workoutLimitBlock(state, opts.compact);
