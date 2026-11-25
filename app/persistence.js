@@ -1,7 +1,8 @@
 // Persisting: payloads, the per-workout saver, the offline queue.
 import { SUPERSET_DEFAULT_REST } from "../lib/superset.js";
-import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead } from "../lib/realtime.js";
+import { serverVersionOf, isStaleConflict, conflictVersion, localIsAhead, mergeWorkout, snapshotWorkout } from "../lib/realtime.js";
 import { storage } from "./data.js";
+import { rememberSentCopy, rememberServerCopy, serverCopyOf } from "./server-copies.js";
 import { canManage } from "./model.js";
 import { friendlyError, handleUserFacingError, showSyncIndicator, syncIndicatorTimeoutId, toast } from "./overlays.js";
 import { renderSection } from "./shell.js";
@@ -322,12 +323,14 @@ async function runWorkoutSave(workoutId) {
     let ok = false;
     try {
         workoutItem.updatedAt = new Date().toISOString();
+        const sent = snapshotWorkout(workoutItem);
         const ack = await storage.apiClient.saveWorkout(workoutItem.id, workoutPayload(workoutItem, { confirmEmpty: saver.confirmEmpty }));
         // The revision this save produced becomes the base of the next one. Without
         // adopting it, the second save of a session would announce a version the
         // server had already moved past and be refused as stale.
         if (ack && ack.updatedAt) {
             workoutItem.serverVersion = ack.updatedAt;
+            rememberSentCopy(workoutItem.id, sent);
         }
         storage.backendStatus = "online";
         ok = true;
@@ -349,9 +352,14 @@ async function runWorkoutSave(workoutId) {
             saver.conflictRetries = (saver.conflictRetries || 0) + 1;
             // Two devices saving in a tight loop could ping-pong forever; after a
             // couple of rounds stop and let the user see what happened.
-            if (saver.conflictRetries <= 2 && await reconcileStaleWorkout(workoutItem, error)) {
+            const outcome = saver.conflictRetries <= 2 ? await reconcileStaleWorkout(workoutItem, error) : false;
+            if (outcome === "retry") {
                 saver.dirty = true;
                 saver.lastError = null;
+            } else if (outcome === "adopted") {
+                saver.lastError = null;
+                saver.conflictRetries = 0;
+                ok = true;
             }
         }
         // Network loss (gym basement mode): park the save in the offline queue
@@ -390,8 +398,11 @@ async function runWorkoutSave(workoutId) {
 
 // Decide what to do when the server refuses a save because the row moved on.
 //
-// Returns true when the caller should retry the save, false when the local copy was
-// replaced by the server's and there is nothing left to send.
+// Returns "retry" when there is something of this device's left to send, "adopted" when
+// the server's copy already holds everything, false when the local edit was lost.
+//
+// With a base copy (the last one the server confirmed) the two sides are merged by
+// set and exercise id, field by field. The rules below are the fallback without one.
 //
 // The conflict has two very different shapes and they need opposite handling:
 //
@@ -418,18 +429,47 @@ async function reconcileStaleWorkout(workoutItem, error) {
         const named = conflictVersion(error);
         if (named) {
             workoutItem.serverVersion = named;
-            return true;
+            return "retry";
         }
         return false;
     }
+    const merged = mergeWorkout(serverCopyOf(workoutItem.id), workoutItem, fresh);
+    if (merged) {
+        const before = JSON.stringify(snapshotWorkout(workoutItem));
+        const localTouchedAt = workoutItem.updatedAt;
+        Object.assign(workoutItem, merged.workout);
+        if (merged.workout.status === fresh.status) {
+            workoutItem.startedAt = fresh.startedAt ?? null;
+            workoutItem.finishedAt = fresh.finishedAt ?? null;
+        }
+        // The row's server aggregates describe neither side any more; without them the
+        // accessors count the merged sets.
+        for (const key of ["exerciseCount", "setCount", "workingSetCount", "totalVolume", "cardioMinutes", "cardioCount", "durationMinutes"]) {
+            delete workoutItem[key];
+        }
+        workoutItem.serverVersion = serverVersionOf(fresh);
+        workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
+        rememberServerCopy(fresh);
+        if (JSON.stringify(snapshotWorkout(workoutItem)) !== before) {
+            renderSection();
+        }
+        if (merged.conflicts) {
+            toast(
+                "Тренування змінилось на іншому пристрої",
+                "Зміни об'єднано. Там, де одне й те саме змінили на обох пристроях, залишено зміну з цього."
+            );
+        }
+        return merged.changedLocally ? "retry" : "adopted";
+    }
     if (localIsAhead(workoutItem, fresh)) {
         workoutItem.serverVersion = serverVersionOf(fresh) || conflictVersion(error) || workoutItem.serverVersion;
-        return true;
+        return "retry";
     }
     const localTouchedAt = workoutItem.updatedAt;
     Object.assign(workoutItem, fresh);
     workoutItem.serverVersion = serverVersionOf(fresh);
     workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
+    rememberServerCopy(fresh);
     renderSection();
     // Deliberately loud. The local edit that triggered this save did not land, and a
     // set disappearing without a word is the exact failure the version check exists

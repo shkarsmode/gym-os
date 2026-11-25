@@ -1,13 +1,14 @@
 // The live stream (SSE) and team refresh.
-import { serverVersionOf, parseSseFrames, backoffDelay, shouldApplyRemote } from "../lib/realtime.js";
+import { serverVersionOf, parseSseFrames, backoffDelay, planResync, shouldApplyRemote } from "../lib/realtime.js";
 import { adoptRenewedSession, storage, storedAuthToken } from "./data.js";
 import { feedState, invalidateFeed, loadFeed } from "./feed.js";
 import { dropRevokedDetail } from "./onboarding.js";
 import { toast } from "./overlays.js";
 import { loadPartnerState, refreshPartnerWorkout } from "./partner.js";
-import { cancelWorkoutSave, workoutSavers } from "./persistence.js";
+import { cancelWorkoutSave, readOfflineQueue, workoutSavers } from "./persistence.js";
 import { flyCheer, loadPresence, refreshPeerWorkouts, replayMissedCheers } from "./presence.js";
 import { loadAccessState } from "./privacy.js";
+import { forgetServerCopy, rememberServerCopy } from "./server-copies.js";
 import { renderSection } from "./shell.js";
 import { state } from "./state.js";
 import { closeWatch, isWatching, registerWatch, scheduleWatchRefresh, watchState } from "./watch.js";
@@ -110,6 +111,7 @@ async function runLiveStream() {
                     // was delivered to nobody. Go and collect it.
                     liveStream.reconnected = false;
                     replayMissedCheers();
+                    void resyncOwnWorkouts();
                 }
                 await handleLiveEvent(frame);
             }
@@ -307,14 +309,21 @@ async function applyRemoteWorkoutChange(workoutId, version) {
         return false;
     }
     const target = state.database.workouts.find((item) => item.id === workoutId);
+    if (target && !shouldApplyRemote({ version: serverVersionOf(fresh), held: target.serverVersion || null, busy: false })) {
+        return false;
+    }
+    adoptServerRow(fresh);
+    return true;
+}
+
+function adoptServerRow(fresh) {
+    const target = state.database.workouts.find((item) => item.id === fresh.id);
     if (!target) {
         // A workout created on another device. Nothing local to protect.
         fresh.serverVersion = serverVersionOf(fresh);
         state.database.workouts.push(fresh);
-        return true;
-    }
-    if (!shouldApplyRemote({ version: serverVersionOf(fresh), held: target.serverVersion || null, busy: false })) {
-        return false;
+        rememberServerCopy(fresh);
+        return;
     }
     const localTouchedAt = target.updatedAt;
     Object.assign(target, fresh);
@@ -323,16 +332,62 @@ async function applyRemoteWorkoutChange(workoutId, version) {
     // A refused detail read is remembered; a row that just arrived is proof it is
     // readable again, so the flag must not survive.
     delete target.detailUnavailable;
-    return true;
+    rememberServerCopy(fresh);
 }
 
 function applyRemoteWorkoutDeletion(workoutId) {
     // Cancel BEFORE removing: a pending save still holding this workout would
     // recreate it on the server, because saving upserts on the client-supplied id.
     cancelWorkoutSave(workoutId);
+    forgetServerCopy(workoutId);
     const index = state.database.workouts.findIndex((item) => item.id === workoutId);
     if (index !== -1) {
         state.database.workouts.splice(index, 1);
+    }
+}
+
+// Hints sent while this device was away (backgrounded, offline, stream dropped) reached
+// nobody, so on coming back the newest page of its own workouts is compared with what
+// it holds: changed rows are re-read, new ones added, deleted ones dropped.
+let lastResyncAt = 0;
+
+function workoutBusy(workoutId) {
+    return workoutSaverBusy(workoutId) || readOfflineQueue().some((entry) => entry.id === workoutId);
+}
+
+async function resyncOwnWorkouts() {
+    const me = storage.currentUser;
+    if (!me || storage.mode !== "api" || !storage.apiClient.hasBaseUrl() || Date.now() - lastResyncAt < 15000) {
+        return;
+    }
+    lastResyncAt = Date.now();
+    let page = null;
+    try {
+        page = await storage.apiClient.fetchMyWorkouts("", 30);
+    } catch (error) {
+        return;
+    }
+    const plan = planResync({
+        local: state.database.workouts.filter((item) => item.userId === me.id),
+        server: Array.isArray(page?.workouts) ? page.workouts : [],
+        complete: !page?.nextCursor,
+        busy: workoutBusy
+    });
+    let changed = false;
+    for (const row of [...plan.adopt, ...plan.add]) {
+        if (!workoutBusy(row.id)) {
+            adoptServerRow(row);
+            changed = true;
+        }
+    }
+    for (const workoutId of plan.remove) {
+        if (!workoutBusy(workoutId)) {
+            applyRemoteWorkoutDeletion(workoutId);
+            changed = true;
+        }
+    }
+    if (changed) {
+        repaintSection();
     }
 }
 

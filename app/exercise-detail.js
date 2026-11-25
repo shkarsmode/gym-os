@@ -3,6 +3,7 @@ import { escapeHtml, number, formatDate, shortDate } from "../lib/format.js";
 import { workoutNeedsDetail } from "../lib/workout-status.js";
 import { positionLabel, workoutBlocks, roundCount } from "../lib/superset.js";
 import { serverVersionOf } from "../lib/realtime.js";
+import { rememberServerCopy } from "./server-copies.js";
 import { oneRepMax, exerciseVolume, exerciseOneRepMax } from "../lib/scoring.js";
 import { emptyInline, exerciseMedia, exerciseSourceBlock, media, workoutStatStrip } from "./components.js";
 import { storage } from "./data.js";
@@ -196,6 +197,7 @@ async function hydrateWorkoutDetail(workoutId) {
         // local one and vice versa; keep the two meanings apart.
         workoutItem.serverVersion = serverVersionOf(full) || workoutItem.serverVersion || null;
         workoutItem.updatedAt = localTouchedAt || workoutItem.updatedAt;
+        rememberServerCopy(full);
     } else if (privateOwnerId) {
         // Already knew? Then the repaint below would paint the identical screen and
         // start this all over again. Second guard on the same loop as `needsDetail`,

@@ -9,6 +9,7 @@ import { maybeStartOnboarding } from "./onboarding.js";
 import { friendlyError, hideBusyOverlay, showBusyOverlay, updateBusyOverlay } from "./overlays.js";
 import { loadPartnerState } from "./partner.js";
 import { flushOfflineQueue, persist, readOfflineQueue, showOfflineChip } from "./persistence.js";
+import { rememberServerCopy } from "./server-copies.js";
 import { applyPreferences, syncPreferencesFromServer } from "./prefs.js";
 import { replayMissedCheers } from "./presence.js";
 import { loadAccessState } from "./privacy.js";
@@ -211,6 +212,9 @@ function adoptServerVersions(rows) {
         const version = serverVersionOf(row);
         if (version) {
             row.serverVersion = version;
+            if (storage.mode === "api") {
+                rememberServerCopy(row);
+            }
         }
     }
 }

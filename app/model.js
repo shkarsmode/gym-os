@@ -2,6 +2,8 @@
 import { escapeHtml, dateInput, imageUrl } from "../lib/format.js";
 import { statusLabels, setTypeLabels, workoutTypeLabels, dataModeLabels } from "../lib/constants.js";
 import { effectiveWorkoutStatus, todayPlannedWorkout } from "../lib/workout-status.js";
+import { serverVersionOf } from "../lib/realtime.js";
+import { rememberServerCopy } from "./server-copies.js";
 import { skeletonMore } from "./components.js";
 import { storage } from "./data.js";
 import { friendlyError, showSyncIndicator } from "./overlays.js";
@@ -275,6 +277,8 @@ async function loadMoreOwnWorkouts() {
         // and a hydrated row must never be replaced by an older copy of itself.
         for (const workoutItem of page.workouts || []) {
             if (!known.has(workoutItem.id)) {
+                workoutItem.serverVersion = serverVersionOf(workoutItem);
+                rememberServerCopy(workoutItem);
                 state.database.workouts.push(workoutItem);
             }
         }
